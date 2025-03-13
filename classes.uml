@@ -1,0 +1,75 @@
+@startuml Python_Classes
+class Library {
+  -str name
+  -list[User] users
+  -list[Author] authors
+  +add_user(User user): None
+  +add_author(Author author): None
+  +get_all_novels(): list[Novel]
+}
+
+class User {
+  -str username
+  -str password_hash
+  +check_password(str password): bool
+  +change_password(str new_password): None
+}
+
+class Author {
+  -str name
+  -list[Novel] novels
+  +add_novel(Novel novel): None
+  +get_novels(): list[Novel]
+}
+
+class Novel {
+  -str title
+  -list[Chapter] chapters
+  -Author author
+  +add_chapter(Chapter chapter): None
+  +get_chapters(): list[Chapter]
+}
+
+class Chapter {
+  -str title
+  -str content
+  -Novel novel
+}
+
+class DatabaseConnecter {
+  -str connection_string
+  +connect() : bool
+  +disconnect() : None
+  +execute_query(str query) : QueryResult
+}
+
+class NovelDownloader {
+  -str source
+  +download_chapter(str title, int chapter)
+}
+
+class MetadataDownloader {
+  -str source
+  +download_author(str name)
+  +download_novel(str title) : Metadata
+}
+
+class AuthorMetadata {
+  -str author_name
+  -list[str] novel_names
+}
+
+class NovelMetadata {
+  -str title
+  -list[str] chapters
+}
+
+Library "1" -- "0..*" User : manages >
+Library "1" -- "0..*" Author : catalogs >
+Library "1" -- "1" MetadataDownloader : downloads >
+Library "1" -- "1" NovelDownloader : downloads >
+Author "1" -- "0..*" Novel : writes >
+Author "1" -- "1" AuthorMetadata : describes >
+Novel "1" -- "1..*" Chapter : contains >
+Novel "1" -- "1" NovelMetadata : describes >
+@enduml

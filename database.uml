@@ -1,0 +1,80 @@
+@startuml Database_Model
+entity "Library" as Library {
+  * id : integer <<PK>>
+  --
+  name : string
+  user_id : integer <<FK>>
+  created_at : timestamp
+}
+
+entity "User" as User {
+  * id : integer <<PK>>
+  --
+  username : string
+  password_hash : string
+  created_at : timestamp	
+}
+
+entity "Author" as Author {
+  * id : integer <<PK>>
+  --
+  name : string
+  metadata: JSON
+  library_id : integer <<FK>>
+}
+
+entity "Novel" as Novel {
+  * id : integer <<PK>>
+  --
+  title : string
+  metadata: JSON
+  file_path: String
+  genre_id : Integer <<FK>>
+  tag_id : Integer <<FK>>
+  author_id : integer <<FK>>
+  library_id : integer <<FK>>
+  cover_image : string
+}
+
+entity "Chapter" as Chapter {
+  * id : integer <<PK>>
+  --
+  title : string
+  content : text
+  novel_id : integer <<FK>>
+  created_at : timestamp
+}
+
+entity "Genre" as Genre {
+  * id : integer <<PK>>
+  --
+  name : string
+  description : text
+}
+
+entity "Tag" as Tag {
+  * id : integer <<PK>>
+  --
+  name : string
+  description : text
+}
+
+entity "ReadingProgress" as ReadingProgress {
+  * id : integer <<PK>>
+  --
+  user_id : integer <<FK>>
+  novel_id : integer <<FK>>
+  chapter_id : integer <<FK>>
+  last_read_date : timestamp
+  completion_percentage : float
+}
+
+
+User ||--o{ Libary : contains
+Library ||--o{ Author : contains
+Library ||--o{ Novel : contains
+Author ||--o{ Novel : writes
+Novel ||--o{ Chapter : contains
+Novel }o--o{ Genre : belongs_to
+Novel }o--o{ Tag : belongs_to
+@enduml

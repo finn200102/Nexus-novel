@@ -1,0 +1,16 @@
+* REST API
+
+* REST API Endpoints
+
+| Endpoint                                                  | Method | Description                                                 |
+|-----------------------------------------------------------+--------+-------------------------------------------------------------|
+| /api/auth/register                                        | POST   | Register a new user                                         |
+| /api/auth/login                                           | POST   | Authenticate a user and return token                        |
+| /api/users/{user_id}/libraries                            | GET    | Get all libraries for a user                                |
+| /api/users/{user_id}/libraries                            | POST   | Create a new library for a user                             |
+| /api/users/{user_id}/libraries/{library_id}               | GET    | Get novels in a specific library for a user                 |
+| /api/users/{user_id}/libraries/{lib_id}/novels            | POST   | Add a novel to a specific library for a user                |
+| /api/users/{user_id}/libraries/{lib_id}/novels/{novel_id} | DELETE | Remove a novel from a specific library for a user           |
+| /api/novels/search                                        | GET    | Search novels by title/author/genre within a user's library |
+| /api/genres                                               | GET    | Get list of genres                                          |
+| /api/tags                                                 | GET    | Get list of tags                                            |
