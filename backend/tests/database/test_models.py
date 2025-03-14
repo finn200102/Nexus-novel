@@ -74,6 +74,42 @@ def test_create_tag(db):
     assert result.name == "spaceships"
     assert result.id is not None
 
+def test_create_user(db):
+    user = User(username="hans", password="1234")
+    db.add(user)
+    db.commit()
+
+    # Query the genre
+    result = db.query(User).filter(User.username == "hans").first()
+
+    # Assert
+    assert result is not None
+    assert result.username == "hans"
+    assert result.id is not None
+
+def test_create_library(db):
+    user = User(username="hans", password="1234")
+    db.add(user)
+    db.commit()
+
+
+
+    # Query the genre
+    result_user = db.query(User).filter(User.username == "hans").first()
+
+    library = Library(name="lib1", user_id=result_user.id)
+    db.add(library)
+    db.commit()
+
+
+    result = db.query(Library).filter(Library.name == "lib1").first()
+    
+
+    # Assert
+    assert result is not None
+    assert result.name == "lib1"
+    assert result.user_id == result_user.id
+    assert result.id is not None
 
 
 
