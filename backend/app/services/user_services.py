@@ -7,9 +7,13 @@ from app.models.user import User
 from app.models.tag import Tag
 from app.models.genre import Genre
 from app.models.chapter import Chapter
+from app.schemas.user import UserCreate
 
 def create_user(db: Session, user_data: dict):
-
+    # Remove the is_active default setting
+    # if 'is_active' not in user_data:
+    #     user_data['is_active'] = True
+        
     user = User(**user_data)
     db.add(user)
     db.commit()
