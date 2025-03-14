@@ -16,7 +16,7 @@ class Novel(BaseModel):
     __tablename__ =  "novels"
 
     title = Column(String(255), nullable=False, index=True)
-    author = Column(String(100), nullable=False, index=True)
+    author_id = Column(Integer, ForeignKey('authors.id'))
     description = Column(Text)
     cover_image = Column(String(255))
     file_path = Column(String(255))
@@ -24,6 +24,7 @@ class Novel(BaseModel):
 
 
     # Relationships
+    author = relationship("Author", back_populates="novels")
     genre = relationship("Genre", back_populates="novels")
     chapters = relationship("Chapter",
                             back_populates="novel",
