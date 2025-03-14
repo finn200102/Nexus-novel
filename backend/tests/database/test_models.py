@@ -10,6 +10,9 @@ from sqlalchemy.ext.declarative import declarative_base
 # Import models
 from app.models.base import BaseModel
 from app.models.novel import Novel
+from app.models.library import Library
+from app.models.author import Author
+from app.models.user import User
 from app.models.genre import Genre
 from app.models.tag import Tag
 from app.models.chapter import Chapter
@@ -70,6 +73,8 @@ def test_create_tag(db):
     assert result is not None
     assert result.name == "spaceships"
     assert result.id is not None
+
+
 
 
 if __name__ == "__main__":

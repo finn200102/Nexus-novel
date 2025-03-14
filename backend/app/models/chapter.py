@@ -12,5 +12,5 @@ class Chapter(BaseModel):
                          back_populates="chapters")
 
     def __repr__(self):
-        return f"<Chapter {self.title}"
+        return f"<Chapter {self.title}>"
 

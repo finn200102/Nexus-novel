@@ -12,5 +12,6 @@ class Author(BaseModel):
     
     novels = relationship("Novel", back_populates="author")
 
+
     def __repr__(self):
         return f"<Author {self.name}>"
