@@ -14,6 +14,9 @@ from app.models.genre import Genre
 from app.models.tag import Tag
 from app.models.chapter import Chapter
 
+# Load service
+from app.services.novel_services import *
+
 # Load environment variables
 load_dotenv()
 
@@ -41,39 +44,18 @@ def db():
         # Drop all tables after tests
         BaseModel.metadata.drop_all(bind=engine)
 
+def test_create_novel(db):
+    novel_data = {}
+    novel_data["title"] = "Harry Potter"
+    novel_data["author"] = "JK"
+    novel = create_novel(db, novel_data)
+    # check that returned object is rigth
+    assert novel.title == "Harry Potter"
+    # check database
+    result = db.query(Novel).filter(Novel.title == "Harry Potter").first()
 
-def test_create_genre(db):
-    # Create a genre
-    fantasy = Genre(name="Fantasy")
-    db.add(fantasy)
-    db.commit()
-
-    # Query the genre
-    result = db.query(Genre).filter(Genre.name == "Fantasy").first()
-
-    # Assert
     assert result is not None
-    assert result.name == "Fantasy"
+    assert result.title == "Harry Potter"
+    assert result.author == "JK"
     assert result.id is not None
-
-
-def test_create_tag(db):
-    # Create a genre
-    spaceships = Tag(name="spaceships")
-    db.add(spaceships)
-    db.commit()
-
-    # Query the genre
-    result = db.query(Tag).filter(Tag.name == "spaceships").first()
-
-    # Assert
-    assert result is not None
-    assert result.name == "spaceships"
-    assert result.id is not None
-
-
-if __name__ == "__main__":
-    # This allows running the tests directly with python
-    pytest.main(["-xvs", __file__])
-
-
+    
