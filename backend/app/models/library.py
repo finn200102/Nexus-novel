@@ -11,6 +11,7 @@ class Library(BaseModel):
 
     # Relationships
     user = relationship("User", back_populates="libraries")
+    novels = relationship("Novel", back_populates="library", cascade="all, delete-orphan")
     
 
     def __repr__(self):

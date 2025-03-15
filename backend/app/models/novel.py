@@ -21,12 +21,15 @@ class Novel(BaseModel):
     description = Column(Text)
     cover_image = Column(String(255))
     file_path = Column(String(255))
-    genre_id = Column(Integer, ForeignKey('genres.id'))
+    genre_id = Column(Integer, ForeignKey('genres.id')) 
+    library_id = Column(Integer, ForeignKey('libraries.id'),
+                        nullable=False)
 
 
     # Relationships
     author = relationship("Author", back_populates="novels")
     genre = relationship("Genre", back_populates="novels")
+    library = relationship("Library", back_populates="novels")
     chapters = relationship("Chapter",
                             back_populates="novel",
                             cascade="all, delete-orphan")
