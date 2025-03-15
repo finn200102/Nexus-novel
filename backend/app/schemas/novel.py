@@ -1,12 +1,9 @@
 from pydantic import BaseModel
 
-class NovelBase(BaseModel):
-    title: str
-
-class NovelCreate(UserBase):
+class NovelCreate(BaseModel):
     url: str
 
-class Novel(UserBase):
+class Novel(BaseModel):
     id: int
 
     class Config:

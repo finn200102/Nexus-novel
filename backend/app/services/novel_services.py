@@ -11,7 +11,7 @@ def create_novel(db: Session, novel_data: dict):
 
     novel = Novel(**novel_data)
 
-    # check for tag
+    # check for 
     if tags_data:
         for tag_name in tags_data:
             tag = db.query(Tag).filter(Tag.name == tag_name).first()
@@ -34,6 +34,15 @@ def get_novel_by_title(db: Session, title):
     """
 
     novels = db.query(Novel).filter(Novel.title == title)
+    return novels
+
+
+def get_novel_by_url(db: Session, url):
+    """
+    Returns novels that match that url
+    """
+
+    novels = db.query(Novel).filter(Novel.url == url)
     return novels
 
 

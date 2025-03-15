@@ -8,6 +8,10 @@ from app.models.chapter import Chapter
 
 def create_author(db: Session, author_data: dict):
 
+    # check if author already exists
+    if db.query(Author).filter(Author.name == author_data["name"]).first():
+        return None
+
     author = Author(**author_data)
     db.add(author)
     db.commit()
