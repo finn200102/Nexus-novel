@@ -5,6 +5,8 @@ class NovelCreate(BaseModel):
 
 class Novel(BaseModel):
     id: int
+    title: str
+    url: str
 
     class Config:
         orm_mode = True

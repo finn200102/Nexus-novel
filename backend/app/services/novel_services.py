@@ -28,6 +28,24 @@ def create_novel(db: Session, novel_data: dict):
     return novel
 
 
+def get_novels(db: Session):
+    """
+    Returns all novels
+    """
+
+    novels = db.query(Novel)
+    return novels
+
+
+def get_novel_by_id(db: Session, id):
+    """
+    Returns novel that matches that id
+    """
+
+    novel = db.query(Novel).filter(Novel.id == id).first()
+    return novel
+
+
 def get_novel_by_title(db: Session, title):
     """
     Returns novels that match that title

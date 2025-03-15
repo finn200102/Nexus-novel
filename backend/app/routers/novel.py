@@ -3,19 +3,19 @@ from sqlalchemy.orm import Session
 from config.database import get_db
 from ..schemas.novel import Novel as NovelSchema
 from ..schemas.novel import NovelCreate
-from app.services.novel_services import *
+import app.services.novel_services as novel_services
 from app.services.author_services import create_author
 from scripts.get_metadata import get_story_metadata
 
 router = APIRouter(
     prefix="/novel",
-    tags=["authentication"],
+    tags=["novels"],
     responses={404: {"description": "Not found"}},
 )
 
-@router.post("/add", response_model=NovelSchema, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=NovelSchema, status_code=status.HTTP_201_CREATED)
 def add_novel(novel: NovelCreate, db: Session = Depends(get_db)):
-    if get_novel_by_url(db, novel.url).first():
+    if novel_services.get_novel_by_url(db, novel.url).first():
         raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Novel already exists"
@@ -33,8 +33,65 @@ def add_novel(novel: NovelCreate, db: Session = Depends(get_db)):
                 "title": metadata["title"]}
     if author:
         novel_data["author_id"] = author.id
-    novel = create_novel(db, novel_data)
+    novel = novel_services.create_novel(db, novel_data)
     
     return novel
+
+
+@router.get("/", response_model=list[NovelSchema])
+def get_novels(
+        title: str = None,
+        author_name: int = None,
+        genre_id: int = None,
+        skip: int = 0,
+        limit: int = 100,
+        db: Session = Depends(get_db)):
+    """
+    Get novels with pagination and optional filtering
+    """
+    # Start with base query
+    query = novel_services.get_novels(db)
+
+    # Apply filters if provided
+    if title:
+        query = query.filter(Novel.title == title)
+
+    if author_name:
+        query = query.filter(Novel.author_name == author_name)
+
+    if genre_id:
+        query = query.filter(Novel.genre_id == genre_id)
+
+    # Apply pagination and return results
+    novels = query.offset(skip).limit(limit).all()
+    return novels
+
+
+@router.get("/{novel_id:int}", response_model=NovelSchema)
+def get_novel_by_id(novel_id: int, db: Session = Depends(get_db)):
+    """
+    Get a single novel by ID
+    """
+    novel = novel_services.get_novel_by_id(db, novel_id)
+    if not novel:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Novel with ID {novel_id} not found"
+        )
+    return novel
+
+
+@router.get("/search/", response_model=list[NovelSchema])
+def search_novels(
+        q: str,
+        skip: int = 0,
+        limit: int = 100,
+        db: Session = Depends(get_db)):
+    """
+    Search novels by title (partial match)
+    """
+    query = novel_services.get_novels(db).filter(Novel.title.ilike(f"%{q}%"))
+    novels = query.offset(skip).limit(limit).all()
+    return novels
 
 
