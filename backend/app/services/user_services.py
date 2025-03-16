@@ -29,6 +29,14 @@ def get_user_by_username(db: Session, username):
     users = db.query(User).filter(User.username == username)
     return users
 
+def get_user_by_id(db: Session, id):
+    """
+    Returns Users that match that id
+    """
+
+    users = db.query(User).filter(User.id == id).first()
+    return users
+
 
 def delete_user(db: Session, user_id):
     """
