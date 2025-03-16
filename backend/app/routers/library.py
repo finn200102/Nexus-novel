@@ -19,7 +19,8 @@ def add_library(library: LibraryCreate, db: Session = Depends(get_db)):
                 detail="Library already exists"
             )
 
-    library_data={"name": library.name}
+    library_data={"name": library.name,
+                  "user_id": library.user_id}
     library = library_services.create_library(db, library_data)
     
     return library

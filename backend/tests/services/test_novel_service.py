@@ -18,6 +18,7 @@ from app.models.author import Author
 # Load service
 from app.services.novel_services import *
 from app.services.library_services import create_library
+from app.services.user_services import create_user
 
 # Load environment variables
 load_dotenv()
@@ -46,9 +47,18 @@ def db():
         # Drop all tables after tests
         BaseModel.metadata.drop_all(bind=engine)
 
+def create_test_user(db):
+    user_data = {}
+    user_data["username"] = "user1"
+    user_data["password"] = "1234"
+    user = create_user(db, user_data)
+    return user
+
 def create_test_library(db):
+    user = create_test_user(db)
     library_data = {
-        "name": "Library1"
+        "name": "Library1",
+        "user_id": user.id
         }
     library = create_library(db, library_data)
     return library

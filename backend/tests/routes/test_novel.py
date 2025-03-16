@@ -4,6 +4,23 @@ import bcrypt
 from app.schemas.user import UserCreate
 from app.services.novel_services import get_novel_by_url
 from app.services.library_services import create_library
+from app.services.user_services import create_user
+
+def create_test_user(db):
+    user_data = {}
+    user_data["username"] = "user1"
+    user_data["password"] = "1234"
+    user = create_user(db, user_data)
+    return user
+
+def create_test_library(db):
+    user = create_test_user(db)
+    library_data = {
+        "name": "Library1",
+        "user_id": user.id
+        }
+    library = create_library(db, library_data)
+    return library
 
 
 def test_add_novel(client, db):
@@ -11,8 +28,9 @@ def test_add_novel(client, db):
     url = "https://www.royalroad.com/fiction/21220/mother-of-learning"
     novel_data = {"url": url}
     # create lib
-    library = create_library(db, library_data={"name": "lib1"})
+    library = create_test_library(db)
     novel_data["library_id"] = library.id
+
 
     # Make request
     response = client.post("/novel/", json=novel_data)
@@ -31,7 +49,7 @@ def test_get_novels(client, db):
     url = "https://www.royalroad.com/fiction/21220/mother-of-learning"
     novel_data = {"url": url}
     # create lib
-    library = create_library(db, library_data={"name": "lib1"})
+    library = create_test_library(db)
     novel_data["library_id"] = library.id
     novel_title = "Mother of Learning"
     author_name =  "nobody103"
@@ -74,7 +92,7 @@ def test_get_novel_by_id(client, db):
     url = "https://www.royalroad.com/fiction/21220/mother-of-learning"
     novel_data = {"url": url}
     # create lib
-    library = create_library(db, library_data={"name": "lib1"})
+    library = create_test_library(db)
     novel_data["library_id"] = library.id
     novel_title = "Mother of Learning"
     author_name =  "nobody103"
