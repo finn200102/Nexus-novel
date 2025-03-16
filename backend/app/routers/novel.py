@@ -30,7 +30,9 @@ def add_novel(novel: NovelCreate, db: Session = Depends(get_db)):
 
 
     novel_data={"url": novel.url,
-                "title": metadata["title"]}
+                "title": metadata["title"],
+                "library_id": novel.library_id
+                }
     if author:
         novel_data["author_id"] = author.id
     novel = novel_services.create_novel(db, novel_data)
