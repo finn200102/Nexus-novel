@@ -7,10 +7,11 @@ class Library(BaseModel):
 
     name = Column(String(100), nullable=False,
                   unique=True, index=True)
-    user_id = Column(Integer, ForeignKey('users.id'))
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
 
     # Relationships
     user = relationship("User", back_populates="libraries")
+    novels = relationship("Novel", back_populates="library", cascade="all, delete-orphan")
     
 
     def __repr__(self):

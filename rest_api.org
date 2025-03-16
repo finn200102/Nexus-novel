@@ -4,7 +4,7 @@
 
 | Endpoint                                                  | Method | Description                                                 |
 |-----------------------------------------------------------+--------+-------------------------------------------------------------|
-| /api/auth/register                                        | POST   | Register a new user                                         |
+| /api/auth/signup                                          | POST   | Register a new user                                         |
 | /api/auth/login                                           | POST   | Authenticate a user and return token                        |
 | /api/users/{user_id}/libraries                            | GET    | Get all libraries for a user                                |
 | /api/users/{user_id}/libraries                            | POST   | Create a new library for a user                             |

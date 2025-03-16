@@ -6,6 +6,9 @@ import bcrypt
 from ..schemas.user import UserCreate, User as UserSchema, LoginResponse, UserLogin
 from app.services.user_services import create_user, get_user_by_username
 
+from datetime import timedelta
+from app.auth.jwt import create_access_token
+
 router = APIRouter(
     prefix="/auth",
     tags=["authentication"],
@@ -90,11 +93,21 @@ def login(user_data: UserLogin, db: Session = Depends(get_db)):
             detail="Invalid username or password"
         )
 
-    # Return user data with response model
+
+    # Generate access token
+    access_token_expires = timedelta(minutes=30)  # Token valid for 30 minutes
+    access_token = create_access_token(
+        data={"sub": str(user.id)},
+        expires_delta=access_token_expires
+    )
+
+    # Return user data with token
     return {
         "id": user.id,
         "username": user.username,
-        "message": "Login successful"
+        "message": "Login successful",
+        "access_token": access_token,
+        "token_type": "bearer"
     }
 
 @router.post("/test-user", status_code=status.HTTP_201_CREATED)

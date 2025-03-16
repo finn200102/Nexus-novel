@@ -17,6 +17,8 @@ from app.models.author import Author
 
 # Load service
 from app.services.novel_services import *
+from app.services.library_services import create_library
+from app.services.user_services import create_user
 
 # Load environment variables
 load_dotenv()
@@ -45,9 +47,28 @@ def db():
         # Drop all tables after tests
         BaseModel.metadata.drop_all(bind=engine)
 
+def create_test_user(db):
+    user_data = {}
+    user_data["username"] = "user1"
+    user_data["password"] = "1234"
+    user = create_user(db, user_data)
+    return user
+
+def create_test_library(db):
+    user = create_test_user(db)
+    library_data = {
+        "name": "Library1",
+        "user_id": user.id
+        }
+    library = create_library(db, library_data)
+    return library
+    
+
 def test_create_novel(db):
+    library = create_test_library(db)
     novel_data = {}
     novel_data["title"] = "Harry Potter"
+    novel_data["library_id"] = library.id
     novel = create_novel(db, novel_data)
     # check that returned object is right
     assert novel.title == "Harry Potter"
@@ -60,8 +81,10 @@ def test_create_novel(db):
 
 
 def test_get_novel_by_title(db):
+    library = create_test_library(db)
     novel_data = {}
     novel_data["title"] = "Harry Potter"
+    novel_data["library_id"] = library.id
     novel = create_novel(db, novel_data)
     # check that returned object is right
     assert novel.title == "Harry Potter"
@@ -71,8 +94,10 @@ def test_get_novel_by_title(db):
 
 
 def test_delete_novel(db):
+    library = create_test_library(db)
     novel_data = {}
     novel_data["title"] = "Harry Potter"
+    novel_data["library_id"] = library.id
     novel = create_novel(db, novel_data)
     # check that returned object is right
     assert novel.title == "Harry Potter"
@@ -88,8 +113,10 @@ def test_delete_novel(db):
     assert result is None
 
 def test_update_novel(db):
+    library = create_test_library(db)
     # Create a novel
     novel_data = {"title": "Harry Potter"}
+    novel_data["library_id"] = library.id
     novel = create_novel(db, novel_data)
 
     # Check that returned object is right

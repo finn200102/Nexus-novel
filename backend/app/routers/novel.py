@@ -3,9 +3,13 @@ from sqlalchemy.orm import Session
 from config.database import get_db
 from ..schemas.novel import Novel as NovelSchema
 from ..schemas.novel import NovelCreate
+from app.models.user import User
+from app.models.library import Library
 import app.services.novel_services as novel_services
 from app.services.author_services import create_author
+from app.services.library_services import get_library_by_id
 from scripts.get_metadata import get_story_metadata
+from app.auth.dependencies import get_current_user
 
 router = APIRouter(
     prefix="/novel",
@@ -14,12 +18,29 @@ router = APIRouter(
 )
 
 @router.post("/", response_model=NovelSchema, status_code=status.HTTP_201_CREATED)
-def add_novel(novel: NovelCreate, db: Session = Depends(get_db)):
+def add_novel(novel: NovelCreate, db: Session = Depends(get_db),
+              current_user: User = Depends(get_current_user)):
     if novel_services.get_novel_by_url(db, novel.url).first():
         raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Novel already exists"
             )
+
+    # Check if library exists and user has access to it
+    library = get_library_by_id(db, novel.library_id)
+    if not library:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Library with ID {novel.library_id} not found"
+        )
+
+    # Check if user owns the library
+    if library.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to add novels to this library"
+        )
+
     # get metadata
     metadata = get_story_metadata(novel.url)
     # create author
@@ -30,7 +51,9 @@ def add_novel(novel: NovelCreate, db: Session = Depends(get_db)):
 
 
     novel_data={"url": novel.url,
-                "title": metadata["title"]}
+                "title": metadata["title"],
+                "library_id": novel.library_id
+                }
     if author:
         novel_data["author_id"] = author.id
     novel = novel_services.create_novel(db, novel_data)
