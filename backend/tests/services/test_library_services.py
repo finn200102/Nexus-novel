@@ -19,6 +19,7 @@ from app.models.author import Author
 
 # Load service
 from app.services.library_services import *
+from app.services.user_services import create_user
 
 # Load environment variables
 load_dotenv()
@@ -47,9 +48,19 @@ def db():
         # Drop all tables after tests
         BaseModel.metadata.drop_all(bind=engine)
 
+def create_test_user(db):
+    user_data = {}
+    user_data["username"] = "user1"
+    user_data["password"] = "1234"
+    user = create_user(db, user_data)
+    return user
+
 def test_create_library(db):
     library_data = {}
     library_data["name"] = "library1"
+    # create user
+    user = create_test_user(db)
+    library_data["user_id"] = user.id
     library = create_library(db, library_data)
     # check that returned object is right
     assert library.name == "library1"
@@ -64,27 +75,33 @@ def test_create_library(db):
 def test_get_library_by_name(db):
     library_data = {}
     library_data["name"] = "library1"
+    # create user
+    user = create_test_user(db)
+    library_data["user_id"] = user.id
     library = create_library(db, library_data)
     # check that returned object is right
     assert library.name == "library1"
     # get library
     library = get_library_by_name(db, "library1")
-    assert library[0].name == "library1"
+    assert library.name == "library1"
 
 
 def test_delete_library(db):
     library_data = {}
     library_data["name"] = "library1"
+    # create user
+    user = create_test_user(db)
+    library_data["user_id"] = user.id
     library = create_library(db, library_data)
     # check that returned object is right
     assert library.name == "library1"
     # check database
     db.query(Library).filter(Library.name == "library1").first()
     # get library
-    librarys = get_library_by_name(db, "library1")
-    assert librarys[0].name == "library1"
+    library = get_library_by_name(db, "library1")
+    assert library.name == "library1"
     # delete library
-    delete_library(db, librarys[0].id)
+    delete_library(db, library.id)
     # check database
     result = db.query(Library).filter(Library.name == "library1").first()
     assert result is None
@@ -93,6 +110,9 @@ def test_delete_library(db):
 def test_update_library(db):
     # Create a library
     library_data = {"name": "library1"}
+    # create user
+    user = create_test_user(db)
+    library_data["user_id"] = user.id
     library = create_library(db, library_data)
 
     # Check that returned object is right
