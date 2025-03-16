@@ -12,7 +12,7 @@ def create_test_user(db):
     return user
 
 
-def test_add_library(client, db):q
+def test_add_library(client, db):
     # Test data
     library_data = {"name": "lib1"}
     # create user
