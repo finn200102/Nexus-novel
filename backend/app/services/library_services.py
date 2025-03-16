@@ -26,6 +26,31 @@ def get_library_by_name(db: Session, name):
     librarys = db.query(Library).filter(Library.name == name)
     return librarys
 
+def get_librarys(db: Session):
+    """
+    Returns all librarys
+    """
+
+    librarys = db.query(Library)
+    return librarys
+
+
+def get_library_by_id(db: Session, id):
+    """
+    Returns library that matches that id
+    """
+
+    library = db.query(Library).filter(Library.id == id).first()
+    return library
+
+def get_library_by_name(db: Session, name):
+    """
+    Returns library that matches that name
+    """
+
+    library = db.query(Library).filter(Library.name == name).first()
+    return library
+
 
 def delete_library(db: Session, library_id):
     """
