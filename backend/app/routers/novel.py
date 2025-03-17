@@ -6,7 +6,7 @@ from ..schemas.novel import NovelCreate
 from app.models.user import User
 from app.models.library import Library
 import app.services.novel_services as novel_services
-from app.services.author_services import create_author
+from app.services.author_services import create_author, get_author_by_name
 from app.services.library_services import get_library_by_id
 from scripts.get_metadata import get_story_metadata
 from app.auth.dependencies import get_current_user
@@ -50,19 +50,24 @@ def add_novel(novel: NovelCreate, db: Session = Depends(get_db),
 
     # get metadata
     metadata = get_story_metadata(novel.url)
+    
+    # check if author already exists
+    authors = get_author_by_name(db, metadata["author"])
     # create author
     author_data = {
         "name": metadata["author"]
     }
-    author = create_author(db, author_data)
-
+    if authors.first():
+        author = authors.first()
+    else:
+        author = create_author(db, author_data)
 
     novel_data={"url": novel.url,
                 "title": metadata["title"],
                 "library_id": novel.library_id
                 }
-    if author:
-        novel_data["author_id"] = author.id
+    
+    novel_data["author_id"] = author.id
     novel = novel_services.create_novel(db, novel_data)
     
     return novel

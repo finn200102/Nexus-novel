@@ -13,7 +13,9 @@ from app.models.novel import Novel
 from app.models.genre import Genre
 from app.models.tag import Tag
 from app.models.chapter import Chapter
+from app.models.user import User
 from app.models.author import Author
+from app.models.library import Library
 
 # Load service
 from app.services.author_services import *

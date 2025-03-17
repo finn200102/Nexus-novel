@@ -28,6 +28,15 @@ def get_author_by_name(db: Session, name):
     return authors
 
 
+def get_author_by_id(db: Session, id):
+    """
+    Returns author that match that id
+    """
+
+    authors = db.query(Author).filter(Author.id == id).firt()
+    return author
+
+
 def delete_author(db: Session, author_id):
     """
     Deletes a author from database
