@@ -1,6 +1,7 @@
 import os
-import sys
-import subprocess
+from fanficfare.adapters import getAdapter
+from fanficfare.configurable import Configuration
+from fanficfare.writers import getWriter
 
 def download_novel_chapter(url, output_dir, story_name, format_type="txt", chapter_number=1):
     # Ensure the main directory exists
@@ -16,44 +17,25 @@ def download_novel_chapter(url, output_dir, story_name, format_type="txt", chapt
     # Define output filename
     output_filename = f"chapter_{chapter_number}.{format_type}"
 
-    # Use the Python interpreter from the active venv
-    venv_python = sys.executable
+    # Create a basic configuration
+    configuration = Configuration(["defaults.ini"], "DEFAULTS")
 
-    # Change current working directory to the target directory
-    # This is the key fix - FanFicFare often writes to current directory
-    original_dir = os.getcwd()
-    os.chdir(abs_story_path)
+    # Initialize the appropriate adapter for the URL
+    adapter = getAdapter(configuration, url)
 
-    try:
-        # Base command with simplified options
-        cmd = [
-            venv_python, "-m", "fanficfare.cli",
-            "-f", format_type,
-            "-b", str(chapter_number),
-            "-e", str(chapter_number),
-            "--force",
-            "-o", f"output_filename={output_filename}",
-            url
-        ]
+    # Set the chapter range
+    adapter.setChaptersRange(chapter_number, chapter_number)
 
-        # Run the command
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True
-        )
+    # Fetch the story metadata
+    adapter.getStoryMetadataOnly()
 
-        # Print output for debugging
-        print(f"Command output: {result.stdout}")
-        if result.stderr:
-            print(f"Command error: {result.stderr}")
+    # Get the writer for the specified format
+    writer = getWriter(format_type, configuration, adapter)
 
-        # Check if file was successfully created
-        expected_file = os.path.join(abs_story_path, output_filename)
-        success = os.path.exists(expected_file) and os.path.getsize(expected_file) > 0
+    # Open the file in binary mode instead of text mode
+    writer.writeStory(outstream=open(os.path.join(abs_story_path, output_filename), 'wb'))
 
-        return success
+    # Check if file was successfully created
+    success = os.path.exists(os.path.join(abs_story_path, output_filename)) and os.path.getsize(os.path.join(abs_story_path, output_filename)) > 0
 
-    finally:
-        # Return to original directory
-        os.chdir(original_dir)
+    return success

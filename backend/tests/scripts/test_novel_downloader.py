@@ -14,19 +14,21 @@ def test_download_novel_chapter():
     # Run the download function
     success = download_novel_chapter(URL, OUTPUT_DIR, STORY_NAME, FORMAT, CHAPTER)
 
-    # If we get here, download was successful
-    found_file = False
-    expected_pattern = f"chapter_{CHAPTER}.{FORMAT}"
+    # Assert that the download was successful
+    assert success, "Download function did not return success"
 
     # Check if the story directory exists
     assert os.path.exists(story_path), f"Story directory {story_path} not found"
 
     # Check for the file in the story directory
+    found_file = False
+    expected_pattern = f"chapter_{CHAPTER}.{FORMAT}"
+
     for file in os.listdir(story_path):
         if expected_pattern in file:
             found_file = True
             file_path = os.path.join(story_path, file)
-            assert os.path.getsize(file_path) > 0
+            assert os.path.getsize(file_path) > 0, f"File {file_path} is empty"
             break
 
     assert found_file, f"No file with pattern {expected_pattern} found in {story_path}"
