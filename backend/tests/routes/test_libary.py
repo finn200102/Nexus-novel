@@ -3,6 +3,7 @@ from fastapi import status
 from app.schemas.library import LibraryCreate
 from app.services.library_services import get_library_by_name
 from app.services.user_services import create_user
+from app.auth.jwt import create_access_token
 
 def create_test_user(db):
     user_data = {}
@@ -12,15 +13,24 @@ def create_test_user(db):
     return user
 
 
+def get_auth_headers(user_id):
+    """Generate authorization headers for a user"""
+    token = create_access_token(data={"sub": str(user_id)})
+    return {"Authorization": f"Bearer {token}"}
+
+
 def test_add_library(client, db):
     # Test data
     library_data = {"name": "lib1"}
     # create user
     user = create_test_user(db)
     library_data["user_id"] = user.id
+    # get auth header
+    headers = get_auth_headers(user.id)
 
     # Make request
-    response = client.post("/library/", json=library_data)
+    response = client.post("/library/", json=library_data,
+                           headers=headers)
 
     # Assertions
     assert response.status_code == status.HTTP_201_CREATED
@@ -37,9 +47,12 @@ def test_get_librarys(client, db):
     # create user
     user = create_test_user(db)
     library_data["user_id"] = user.id
+    # get auth header
+    headers = get_auth_headers(user.id)
 
     # Make request
-    response = client.post("/library/", json=library_data)
+    response = client.post("/library/", json=library_data,
+                           headers=headers)
 
     # Assertions
     assert response.status_code == status.HTTP_201_CREATED
@@ -49,7 +62,8 @@ def test_get_librarys(client, db):
     assert db_library.name == "lib1"
 
     # get library
-    response = client.get("/library/")
+    response = client.get("/library/",
+                          headers=headers)
     print("Response status:", response.status_code)
     print("Response JSON:", response.json())
 
@@ -76,9 +90,12 @@ def test_get_library_by_id(client, db):
     # create user
     user = create_test_user(db)
     library_data["user_id"] = user.id
+    # get auth header
+    headers = get_auth_headers(user.id)
 
     # Make request
-    response = client.post("/library/", json=library_data)
+    response = client.post("/library/", json=library_data,
+                           headers=headers)
 
     # Assertions
     assert response.status_code == status.HTTP_201_CREATED
@@ -90,7 +107,8 @@ def test_get_library_by_id(client, db):
 
 
     # get library
-    response = client.get(f"/library/{db_library.id}")
+    response = client.get(f"/library/{db_library.id}",
+                          headers=headers)
     print("Response status:", response.status_code)
     print("Response JSON:", response.json())
 
