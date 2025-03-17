@@ -106,7 +106,7 @@ def test_get_novels(client, db):
     assert db_novel.url == url
 
     # get novel
-    response = client.get("/novel/")
+    response = client.get(f"/novel/?library_id={library.id}", headers=headers)
     print("Response status:", response.status_code)
     print("Response JSON:", response.json())
 
@@ -154,7 +154,7 @@ def test_get_novel_by_id(client, db):
     assert db_novel.url == url
 
     # get novel
-    response = client.get(f"/novel/{db_novel.id}")
+    response = client.get(f"/novel/{db_novel.id}?library_id={library.id}", headers=headers)
     print("Response status:", response.status_code)
     print("Response JSON:", response.json())
 
