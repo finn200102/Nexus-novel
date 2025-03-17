@@ -1,0 +1,4 @@
+* README
+
+** Ideas
+Like in jellyfin add a character section where all characters of the story are, that means parsing the chapters and collecting information

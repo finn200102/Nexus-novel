@@ -1,0 +1,10 @@
+/* src/index.css */
+@import "tailwindcss";
+
+/* You can add custom theme variables here */
+@theme {
+  /* Example customizations */
+  --color-primary-500: #3b82f6;
+  --font-sans: "Inter", system-ui, sans-serif;
+}
+
