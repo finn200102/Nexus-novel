@@ -17,6 +17,25 @@ router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
+def check_library(db, library_id, current_user):
+    """
+    Check if library exists and is owned by curretn user
+    """
+    # Check if library exists and user has access to it
+    library = get_library_by_id(db, library_id)
+    if not library:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Library with ID {library_id} not found"
+        )
+
+    # Check if user owns the library
+    if library.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission for this library"
+        )
+
 @router.post("/", response_model=NovelSchema, status_code=status.HTTP_201_CREATED)
 def add_novel(novel: NovelCreate, db: Session = Depends(get_db),
               current_user: User = Depends(get_current_user)):
@@ -26,20 +45,8 @@ def add_novel(novel: NovelCreate, db: Session = Depends(get_db),
                 detail="Novel already exists"
             )
 
-    # Check if library exists and user has access to it
-    library = get_library_by_id(db, novel.library_id)
-    if not library:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Library with ID {novel.library_id} not found"
-        )
-
-    # Check if user owns the library
-    if library.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have permission to add novels to this library"
-        )
+    # check library
+    check_library(db, novel.library_id, current_user)
 
     # get metadata
     metadata = get_story_metadata(novel.url)
@@ -63,15 +70,21 @@ def add_novel(novel: NovelCreate, db: Session = Depends(get_db),
 
 @router.get("/", response_model=list[NovelSchema])
 def get_novels(
+        library_id: int,
         title: str = None,
         author_name: int = None,
         genre_id: int = None,
         skip: int = 0,
         limit: int = 100,
-        db: Session = Depends(get_db)):
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user)):
     """
     Get novels with pagination and optional filtering
     """
+    
+    # check library
+    check_library(db, library_id, current_user)
+    
     # Start with base query
     query = novel_services.get_novels(db)
 
@@ -91,10 +104,15 @@ def get_novels(
 
 
 @router.get("/{novel_id:int}", response_model=NovelSchema)
-def get_novel_by_id(novel_id: int, db: Session = Depends(get_db)):
+def get_novel_by_id(novel_id: int,
+                    library_id: int,
+                    db: Session = Depends(get_db),
+                    current_user: User = Depends(get_current_user)):
     """
     Get a single novel by ID
     """
+    # check library
+    check_library(db, library_id, current_user)
     novel = novel_services.get_novel_by_id(db, novel_id)
     if not novel:
         raise HTTPException(
@@ -107,12 +125,16 @@ def get_novel_by_id(novel_id: int, db: Session = Depends(get_db)):
 @router.get("/search/", response_model=list[NovelSchema])
 def search_novels(
         q: str,
+        library_id: int,
         skip: int = 0,
         limit: int = 100,
-        db: Session = Depends(get_db)):
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user)):
     """
     Search novels by title (partial match)
     """
+    # check library
+    check_library(db, library_id, current_user)
     query = novel_services.get_novels(db).filter(Novel.title.ilike(f"%{q}%"))
     novels = query.offset(skip).limit(limit).all()
     return novels
