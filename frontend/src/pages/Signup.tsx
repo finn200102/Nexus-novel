@@ -1,7 +1,7 @@
 import React from "react";
-import LoginForm from "../components/auth/LoginForm";
+import SignupForm from "../components/auth/SignupForm";
 
-const LoginPage: React.FC = () => {
+const SignupPage: React.FC = () => {
   return (
     <div
       style={{
@@ -12,10 +12,10 @@ const LoginPage: React.FC = () => {
         height: "100vh",
       }}
     >
-      <h1>Login</h1>
-      <LoginForm />
+      <h1>Signup</h1>
+      <SignupForm />
     </div>
   );
 };
 
-export default LoginPage;
+export default SignupPage;
