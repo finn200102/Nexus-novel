@@ -16,7 +16,7 @@ const LibraryList: React.FC = () => {
     const fetchLibraries = async () => {
       try {
         setLoading(true);
-        const data = await libraryService.getAllLibraries();
+        const data = await libraryService.getLibraries();
 
         // Ensure we have an array of libraries
         if (Array.isArray(data)) {
