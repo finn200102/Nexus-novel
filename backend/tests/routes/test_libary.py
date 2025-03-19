@@ -19,8 +19,8 @@ def get_auth_headers(user_id):
     return {"Authorization": f"Bearer {token}"}
 
 
-def test_add_library(client, db):
-    # Test data
+def add_library_response(client, db):
+    #Test data
     library_data = {"name": "lib1"}
     # create user
     user = create_test_user(db)
@@ -31,7 +31,12 @@ def test_add_library(client, db):
     # Make request
     response = client.post("/library/", json=library_data,
                            headers=headers)
+    
+    return response, headers, library_data
 
+
+def test_add_library(client, db):
+    response, headers, library_data = add_library_response(client, db)
     # Assertions
     assert response.status_code == status.HTTP_201_CREATED
 
@@ -42,17 +47,7 @@ def test_add_library(client, db):
 
 
 def test_get_librarys(client, db):
-    # Test data
-    library_data = {"name": "lib1"}
-    # create user
-    user = create_test_user(db)
-    library_data["user_id"] = user.id
-    # get auth header
-    headers = get_auth_headers(user.id)
-
-    # Make request
-    response = client.post("/library/", json=library_data,
-                           headers=headers)
+    response, headers, library_data = add_library_response(client, db)
 
     # Assertions
     assert response.status_code == status.HTTP_201_CREATED
@@ -85,26 +80,8 @@ def test_get_librarys(client, db):
 
 
 def test_get_library_by_id(client, db):
-    # Test data
-    library_data = {"name": "lib1"}
-    # create user
-    user = create_test_user(db)
-    library_data["user_id"] = user.id
-    # get auth header
-    headers = get_auth_headers(user.id)
-
-    # Make request
-    response = client.post("/library/", json=library_data,
-                           headers=headers)
-
-    # Assertions
-    assert response.status_code == status.HTTP_201_CREATED
-    
-    # Verify nove was created
+    response, headers, library_data = add_library_response(client, db)
     db_library = get_library_by_name(db, "lib1")
-    assert db_library is not None
-    assert db_library.name == "lib1"
-
 
     # get library
     response = client.get(f"/library/{db_library.id}",
@@ -118,3 +95,15 @@ def test_get_library_by_id(client, db):
     library = response.json()
     assert library is not None
     assert library["id"] == db_library.id
+
+
+def test_delete_library_by_id(client, db):
+    response, headers, library_data = add_library_response(client, db)
+    db_library = get_library_by_name(db, "lib1")
+
+    assert db_library.name == "lib1"
+    response = client.post(f"/library/delete/{db_library.id}",
+                            headers=headers)
+    db_library = get_library_by_name(db, "lib1")
+
+    assert db_library is None
