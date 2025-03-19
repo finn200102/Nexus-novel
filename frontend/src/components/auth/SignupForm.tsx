@@ -23,7 +23,7 @@ const SignupForm: React.FC = () => {
     setSubmitStatus(null);
 
     try {
-      await axios.post("/auth/signup", formData);
+      await axios.post("/api/auth/signup", formData);
       setSubmitStatus("success");
       setFormData({ username: "", password: "" });
     } catch (error) {
