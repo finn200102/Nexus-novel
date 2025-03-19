@@ -68,7 +68,8 @@ def update_library(db: Session, library_id, library_data):
     Update the Library with Library_data which can be complete new data or just part of it
     """
     library = db.query(Library).filter(Library.id == library_id).first()
-
+    print("here in update", library)
+    print(library_data)
     if not library:
         return None
 

@@ -11,3 +11,7 @@ class Library(BaseModel):
 
     class Config:
         orm_mode = True
+
+class LibraryUpdate(BaseModel):
+    name: str
+    id: int

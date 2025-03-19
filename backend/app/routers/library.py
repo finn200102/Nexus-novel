@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, status, HTTPException
 from sqlalchemy.orm import Session
 from config.database import get_db
 from ..schemas.library import Library as LibrarySchema
-from ..schemas.library import LibraryCreate
+from ..schemas.library import LibraryCreate, LibraryUpdate
 from app.models.user import User
 from app.models.library import Library
 import app.services.library_services as library_services
@@ -89,11 +89,25 @@ def get_library_by_id(library_id: int, db: Session = Depends(get_db),
 
 @router.post("/delete/{library_id:int}", response_model=LibrarySchema)
 def delete_library_by_id(library_id: int, db: Session = Depends(get_db),
-                         curretn_user: User = Depends(get_current_user)):
+                         current_user: User = Depends(get_current_user)):
     """
     Delete a single library by ID
     """
-    library = check_library(db, library_id, curretn_user)
+    library = check_library(db, library_id, current_user)
     if library:
         library_services.delete_library(db, library.id)
+    return library
+
+
+@router.post("/update/", response_model=LibrarySchema)
+def update_library(library: LibraryUpdate, db: Session = Depends(get_db),
+                         current_user: User = Depends(get_current_user)):
+    """
+    Update a single library by library_data
+    """
+    library_data={"name": library.name}
+    library = check_library(db, library.id, current_user)
+    
+    if library:
+        library_services.update_library(db, library.id, library_data)
     return library
