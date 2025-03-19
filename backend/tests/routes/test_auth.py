@@ -3,6 +3,8 @@ from fastapi import status
 import bcrypt
 from app.schemas.user import UserCreate
 from app.services.user_services import get_user_by_username
+from app.services.user_services import get_user_by_id
+from app.auth.jwt import verify_token
 
 
 def test_signup_success(client, db):
@@ -63,6 +65,16 @@ def test_login_success(client, db):
     assert response.json()["username"] == "testuser"
     assert "id" in response.json()
     assert response.json()["message"] == "Login successful"
+    token = response.json()["access_token"]
+    assert token is not None
+    print("Token:", token)
+    # Verify the token manually
+    token_data = verify_token(token)
+
+    # Get the user from the database
+
+    user = get_user_by_id(db, token_data["user_id"])
+    print(user) 
 
     # Verify the returned ID matches the created user
     assert response.json()["id"] == db_user.id

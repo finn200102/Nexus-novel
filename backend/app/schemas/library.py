@@ -2,6 +2,7 @@ from pydantic import BaseModel
 
 class LibraryCreate(BaseModel):
     name: str
+    user_id: int = None
 
 class Library(BaseModel):
     id: int

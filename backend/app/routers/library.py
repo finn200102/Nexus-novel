@@ -45,14 +45,8 @@ def add_library(library: LibraryCreate, db: Session = Depends(get_db),
                 detail="Library already exists"
             )
 
-    if library.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have permission for this library"
-        )
-
     library_data={"name": library.name,
-                  "user_id": library.user_id}
+                  "user_id": current_user.id}
     library = library_services.create_library(db, library_data)
     
     return library

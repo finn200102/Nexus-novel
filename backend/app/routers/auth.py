@@ -5,6 +5,8 @@ from config.database import get_db
 import bcrypt
 from ..schemas.user import UserCreate, User as UserSchema, LoginResponse, UserLogin
 from app.services.user_services import create_user, get_user_by_username
+from app.models.user import User
+from app.auth.dependencies import get_current_user
 
 from datetime import timedelta
 from app.auth.jwt import create_access_token
@@ -127,6 +129,13 @@ def create_test_user(db: Session = Depends(get_db)):
     user = create_user(db, user_data={"username": "testuser2", "password": hashed_password_str})
     
     return {"message": "Test user created", "username": "testuser2", "password": "testpassword"}
+
+
+@router.get("/verify-token", response_model=UserSchema)
+def verify_token_endpoint(current_user: User = Depends(get_current_user)):
+    """Endpoint to verify if the current token is valid"""
+    return current_user
+
 
 
 
