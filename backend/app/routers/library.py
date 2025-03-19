@@ -86,3 +86,14 @@ def get_library_by_id(library_id: int, db: Session = Depends(get_db),
 
     library = check_library(db, library_id, current_user)
     return library
+
+@router.post("/delete/{library_id:int}", response_model=LibrarySchema)
+def delete_library_by_id(library_id: int, db: Session = Depends(get_db),
+                         curretn_user: User = Depends(get_current_user)):
+    """
+    Delete a single library by ID
+    """
+    library = check_library(db, library_id, curretn_user)
+    if library:
+        library_services.delete_library(db, library.id)
+    return library
