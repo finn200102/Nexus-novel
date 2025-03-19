@@ -107,3 +107,17 @@ def test_delete_library_by_id(client, db):
     db_library = get_library_by_name(db, "lib1")
 
     assert db_library is None
+
+def test_update_library_by_id(client, db):
+    response, headers, library_data = add_library_response(client, db)
+    db_library = get_library_by_name(db, "lib1")
+
+    assert db_library.name == "lib1"
+    library_data = {"name": "lib2",
+                    "id": db_library.id
+                    }
+    response = client.post(f"/library/update/", json=library_data,
+                            headers=headers)
+    db_library = get_library_by_name(db, "lib2")
+
+    assert db_library is not None
