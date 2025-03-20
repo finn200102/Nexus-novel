@@ -152,9 +152,15 @@ def update_novel(novel: NovelUpdate, db: Session = Depends(get_db),
     """
     novel_data={"title": novel.title,
                 "url": novel.url}
-    novel = check_novel(db, novel.id, current_user)
+    novel = novel_services.get_novel_by_id(db, novel.id)
+    if not novel:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Novel with ID {novel_id} not found"
+        )
+    library = check_library(db, novel.id, current_user)
 
     
-    if novel:
-        novel_services.update_novel(db, novel.id, novel_data)
+
+    novel = novel_services.update_novel(db, novel.id, novel_data)
     return novel
