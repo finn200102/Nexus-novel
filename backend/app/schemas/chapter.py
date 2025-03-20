@@ -25,3 +25,8 @@ class Chapter(BaseModel):
 
     class Config:
         orm_mode = True
+
+
+class ChapterUpdate(BaseModel):
+    title: str
+    content_status: ContentStatus

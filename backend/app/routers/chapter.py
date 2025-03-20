@@ -3,9 +3,10 @@ from sqlalchemy.orm import Session
 from config.database import get_db
 from app.models.user import User
 from ..schemas.chapter import Chapter as ChapterSchema
-from ..schemas.chapter import ChapterCreate
+from ..schemas.chapter import ChapterCreate, ChapterUpdate
 from app.models.chapter import Chapter
 import app.services.chapter_services as chapter_services
+import app.services.novel_services as novel_services
 from app.auth.dependencies import get_current_user
 
 router = APIRouter(
@@ -14,17 +15,52 @@ router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
-
-@router.post("/", response_model=ChapterSchema, status_code=status.HTTP_201_CREATED)
-def add_chapter(chapter: ChapterCreate, db: Session = Depends(get_db),
-                current_user: User = Depends(get_current_user)):
-    if chapter_services.get_chapter_by_chapter_number(db, chapter.chapter_number,
-                                                      chapter.novel_id):
+def check_chapter(db, chapter_id, current_user):
+    chapter = chapter_services.get_chapter_by_chapter_number(db, chapter.chapter_number,
+                                                             chapter.novel_id)
+    if not chapter:
         raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Chapter already exists"
             )
 
+    # Check if novel exists
+    novel = novel_services.get_novel_by_id(db, chapter.novel_id)
+    if not novel:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Novel with ID {chapter.novel_id} not found"
+        )
+
+    # Check if library exists
+    library = library_services.get_library_by_id(db, novel.library_id)
+    if not library:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Library with ID {novel.library_id} not found"
+        )
+
+    # Check if user owns the library
+    if library.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission for this library"
+        )
+    return chapter
+
+
+@router.post("/", response_model=ChapterSchema, status_code=status.HTTP_201_CREATED)
+def add_chapter(chapter: ChapterCreate, db: Session = Depends(get_db),
+                current_user: User = Depends(get_current_user)):
+
+    query = chapter_services.get_chapter_by_chapter_number(db, chapter.chapter_number,
+                                                             chapter.novel_id)
+    
+    if query:
+        raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Chapter already exists"
+            )
     # Create chapter data dictionary
     chapter_data = {
         "novel_id": chapter.novel_id,
@@ -35,3 +71,72 @@ def add_chapter(chapter: ChapterCreate, db: Session = Depends(get_db),
     new_chapter = chapter_services.create_chapter(db, chapter_data)
     
     return new_chapter
+
+
+@router.get("/{novel_id:int}", response_model=list[ChapterSchema])
+def get_chapters(
+        novel_id: int,
+        title: str = None,
+        skip: int = 0,
+        limit: int = 100,
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user)):
+    """
+    Get chapters with pagination and optional filtering
+    """
+    
+    # Start with base query
+    query = chapter_services.get_chapters(db)
+
+    # Apply filters if provided
+    if title:
+        query = query.filter(Chapter.title == title)
+
+    query = query.filter(Chapter.novel_id == novel_id)
+
+    # Apply pagination and return results
+    chapters = query.offset(skip).limit(limit).all()
+    return chapters
+
+
+@router.get("/{chapter_number:int}", response_model=ChapterSchema)
+def get_chapter_by_number(chapter_number: int, db: Session = Depends(get_db),
+                      current_user: User = Depends(get_current_user)):
+    """
+    Get a single chapter by Number
+    """
+
+    chapter = check_chapter(db, chapter_number, current_user)
+    return chapter
+
+@router.post("/delete/{chapter_id:int}", response_model=ChapterSchema)
+def delete_chapter_by_id(chapter_id: int, db: Session = Depends(get_db),
+                         current_user: User = Depends(get_current_user)):
+    """
+    Delete a single chapter by ID
+    """
+    chapter = chapter_services.get_chapter_by_id(db, chapter_id)
+    if not chapter:
+        raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="chapter not found"
+            )
+    chapter = check_chapter(db, chapter.chapter_number, current_user)
+    chapter_services.delete_chapter(db, chapter_id)
+    return chapter
+
+
+@router.post("/update/", response_model=ChapterSchema)
+def update_chapter(chapter: ChapterUpdate, db: Session = Depends(get_db),
+                         current_user: User = Depends(get_current_user)):
+    """
+    Update a single chapter by chapter_data
+    """
+    chapter_data = {"title": "abc",
+                    "content_status": "PRESENT"}
+
+    chapter = check_chapter(db, chapter.id, current_user)
+    
+    if chapter:
+        chapter_services.update_chapter(db, chapter.id, chapter_data)
+    return chapter
