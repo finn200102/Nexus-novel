@@ -29,7 +29,7 @@ def get_auth_headers(user_id):
     return {"Authorization": f"Bearer {token}"}
 
 
-def test_add_novel(client, db):
+def add_novel_resources(client, db):
     # Test data
     url = "https://www.royalroad.com/fiction/21220/mother-of-learning"
     novel_data = {"url": url}
@@ -44,6 +44,12 @@ def test_add_novel(client, db):
 
     # Make request
     response = client.post("/novel/", json=novel_data, headers=headers)
+
+    return response, headers, novel_data, url, library
+
+
+def test_add_novel(client, db):
+    response, headers, novel_data, url, library = add_novel_resources(client, db)
 
     # Assertions
     assert response.status_code == status.HTTP_201_CREATED
@@ -80,22 +86,7 @@ def test_add_novel_unauthorized(client, db):
 
 
 def test_get_novels(client, db):
-    # Test data
-    url = "https://www.royalroad.com/fiction/21220/mother-of-learning"
-    novel_data = {"url": url}
-    # create lib
-    library = create_test_library(db)
-    novel_data["library_id"] = library.id
-    novel_title = "Mother of Learning"
-    author_name =  "nobody103"
-    
-    # get auth header
-    user_id = library.user_id
-    headers = get_auth_headers(user_id)
-
-
-    # Make request
-    response = client.post("/novel/", json=novel_data, headers=headers)
+    response, headers, novel_data, url, library = add_novel_resources(client, db)
     
     # Assertions
     assert response.status_code == status.HTTP_201_CREATED
@@ -128,23 +119,8 @@ def test_get_novels(client, db):
 
 
 def test_get_novel_by_id(client, db):
-    # Test data
-    url = "https://www.royalroad.com/fiction/21220/mother-of-learning"
-    novel_data = {"url": url}
-    # create lib
-    library = create_test_library(db)
-    novel_data["library_id"] = library.id
-    novel_title = "Mother of Learning"
-    author_name =  "nobody103"
-
-    # get auth header
-    user_id = library.user_id
-    headers = get_auth_headers(user_id)
-
-
-    # Make request
-    response = client.post("/novel/", json=novel_data, headers=headers)
-
+    response, headers, novel_data, url, library = add_novel_resources(client, db)
+    
     # Assertions
     assert response.status_code == status.HTTP_201_CREATED
 
@@ -164,3 +140,21 @@ def test_get_novel_by_id(client, db):
     novel = response.json()
     assert novel is not None
     assert novel["id"] == db_novel.id
+
+
+def test_delete_novel_by_id(client, db):
+    response, headers, novel_data, url, library = add_novel_resources(client, db)
+    
+    # Assertions
+    assert response.status_code == status.HTTP_201_CREATED
+
+    # Verify nove was created
+    db_novel = get_novel_by_url(db, url).first()
+    assert db_novel is not None
+
+    # delete novel
+    response = client.post(f"/novel/delete/{db_novel.id}", headers=headers)
+
+    # Verify nove was deleted
+    db_novel = get_novel_by_url(db, url).first()
+    assert db_novel is None
