@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, status, HTTPException
 from sqlalchemy.orm import Session
 from config.database import get_db
 from ..schemas.novel import Novel as NovelSchema
-from ..schemas.novel import NovelCreate
+from ..schemas.novel import NovelCreate, NovelUpdate
 from app.models.user import User
 from app.models.library import Library
 import app.services.novel_services as novel_services
@@ -126,22 +126,35 @@ def get_novel_by_id(novel_id: int,
         )
     return novel
 
-
-@router.get("/search/", response_model=list[NovelSchema])
-def search_novels(
-        q: str,
-        library_id: int,
-        skip: int = 0,
-        limit: int = 100,
-        db: Session = Depends(get_db),
-        current_user: User = Depends(get_current_user)):
+@router.post("/delete/{novel_id:int}", response_model=NovelSchema)
+def delete_novel_by_id(novel_id: int, db: Session = Depends(get_db),
+                       current_user: User = Depends(get_current_user)):
     """
-    Search novels by title (partial match)
+    Delete a single novel by ID
     """
-    # check library
-    check_library(db, library_id, current_user)
-    query = novel_services.get_novels(db).filter(Novel.title.ilike(f"%{q}%"))
-    novels = query.offset(skip).limit(limit).all()
-    return novels
+    novel = novel_services.get_novel_by_id(db, novel_id)
+    if not novel:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Novel with ID {novel_id} not found"
+        )
+
+    library = check_library(db, novel.id, current_user)
+    novel_services.delete_novel(db, novel.id)
+    return novel
 
 
+@router.post("/update/", response_model=NovelSchema)
+def update_novel(novel: NovelUpdate, db: Session = Depends(get_db),
+                         current_user: User = Depends(get_current_user)):
+    """
+    Update a single novel by novel_data
+    """
+    novel_data={"title": novel.title,
+                "url": novel.url}
+    novel = check_novel(db, novel.id, current_user)
+
+    
+    if novel:
+        novel_services.update_novel(db, novel.id, novel_data)
+    return novel

@@ -12,3 +12,8 @@ class Novel(BaseModel):
 
     class Config:
         orm_mode = True
+
+class NovelUpdate(BaseModel):
+    id: int
+    title: str
+    url: str
