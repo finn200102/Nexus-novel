@@ -158,3 +158,25 @@ def test_delete_novel_by_id(client, db):
     # Verify nove was deleted
     db_novel = get_novel_by_url(db, url).first()
     assert db_novel is None
+
+def test_update_novel(client, db):
+    response, headers, novel_data, url, library = add_novel_resources(client, db)
+
+    # Assertions
+    assert response.status_code == status.HTTP_201_CREATED
+
+    # Verify nove was created
+    db_novel = get_novel_by_url(db, url).first()
+    assert db_novel is not None
+    new_novel_data = novel_data
+    new_novel_data["id"] = db_novel.id
+    new_novel_data["title"] = "newtitle"
+    
+
+    # update novel
+    response = client.post(f"/novel/update", json=new_novel_data, headers=headers)
+
+    # Verify nove was updated
+    db_novel = get_novel_by_url(db, url).first()
+    assert db_novel is not None
+    assert db_novel.title == "newtitle"
