@@ -16,6 +16,21 @@ def create_chapter(db: Session, chapter_data: dict):
     db.refresh(chapter)
     return chapter
 
+def get_chapters(db: Session):
+    """
+    Returns all chapters
+    """
+
+    chapters = db.query(Chapter)
+    return chapters
+
+def get_chapter_by_id(db: Session, id):
+    """
+    Returns chapter that matches that id
+    """
+
+    chapter = db.query(Chapter).filter(Chapter.id == id).first()
+    return chapter
 
 def get_chapters_by_novel_id(db: Session, novel_id):
     """
