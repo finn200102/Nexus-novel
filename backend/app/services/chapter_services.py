@@ -46,3 +46,35 @@ def get_chapter_by_chapter_number(db: Session, chapter_number, novel_id):
     """
     chapter = db.query(Chapter).filter(Chapter.novel_id == novel_id).filter(Chapter.chapter_number == chapter_number).first()
     return chapter
+
+
+def delete_chapter(db: Session, chapter_id):
+    """
+    Deletes a Chapter from database
+    """
+
+    chapter = db.query(Chapter).filter(Chapter.id == chapter_id).first()
+    if chapter:
+        db.delete(chapter)
+        db.commit()
+
+
+def update_chapter(db: Session, chapter_id, chapter_data):
+    """
+    Update the Chapter with Chapter_data which can be complete new data or just part of it
+    """
+    chapter = db.query(Chapter).filter(Chapter.id == chapter_id).first()
+    print("here in update", chapter)
+    print(chapter_data)
+    if not chapter:
+        return None
+
+    # Update Chapter attributes
+    for key, value in chapter_data.items():
+        if hasattr(chapter, key):
+            setattr(chapter, key, value)
+
+    db.commit()
+    db.refresh(chapter)
+    return chapter
+

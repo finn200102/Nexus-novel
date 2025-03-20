@@ -20,7 +20,7 @@ class Novel(BaseModel):
     url = Column(String(255))
     description = Column(Text)
     cover_image = Column(String(255))
-    file_path = Column(String(255)
+    file_path = Column(String(255))
     num_chapters = Column(Integer)
     genre_id = Column(Integer, ForeignKey('genres.id')) 
     library_id = Column(Integer, ForeignKey('libraries.id'),
