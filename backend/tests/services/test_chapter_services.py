@@ -21,7 +21,7 @@ from app.models.author import Author
 from app.services.library_services import *
 from app.services.user_services import create_user
 from app.services.novel_services import create_novel
-from app.services.chapter_services import create_chapter, get_chapter_by_id
+from app.services.chapter_services import *
 
 # Load environment variables
 load_dotenv()
@@ -77,14 +77,41 @@ def create_test_novel(db):
 
     return novel, library
 
-def test_create_chapter(db):
-    
+def create_test_chapter(db):
     novel, library = create_test_novel(db)
     chapter_data = {"novel_id": novel.id,
                     "chapter_number": 1,
                     "title": "",
                     "content_status": "MISSING"}
     chapter = create_chapter(db, chapter_data)
+    return chapter
+
+def test_create_chapter(db):
+    chapter = create_test_chapter(db)
+
     chapter = get_chapter_by_id(db, chapter.id)
     assert chapter.chapter_number == 1
-    
+
+
+def test_get_chapter_by_id(db):
+    chapter = create_test_chapter(db)
+    chapter_id = chapter.id
+    chapter = get_chapter_by_id(db, chapter_id)
+    assert chapter.id == chapter_id
+
+def test_delete_chapter(db):
+    chapter = create_test_chapter(db)
+    chapter_id = chapter.id
+    chapter = delete_chapter(db, chapter_id)
+    chapter = get_chapter_by_id(db, chapter_id)
+    assert chapter is None
+
+def test_update_chapter(db):
+    chapter = create_test_chapter(db)
+    chapter_id = chapter.id
+    chapter_data = {"title": "abc",
+                    "content_status": "PRESENT"}
+    chapter = update_chapter(db, chapter_id, chapter_data)
+    assert chapter.id == chapter_id
+    assert chapter.title == "abc"
+    assert chapter.content_status.value == "PRESENT"
