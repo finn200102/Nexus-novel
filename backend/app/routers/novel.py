@@ -126,6 +126,7 @@ def get_novel_by_id(novel_id: int,
         )
     return novel
 
+
 @router.post("/delete/{novel_id:int}", response_model=NovelSchema)
 def delete_novel_by_id(novel_id: int, db: Session = Depends(get_db),
                        current_user: User = Depends(get_current_user)):

@@ -28,8 +28,8 @@ def parse_metadata(metadata):
     """
 
     keys = ['genre', 'author', 'series', 'numChapters',
-            'title', 'description', 'langcode', 'cover_image']
-    parsed_metadata = {}
+            'title', 'description', 'langcode', 'cover_image', 'numChapters']
+    parsed_metadata = {} 
 
     for key in keys:
         if metadata[key]:
