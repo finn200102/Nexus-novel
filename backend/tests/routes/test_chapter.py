@@ -7,6 +7,8 @@ from app.services.chapter_services import get_chapters_by_novel_id, get_chapter_
 from app.services.library_services import create_library
 from app.services.user_services import create_user
 from app.auth.jwt import create_access_token
+import os
+from pathlib import Path
 
 def create_test_user(db):
     user_data = {}
@@ -136,3 +138,20 @@ def test_update_chapter(client, db):
     assert chapter is not None
     assert chapter.content_status.value == "PRESENT"
 
+
+def test_download_chapter(client, db):
+    novel, headers, novel_data, url, library = create_test_novel(db)
+    response = add_chapter(client, novel.id, headers)
+    chapter_number = response.json()["chapter_number"]
+    chapter_id = response.json()["id"]
+    response = client.get(f"chapter/download/{novel.id}/{chapter_number}",
+                           headers=headers)
+
+    assert response.status_code == 200
+    print(response)
+    print(response.json)
+    base_dir = "/Users/finng/Home/Programmieren/Projects/nexus-novel/backend/app/downloads/"
+    path = base_dir + "title1/chapter_1.txt"
+    assert os.path.exists(path), f"Chapter file {path} not found"
+    os.remove(path)
+    

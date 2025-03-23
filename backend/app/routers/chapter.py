@@ -9,6 +9,8 @@ import app.services.chapter_services as chapter_services
 import app.services.library_services as library_services
 import app.services.novel_services as novel_services
 from app.auth.dependencies import get_current_user
+from scripts.novel_downloader import download_novel_chapter
+from pathlib import Path
 
 router = APIRouter(
     prefix="/chapter",
@@ -73,6 +75,26 @@ def add_chapter(chapter: ChapterCreate, db: Session = Depends(get_db),
     
     return new_chapter
 
+@router.get("/download/{novel_id:int}/{chapter_number:int}", response_model=ChapterSchema)
+def download_chapter(novel_id: int, chapter_number: int, db: Session = Depends(get_db),
+                     current_user: User = Depends(get_current_user)):
+    chapter = check_chapter(db, novel_id, chapter_number, current_user)
+    novel = novel_services.get_novel_by_id(db, chapter.novel_id)
+
+    base_dir = "/Users/finng/Home/Programmieren/Projects/nexus-novel/backend/app/downloads/"
+    success = download_novel_chapter(novel.url, base_dir, novel.title, "txt", chapter_number)
+    print("hello")
+    if success:
+        chapter_data = {"content_status": "PRESENT"}
+        chapter_services.update_chapter(db, chapter.id, chapter_data)
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Chapter did not get downloaded"
+        )
+    return chapter_services.get_chapter_by_id(db, chapter.id)
+
+        
 
 @router.get("/{novel_id:int}", response_model=list[ChapterSchema])
 def get_chapters(
@@ -101,8 +123,7 @@ def get_chapters(
 
 
 @router.get("/{novel_id:int}/{chapter_number:int}", response_model=ChapterSchema)
-def get_chapter_by_number(novel_id: int, chapter_number: int, db: Session = Depends(get_db),
-                      current_user: User = Depends(get_current_user)):
+def get_chapter_by_number(novel_id: int, chapter_number: int, db: Session = Depends(get_db),current_user: User = Depends(get_current_user)):
     """
     Get a single chapter by Number
     """

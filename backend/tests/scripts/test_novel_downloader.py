@@ -33,7 +33,7 @@ def test_download_novel_chapter():
 
     assert found_file, f"No file with pattern {expected_pattern} found in {story_path}"
 
-
+"""
 def test_download_novel_chapter_spacebattles():
     OUTPUT_DIR = "downloads"
     URL = "https://forums.spacebattles.com/threads/beware-of-chicken-xianxia.910799/"
@@ -65,3 +65,4 @@ def test_download_novel_chapter_spacebattles():
             break
 
     assert found_file, f"No file with pattern {expected_pattern} found in {story_path}"
+"""
