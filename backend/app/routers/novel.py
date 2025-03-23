@@ -17,6 +17,18 @@ router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
+def supported_src(url):
+    supported = ["www.royalroad.com",
+                 "forums.spacebattles.com"]
+    def check_url_supported(url):
+        for s in supported:
+            if s in url:
+                return True
+        return False
+
+    return check_url_supported(url)
+
+
 def check_library(db, library_id, current_user):
     """
     Check if library exists and is owned by curretn user
@@ -47,6 +59,13 @@ def add_novel(novel: NovelCreate, db: Session = Depends(get_db),
 
     # check library
     check_library(db, novel.library_id, current_user)
+
+    # check if url is supported
+    if not supported_src(novel.url):
+        raise HTTPExeption(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Not a supported source url"
+            )
 
     # get metadata
     metadata = get_story_metadata(novel.url)
