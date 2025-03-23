@@ -3,7 +3,7 @@ from fastapi import status
 import bcrypt
 from app.schemas.user import UserCreate
 from app.services.novel_services import *
-from app.services.chapter_services import get_chapters_by_novel_id
+from app.services.chapter_services import get_chapters_by_novel_id, get_chapter_by_id, delete_chapter
 from app.services.library_services import create_library
 from app.services.user_services import create_user
 from app.auth.jwt import create_access_token
@@ -93,6 +93,46 @@ def test_get_chapters(client, db):
     assert found, "Created chapter not found in the response"
 
 
+def test_get_chapter_by_number(client, db):
+    novel, headers, novel_data, url, library = create_test_novel(db)
+    response = add_chapter(client, novel.id, headers)
+    chapter_number = response.json()["chapter_number"]
+    # get chapter by number
+    response = client.get(f"/chapter/{novel.id}/{chapter_number}",
+                          headers=headers)
+    print("Response status:", response.status_code)
+    print("Response JSON:", response.json())
+    chapter = response.json()
+    assert chapter["title"] =="aaa"
 
+def test_delete_chapter_by_id(client, db):
+    novel, headers, novel_data, url, library = create_test_novel(db)
+    response = add_chapter(client, novel.id, headers)
+    chapter_number = response.json()["chapter_number"]
+    chapter_id = response.json()["id"]
 
+    response = client.delete(f"chapter/{chapter_id}",
+                           headers=headers)
+
+    
+    chapter = get_chapter_by_id(db, chapter_id)
+    print(chapter)
+    assert chapter is None
+
+def test_update_chapter(client, db):
+    novel, headers, novel_data, url, library = create_test_novel(db)
+    response = add_chapter(client, novel.id, headers)
+    chapter_number = response.json()["chapter_number"]
+    chapter_id = response.json()["id"]
+    chapter_data = {"novel_id": novel.id,
+                    "chapter_number": 1,
+                    "title": "aaa",
+                    "content_status": "PRESENT",
+                    "id": chapter_id
+                    }
+    response = client.put(f"/chapter/", json=chapter_data, headers=headers)
+    chapter = get_chapter_by_id(db, chapter_id)
+    print(chapter)
+    assert chapter is not None
+    assert chapter.content_status.value == "PRESENT"
 

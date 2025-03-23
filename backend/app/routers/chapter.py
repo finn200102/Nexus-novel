@@ -6,6 +6,7 @@ from ..schemas.chapter import Chapter as ChapterSchema
 from ..schemas.chapter import ChapterCreate, ChapterUpdate
 from app.models.chapter import Chapter
 import app.services.chapter_services as chapter_services
+import app.services.library_services as library_services
 import app.services.novel_services as novel_services
 from app.auth.dependencies import get_current_user
 
@@ -15,9 +16,9 @@ router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
-def check_chapter(db, chapter_id, current_user):
-    chapter = chapter_services.get_chapter_by_chapter_number(db, chapter.chapter_number,
-                                                             chapter.novel_id)
+def check_chapter(db, novel_id, chapter_number, current_user):
+    chapter = chapter_services.get_chapter_by_chapter_number(db, chapter_number,
+                                                             novel_id)
     if not chapter:
         raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -99,17 +100,17 @@ def get_chapters(
     return chapters
 
 
-@router.get("/{chapter_number:int}", response_model=ChapterSchema)
-def get_chapter_by_number(chapter_number: int, db: Session = Depends(get_db),
+@router.get("/{novel_id:int}/{chapter_number:int}", response_model=ChapterSchema)
+def get_chapter_by_number(novel_id: int, chapter_number: int, db: Session = Depends(get_db),
                       current_user: User = Depends(get_current_user)):
     """
     Get a single chapter by Number
     """
 
-    chapter = check_chapter(db, chapter_number, current_user)
+    chapter = check_chapter(db, novel_id, chapter_number, current_user)
     return chapter
 
-@router.post("/delete/{chapter_id:int}", response_model=ChapterSchema)
+@router.delete("/{chapter_id:int}", response_model=ChapterSchema)
 def delete_chapter_by_id(chapter_id: int, db: Session = Depends(get_db),
                          current_user: User = Depends(get_current_user)):
     """
@@ -121,22 +122,22 @@ def delete_chapter_by_id(chapter_id: int, db: Session = Depends(get_db),
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="chapter not found"
             )
-    chapter = check_chapter(db, chapter.chapter_number, current_user)
+    check_chapter(db, chapter.novel_id, chapter.chapter_number, current_user)
     chapter_services.delete_chapter(db, chapter_id)
     return chapter
 
 
-@router.post("/update/", response_model=ChapterSchema)
+@router.put("/", response_model=ChapterSchema)
 def update_chapter(chapter: ChapterUpdate, db: Session = Depends(get_db),
                          current_user: User = Depends(get_current_user)):
     """
     Update a single chapter by chapter_data
     """
-    chapter_data = {"title": "abc",
-                    "content_status": "PRESENT"}
-
-    chapter = check_chapter(db, chapter.id, current_user)
+    chapter_data = {"title": chapter.title,
+                    "content_status": chapter.content_status}
+    ch = chapter_services.get_chapter_by_id(db, chapter.id)
+    check_chapter(db, chapter.novel_id, ch.chapter_number, current_user)
     
-    if chapter:
-        chapter_services.update_chapter(db, chapter.id, chapter_data)
+    chapter_services.update_chapter(db, chapter.id, chapter_data)
+    chapter = chapter_services.get_chapter_by_id(db, chapter.id)
     return chapter

@@ -28,5 +28,7 @@ class Chapter(BaseModel):
 
 
 class ChapterUpdate(BaseModel):
+    id: int
+    novel_id: int
     title: str
     content_status: ContentStatus
