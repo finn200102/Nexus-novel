@@ -4,9 +4,11 @@ from config.database import get_db
 from ..schemas.novel import Novel as NovelSchema
 from ..schemas.novel import NovelCreate, NovelUpdate
 from app.models.user import User
+from app.models.chapter import Chapter
 from app.models.library import Library
 import app.services.novel_services as novel_services
 from app.services.author_services import create_author, get_author_by_name
+from app.services.chapter_services import create_chapter, get_chapters
 from app.services.library_services import get_library_by_id
 from scripts.get_metadata import get_story_metadata
 from app.auth.dependencies import get_current_user
@@ -88,6 +90,17 @@ def add_novel(novel: NovelCreate, db: Session = Depends(get_db),
     
     novel_data["author_id"] = author.id
     novel = novel_services.create_novel(db, novel_data)
+
+    # add chapters to db
+    chapter_number = metadata["numChapters"]
+    print(chapter_number)
+    for c in range(int(chapter_number)-1):
+        num_chapter = c + 1
+        chapter_data = {"novel_id": novel.id,
+                        "chapter_number": num_chapter,
+                        "title": "",
+                        "content_status": "MISSING"}
+        create_chapter(db, chapter_data)    
     
     return novel
 
