@@ -1,22 +1,13 @@
 import React from "react";
-import CreateLibraryForm from "../components/library/CreateLibraryForm";
-import LibraryList from "../components/library/LibraryList";
+import NovelList from "../components/novel/NovelList";
 
-const LibraryPage: React.FC = () => {
+interface LibraryPageProps {
+  library_id: number;
+}
+const LibraryPage: React.FC<LibraryPageProps> = ({ library_id }) => {
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        height: "100vh",
-      }}
-    >
-      <h1>Lib</h1>
-      <CreateLibraryForm />
-      <h2>Libs</h2>
-      <LibraryList />
+    <div>
+      <NovelList library_id={library_id} />
     </div>
   );
 };
