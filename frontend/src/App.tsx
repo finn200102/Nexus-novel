@@ -5,6 +5,7 @@ import {
   Route,
   useParams,
 } from "react-router-dom";
+import Layout from "./components/layout/Layout";
 import Home from "./pages/Home";
 import Signup from "./pages/Signup";
 import Login from "./pages/Login";
@@ -12,13 +13,32 @@ import LibraryPage from "./pages/Library";
 import NovelDetail from "./pages/NovelDetail";
 import Reader from "./pages/Reader";
 
+// Wrap individual components with Layout
+const WrappedHome = () => (
+  <Layout>
+    <Home />
+  </Layout>
+);
+
+const WrappedSignup = () => (
+  <Layout>
+    <Signup />
+  </Layout>
+);
+
+const WrappedLogin = () => (
+  <Layout>
+    <Login />
+  </Layout>
+);
+
 const App: React.FC = () => {
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/signup" element={<Signup />} />
-        <Route path="/login" element={<Login />} />
+        <Route path="/" element={<WrappedHome />} />
+        <Route path="/signup" element={<WrappedSignup />} />
+        <Route path="/login" element={<WrappedLogin />} />
         <Route path="/library/:libraryId" element={<LibraryWrapper />} />
         <Route
           path="/library/:libraryId/novels/:novelId"
@@ -48,10 +68,12 @@ const NovelWrapper = () => {
   }
 
   return (
-    <NovelDetail
-      libraryId={parseInt(libraryId, 10)}
-      novelId={parseInt(novelId, 10)}
-    />
+    <Layout>
+      <NovelDetail
+        libraryId={parseInt(libraryId, 10)}
+        novelId={parseInt(novelId, 10)}
+      />
+    </Layout>
   );
 };
 
@@ -66,7 +88,11 @@ const ChapterWrapper = () => {
   if (!novelId) return <div>Invalid novel ID</div>;
   if (!chapterNumber) return <div>Invalid chapter ID</div>;
 
-  return <Reader />;
+  return (
+    <Layout>
+      <Reader />
+    </Layout>
+  );
 };
 
 const LibraryWrapper = () => {
@@ -76,7 +102,11 @@ const LibraryWrapper = () => {
     return <div>Invalid library ID</div>;
   }
 
-  return <LibraryPage library_id={parseInt(libraryId, 10)} />;
+  return (
+    <Layout>
+      <LibraryPage library_id={parseInt(libraryId, 10)} />
+    </Layout>
+  );
 };
 
 export default App;
