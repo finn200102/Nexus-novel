@@ -1,6 +1,7 @@
 import React, { FormEvent } from "react";
 import { useState } from "react";
 import { libraryService } from "../../services/libraryService";
+import "../../styles/library-form.css";
 
 interface LibraryData {
   name: string;
@@ -44,22 +45,26 @@ const CreateLibraryForm: React.FC = () => {
   };
 
   return (
-    <div className="create-library-form">
-      <h2>Create New Library</h2>
+    <div className="library-form-container">
+      <h2 className="form-title">Create New Library</h2>
 
       {submitStatus === "success" && (
-        <div className="alert alert-success">Library created successfully!</div>
+        <div className="status-message success-message">
+          Library created successfully!
+        </div>
       )}
 
       {submitStatus === "error" && (
-        <div className="alert alert-error">
+        <div className="status-message error-message">
           Failed to create library. Please try again.
         </div>
       )}
 
-      <form onSubmit={handleSubmit}>
+      <form className="library-form" onSubmit={handleSubmit}>
         <div className="form-group">
-          <label htmlFor="name">Library Name</label>
+          <label htmlFor="name" className="form-label">
+            Library Name
+          </label>
           <input
             type="text"
             id="name"
@@ -68,12 +73,14 @@ const CreateLibraryForm: React.FC = () => {
             onChange={handleInputChange}
             required
             disabled={isSubmitting}
+            className="form-input"
           />
         </div>
 
         <button
           type="submit"
           disabled={isSubmitting || !libraryData.name.trim()}
+          className="submit-button"
         >
           {isSubmitting ? "Creating..." : "Create Library"}
         </button>

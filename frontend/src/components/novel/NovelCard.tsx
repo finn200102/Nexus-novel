@@ -1,4 +1,6 @@
 import React from "react";
+import defaultCoverImage from "../../assets/cover.png";
+import "../../styles/novel-card.css";
 
 interface NovelSchema {
   id: number;
@@ -22,23 +24,26 @@ const NovelCard: React.FC<NovelCardProps> = ({
   isSelected,
   onClick,
 }) => {
+  const coverImageSrc = novel.cover_image || defaultCoverImage;
+
   return (
     <div
-      className={`novel-card ${isSelected ? "selected" : ""}`}
+      className={`novel-card ${isSelected ? "novel-card--selected" : ""}`}
       onClick={onClick}
     >
-      {novel.cover_image && (
-        <div className="novel-cover">
-          <img
-            src={novel.cover_image}
-            alt={`Cover for ${novel.title}`}
-            className="cover-image"
-          />
-        </div>
-      )}
-      <div className="novel-info">
-        <h3 className="novel-title">{novel.title}</h3>
-        <div className="novel-meta"></div>
+      <div className="novel-card__cover">
+        <img
+          src={coverImageSrc}
+          alt={`Cover for ${novel.title}`}
+          className="novel-card__image"
+          onError={(e) => {
+            (e.target as HTMLImageElement).src = defaultCoverImage;
+          }}
+        />
+      </div>
+      <div className="novel-card__content">
+        <h3 className="novel-card__title">{novel.title}</h3>
+        <div className="novel-card__meta"></div>
       </div>
     </div>
   );

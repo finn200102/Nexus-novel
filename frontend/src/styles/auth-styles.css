@@ -1,0 +1,189 @@
+/* Common styles */
+body {
+  font-family: "Merriweather", Georgia, serif;
+  background-color: #f5f5dc;
+  color: #333333;
+  line-height: 1.6;
+  margin: 0;
+  padding: 0;
+}
+
+/* Login Form Styles */
+.login-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  padding: 1.5rem;
+}
+
+.login-form {
+  background-color: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  padding: 2.5rem;
+  width: 100%;
+  max-width: 400px;
+  position: relative;
+  overflow: hidden;
+}
+
+.login-form::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 5px;
+  background: linear-gradient(to right, #4a777a, #e97451);
+}
+
+.login-button {
+  display: block;
+  width: 100%;
+  padding: 1rem;
+  background-color: #4a777a;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-family: "Montserrat", "Helvetica Neue", sans-serif;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+  margin-top: 1.5rem;
+}
+
+.login-button:hover {
+  background-color: #e97451;
+}
+
+.login-button:active {
+  transform: scale(0.98);
+}
+
+.login-button:disabled {
+  background-color: #999;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Signup Form Styles */
+.signup-form {
+  background-color: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  padding: 2.5rem;
+  width: 100%;
+  max-width: 400px;
+  position: relative;
+  overflow: hidden;
+  margin: 2.5rem auto;
+}
+
+.signup-form::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 5px;
+  background: linear-gradient(to right, #4a777a, #e97451);
+}
+
+.submit-button {
+  display: block;
+  width: 100%;
+  padding: 1rem;
+  background-color: #4a777a;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-family: "Montserrat", "Helvetica Neue", sans-serif;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+  margin-top: 1.5rem;
+}
+
+.submit-button:hover {
+  background-color: #e97451;
+}
+
+.submit-button:active {
+  transform: scale(0.98);
+}
+
+.submit-button:disabled {
+  background-color: #999;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Shared Form Element Styles */
+.form-group {
+  margin-bottom: 1.5rem;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-family: "Montserrat", "Helvetica Neue", sans-serif;
+  font-weight: 500;
+  color: #333333;
+}
+
+.form-input {
+  width: 100%;
+  padding: 1rem;
+  font-family: "Merriweather", Georgia, serif;
+  font-size: 1rem;
+  border: 1px solid #cccccc;
+  border-radius: 4px;
+  background-color: #ffffff;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  box-sizing: border-box;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: #4a777a;
+  box-shadow: 0 0 0 2px rgba(74, 119, 122, 0.2);
+}
+
+/* Status Messages */
+.status-message {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  border-radius: 4px;
+  font-family: "Montserrat", "Helvetica Neue", sans-serif;
+  font-weight: 500;
+  text-align: center;
+}
+
+.success {
+  background-color: rgba(56, 142, 60, 0.1);
+  color: #388e3c;
+  border: 1px solid rgba(56, 142, 60, 0.3);
+}
+
+.error {
+  background-color: rgba(211, 47, 47, 0.1);
+  color: #d32f2f;
+  border: 1px solid rgba(211, 47, 47, 0.3);
+}
+
+/* Responsive Adjustments */
+@media (max-width: 480px) {
+  .login-form,
+  .signup-form {
+    padding: 1.5rem;
+  }
+
+  .form-input,
+  .login-button,
+  .submit-button {
+    padding: 0.8rem;
+  }
+}

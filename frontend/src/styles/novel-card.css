@@ -1,0 +1,147 @@
+.novel-card {
+  display: flex;
+  flex-direction: column;
+  background-color: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  width: 180px; /* Fixed width for the entire card */
+  height: 320px; /* Fixed height for the entire card */
+  position: relative;
+}
+
+.novel-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+}
+
+.novel-card--selected {
+  box-shadow: 0 0 0 2px #4a777a, 0 8px 20px rgba(0, 0, 0, 0.1);
+}
+
+.novel-card--selected::after {
+  content: "✓";
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 24px;
+  height: 24px;
+  background-color: #4a777a;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: bold;
+  z-index: 2;
+}
+
+.novel-card__cover {
+  width: 100%;
+  height: 240px; /* Fixed height for the cover */
+  overflow: hidden;
+}
+
+.novel-card__image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover; /* This will crop the image to fit the container */
+  object-position: center top; /* Focus on the top part of the cover */
+  transition: transform 0.5s ease;
+}
+
+.novel-card:hover .novel-card__image {
+  transform: scale(1.05);
+}
+
+.novel-card__content {
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  height: 80px; /* Fixed height for the content area */
+  overflow: hidden;
+}
+
+.novel-card__title {
+  font-family: "Montserrat", "Helvetica Neue", sans-serif;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #333333;
+  margin: 0 0 0.5rem 0;
+  line-height: 1.3;
+  /* Ensure long titles don't overflow */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.novel-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: auto;
+  font-family: "Merriweather", Georgia, serif;
+  font-size: 0.8rem;
+  color: #666666;
+}
+
+/* Optional: Add a subtle gradient overlay on the cover for better text visibility */
+.novel-card__cover::after {
+  content: "";
+  position: absolute;
+  bottom: 80px; /* Align with the content area */
+  left: 0;
+  width: 100%;
+  height: 40px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.5), transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.novel-card:hover .novel-card__cover::after {
+  opacity: 1;
+}
+
+/* For grid layouts */
+.novel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 1.5rem;
+  padding: 1.5rem;
+}
+
+/* Responsive adjustments - maintain fixed size but adjust grid */
+@media (max-width: 768px) {
+  .novel-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 1rem;
+    padding: 1rem;
+  }
+
+  .novel-card {
+    width: 150px;
+    height: 280px;
+  }
+
+  .novel-card__cover {
+    height: 210px;
+  }
+
+  .novel-card__content {
+    height: 70px;
+    padding: 0.5rem;
+  }
+
+  .novel-card__title {
+    font-size: 0.8rem;
+  }
+
+  .novel-card__cover::after {
+    bottom: 70px;
+  }
+}

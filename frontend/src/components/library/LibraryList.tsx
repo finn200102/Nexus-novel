@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { libraryService } from "../../services/libraryService";
 import { useNavigate } from "react-router-dom";
+import "../../styles/library-list.css";
 
 interface LibrarySchema {
   id: number;
@@ -43,19 +44,25 @@ const LibraryList: React.FC = () => {
   };
 
   return (
-    <div className="library-list">
-      <h2>My Libraries</h2>
+    <div className="library-container">
+      <h2 className="library-title">My Libraries</h2>
 
-      {loading && <p>Loading...</p>}
+      {loading && <p className="loading-message">Loading...</p>}
 
-      {error && <p className="error">{error}</p>}
+      {error && <p className="error-message">{error}</p>}
 
-      {!loading && libraries.length === 0 && <p>No libraries found</p>}
+      {!loading && libraries.length === 0 && (
+        <p className="empty-state-message">No libraries found</p>
+      )}
 
       {libraries.length > 0 && (
-        <ul>
+        <ul className="library-items">
           {libraries.map((library) => (
-            <li key={library.id} onClick={() => handleLibraryClick(library.id)}>
+            <li
+              key={library.id}
+              onClick={() => handleLibraryClick(library.id)}
+              className="library-item"
+            >
               {library.name}
             </li>
           ))}

@@ -1,6 +1,7 @@
 import React, { FormEvent } from "react";
 import { useState } from "react";
 import { novelService } from "../../services/novelService";
+import "../../styles/novel-form.css";
 
 interface NovelData {
   url: string;
@@ -49,22 +50,26 @@ const CreateNovelForm: React.FC<CreateNovelProps> = ({ library_id }) => {
   };
 
   return (
-    <div className="create-library-form">
-      <h2>Add New Novel</h2>
+    <div className="novel-form">
+      <h2 className="novel-form__title">Add New Novel</h2>
 
       {submitStatus === "success" && (
-        <div className="alert alert-success">Novel added successfully!</div>
+        <div className="novel-form__status novel-form__status--success">
+          Novel added successfully!
+        </div>
       )}
 
       {submitStatus === "error" && (
-        <div className="alert alert-error">
+        <div className="novel-form__status novel-form__status--error">
           Failed to add Novel. Please try again.
         </div>
       )}
 
-      <form onSubmit={handleSubmit}>
-        <div className="form-group">
-          <label htmlFor="url">Novel url</label>
+      <form className="novel-form__form" onSubmit={handleSubmit}>
+        <div className="novel-form__group">
+          <label htmlFor="url" className="novel-form__label">
+            Novel URL
+          </label>
           <input
             type="text"
             id="url"
@@ -73,11 +78,16 @@ const CreateNovelForm: React.FC<CreateNovelProps> = ({ library_id }) => {
             onChange={handleInputChange}
             required
             disabled={isSubmitting}
+            className="novel-form__input"
           />
         </div>
 
-        <button type="submit" disabled={isSubmitting || !novelData.url.trim()}>
-          {isSubmitting ? "Creating..." : "Add Novel"}
+        <button
+          type="submit"
+          disabled={isSubmitting || !novelData.url.trim()}
+          className="novel-form__button"
+        >
+          {isSubmitting ? "Adding..." : "Add Novel"}
         </button>
       </form>
     </div>

@@ -1,0 +1,141 @@
+.novel-list {
+  padding: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.novel-list__title {
+  font-family: "Montserrat", "Helvetica Neue", sans-serif;
+  font-size: 1.8rem;
+  color: #333333;
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #e0e0d5;
+  position: relative;
+}
+
+.novel-list__title::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 80px;
+  height: 3px;
+  background: linear-gradient(to right, #4a777a, #e97451);
+}
+
+.novel-list__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 2rem 1.5rem;
+  justify-content: center;
+}
+
+.novel-list__loading,
+.novel-list__error,
+.novel-list__empty {
+  font-family: "Montserrat", "Helvetica Neue", sans-serif;
+  text-align: center;
+  padding: 2rem;
+  background-color: #f5f5dc;
+  border-radius: 8px;
+  margin: 2rem 0;
+}
+
+.novel-list__loading {
+  color: #4a777a;
+  position: relative;
+}
+
+.novel-list__loading::after {
+  content: "";
+  display: block;
+  width: 40px;
+  height: 4px;
+  background-color: #4a777a;
+  margin: 1rem auto 0;
+  animation: loadingPulse 1.5s infinite ease-in-out;
+}
+
+@keyframes loadingPulse {
+  0% {
+    width: 40px;
+    opacity: 0.6;
+  }
+  50% {
+    width: 100px;
+    opacity: 1;
+  }
+  100% {
+    width: 40px;
+    opacity: 0.6;
+  }
+}
+
+.novel-list__error {
+  color: #d32f2f;
+  background-color: rgba(211, 47, 47, 0.1);
+  border: 1px solid rgba(211, 47, 47, 0.3);
+}
+
+.novel-list__empty {
+  color: #666666;
+  font-style: italic;
+}
+
+/* Add a subtle animation when novels appear */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.novel-list__grid {
+  animation: fadeIn 0.4s ease-out;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1024px) {
+  .novel-list {
+    padding: 1.5rem;
+  }
+
+  .novel-list__grid {
+    gap: 1.5rem 1rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .novel-list {
+    padding: 1rem;
+  }
+
+  .novel-list__title {
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .novel-list__grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 1.25rem 0.75rem;
+  }
+
+  .novel-list__loading,
+  .novel-list__error,
+  .novel-list__empty {
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .novel-list__grid {
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 1rem 0.5rem;
+  }
+}

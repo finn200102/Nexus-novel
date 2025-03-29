@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { novelService } from "../../services/novelService";
 import NovelCard from "./NovelCard";
+import "../../styles/novel-list.css";
 
 interface NovelSchema {
   id: number;
@@ -53,16 +54,18 @@ const NovelList: React.FC<NovelListProps> = ({ library_id }) => {
 
   return (
     <div className="novel-list">
-      <h2>My Novels</h2>
+      <h2 className="novel-list__title">My Novels</h2>
 
-      {loading && <p>Loading...</p>}
+      {loading && <p className="novel-list__loading">Loading...</p>}
 
-      {error && <p className="error">{error}</p>}
+      {error && <p className="novel-list__error">{error}</p>}
 
-      {!loading && novels.length === 0 && <p>No novels found</p>}
+      {!loading && novels.length === 0 && (
+        <p className="novel-list__empty">No novels found</p>
+      )}
 
       {novels.length > 0 && (
-        <div className="novels-grid">
+        <div className="novel-list__grid">
           {novels.map((novel) => (
             <NovelCard
               key={novel.id}
