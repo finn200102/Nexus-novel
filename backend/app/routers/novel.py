@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from config.database import get_db
 from ..schemas.novel import Novel as NovelSchema
 from ..schemas.novel import NovelCreate, NovelUpdate
+from app.models.chapter import ContentStatus
 from app.models.user import User
 from app.models.chapter import Chapter
 from app.models.library import Library
@@ -99,7 +100,7 @@ def add_novel(novel: NovelCreate, db: Session = Depends(get_db),
         chapter_data = {"novel_id": novel.id,
                         "chapter_number": num_chapter,
                         "title": "",
-                        "content_status": "MISSING"}
+                        "content_status": ContentStatus.MISSING}
         create_chapter(db, chapter_data)    
     
     return novel
