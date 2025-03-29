@@ -27,6 +27,14 @@ class Chapter(BaseModel):
         orm_mode = True
 
 
+class ChapterContent(BaseModel):
+    id: int
+    novel_id: int
+    chapter_number: int
+    title: str
+    content: str
+
+
 class ChapterUpdate(BaseModel):
     id: int
     novel_id: int
