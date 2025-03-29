@@ -1,0 +1,198 @@
+/* Reader.css */
+
+/* --- Overall Container --- */
+.reader-container {
+  max-width: 800px; /* Limit width for readability */
+  margin: 40px auto; /* Center the container with space top/bottom */
+  padding: 30px 40px; /* Generous padding inside */
+  background-color: #fdfdfd; /* Slightly off-white, less harsh than pure white */
+  border-radius: 8px; /* Soften corners */
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1); /* Subtle shadow for depth */
+  color: #333; /* Default text color */
+  font-family: sans-serif; /* Fallback font */
+}
+
+/* --- Header Section --- */
+.reader-header {
+  text-align: center;
+  margin-bottom: 40px; /* Space below header */
+  padding-bottom: 20px; /* Space above the separator line */
+  border-bottom: 1px solid #eee; /* Subtle separator */
+}
+
+.novel-title {
+  font-size: 2em; /* Large novel title */
+  font-weight: bold;
+  color: #222;
+  margin-bottom: 0.3em;
+  font-family: "Merriweather", serif; /* Example serif font */
+}
+
+.chapter-title {
+  font-size: 1.5em; /* Slightly smaller chapter title */
+  font-weight: normal;
+  color: #444;
+  margin-bottom: 0.5em;
+  font-family: "Merriweather Sans", sans-serif; /* Example sans-serif for contrast */
+}
+
+.chapter-info {
+  font-size: 0.9em;
+  color: #777;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* --- Content Section --- */
+.reader-content {
+  font-family: "Georgia", "Times New Roman", serif; /* Classic serif for reading */
+  font-size: 1.15em; /* Comfortable reading size (adjust as needed) */
+  line-height: 1.7; /* Generous line spacing is key for readability */
+  color: #282828; /* Dark gray, easier on eyes than pure black */
+  text-align: left; /* Left align is generally better for web readability than justify */
+  /* Consider adding hyphens if using text-align: justify */
+  /* hyphens: auto; */
+}
+
+.reader-content p {
+  margin-bottom: 1.2em; /* Space between paragraphs */
+  /* Ensure empty paragraphs from double line breaks still take up some space */
+  min-height: 1em;
+}
+
+/* Style first paragraph differently if desired */
+/* .reader-content p:first-of-type {
+      font-size: 1.1em;
+      margin-bottom: 1.5em;
+    } */
+
+/* Add indentation to first line of paragraphs (optional classic book style) */
+/* .reader-content p {
+      text-indent: 2em;
+      margin-bottom: 0; // Remove bottom margin if using indent
+    } */
+
+/* --- Navigation Section --- */
+.reader-navigation {
+  display: flex;
+  justify-content: space-between; /* Pushes buttons to opposite ends */
+  align-items: center;
+  margin-top: 40px; /* Space above navigation */
+  padding-top: 20px; /* Space below the separator line */
+  border-top: 1px solid #eee; /* Subtle separator */
+}
+
+.reader-navigation button {
+  padding: 10px 20px;
+  font-size: 1em;
+  font-family: "Lato", sans-serif; /* Clear sans-serif for UI elements */
+  border: 1px solid #ccc;
+  background-color: #f8f8f8;
+  color: #333;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.reader-navigation button:hover:not(:disabled) {
+  background-color: #e8e8e8;
+  border-color: #bbb;
+  color: #111;
+}
+
+.reader-navigation button:active:not(:disabled) {
+  background-color: #ddd;
+}
+
+.reader-navigation button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  background-color: #f0f0f0;
+  border-color: #ddd;
+  color: #999;
+}
+
+/* Specific button styling (optional) */
+.prev-button {
+  /* Add specific styles if needed */
+}
+
+.next-button {
+  /* Add specific styles if needed */
+}
+
+/* --- Selection Highlight --- */
+/* Improve the look of selected text */
+::selection {
+  background-color: #cce2ff; /* Light blue background */
+  color: #333;
+}
+::-moz-selection {
+  /* Firefox */
+  background-color: #cce2ff;
+  color: #333;
+}
+
+/* --- Responsive Adjustments --- */
+@media (max-width: 768px) {
+  .reader-container {
+    margin: 20px auto;
+    padding: 20px 25px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  }
+
+  .novel-title {
+    font-size: 1.8em;
+  }
+
+  .chapter-title {
+    font-size: 1.3em;
+  }
+
+  .reader-content {
+    font-size: 1.1em; /* Slightly smaller on tablets */
+    line-height: 1.65;
+  }
+
+  .reader-navigation button {
+    padding: 8px 16px;
+    font-size: 0.95em;
+  }
+}
+
+@media (max-width: 480px) {
+  .reader-container {
+    margin: 10px auto;
+    padding: 15px 15px;
+    border-radius: 4px; /* Less rounding on small screens */
+    box-shadow: none; /* Remove shadow on very small screens */
+    border: 1px solid #eee; /* Add a border instead */
+  }
+
+  .novel-title {
+    font-size: 1.5em;
+  }
+
+  .chapter-title {
+    font-size: 1.15em;
+  }
+
+  .reader-content {
+    font-size: 1em; /* Base font size for mobile */
+    line-height: 1.6;
+  }
+
+  .reader-header,
+  .reader-navigation {
+    margin-bottom: 25px;
+    padding-bottom: 15px;
+    margin-top: 25px;
+    padding-top: 15px;
+  }
+
+  .reader-navigation button {
+    padding: 8px 12px;
+    font-size: 0.9em;
+  }
+}
