@@ -1,18 +1,27 @@
 import React, { useEffect, useState } from "react";
 import { novelService } from "../../services/novelService";
+import NovelCard from "./NovelCard";
+
 interface NovelSchema {
   id: number;
   title: string;
+  author_id: number;
   url: string;
+  cover_image: string;
   library_id: number;
+  created_at: string;
+  updated_at: string;
 }
+
 interface NovelListProps {
   library_id: number;
 }
+
 const NovelList: React.FC<NovelListProps> = ({ library_id }) => {
   const [novels, setNovels] = useState<NovelSchema[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedNovelId, setSelectedNovelId] = useState<number | null>(null);
 
   useEffect(() => {
     const fetchNovels = async () => {
@@ -38,6 +47,10 @@ const NovelList: React.FC<NovelListProps> = ({ library_id }) => {
     fetchNovels();
   }, [library_id]);
 
+  const handleNovelClick = (novelId: number) => {
+    setSelectedNovelId(novelId === selectedNovelId ? null : novelId);
+  };
+
   return (
     <div className="novel-list">
       <h2>My Novels</h2>
@@ -49,11 +62,16 @@ const NovelList: React.FC<NovelListProps> = ({ library_id }) => {
       {!loading && novels.length === 0 && <p>No novels found</p>}
 
       {novels.length > 0 && (
-        <ul>
+        <div className="novels-grid">
           {novels.map((novel) => (
-            <li key={novel.id}>{novel.title}</li>
+            <NovelCard
+              key={novel.id}
+              novel={novel}
+              isSelected={novel.id === selectedNovelId}
+              onClick={() => handleNovelClick(novel.id)}
+            />
           ))}
-        </ul>
+        </div>
       )}
     </div>
   );
