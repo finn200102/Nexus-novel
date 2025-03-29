@@ -101,7 +101,7 @@ def get_chapters(
         novel_id: int,
         title: str = None,
         skip: int = 0,
-        limit: int = 100,
+        limit: int = 1000,
         db: Session = Depends(get_db),
         current_user: User = Depends(get_current_user)):
     """
@@ -109,13 +109,12 @@ def get_chapters(
     """
     
     # Start with base query
-    query = chapter_services.get_chapters(db)
+    query = chapter_services.get_chapters_by_novel_id(db, novel_id=novel_id)
 
     # Apply filters if provided
     if title:
         query = query.filter(Chapter.title == title)
 
-    query = query.filter(Chapter.novel_id == novel_id)
 
     # Apply pagination and return results
     chapters = query.offset(skip).limit(limit).all()
