@@ -5,6 +5,7 @@ from ..schemas.novel import Novel as NovelSchema
 from ..schemas.novel import NovelCreate, NovelUpdate
 from app.models.chapter import ContentStatus
 from app.models.user import User
+from app.models.novel import Novel
 from app.models.chapter import Chapter
 from app.models.library import Library
 import app.services.novel_services as novel_services
@@ -72,7 +73,7 @@ def add_novel(novel: NovelCreate, db: Session = Depends(get_db),
 
     # get metadata
     metadata = get_story_metadata(novel.url)
-    
+
     # check if author already exists
     authors = get_author_by_name(db, metadata["author"])
     # create author
@@ -86,7 +87,8 @@ def add_novel(novel: NovelCreate, db: Session = Depends(get_db),
 
     novel_data={"url": novel.url,
                 "title": metadata["title"],
-                "library_id": novel.library_id
+                "library_id": novel.library_id,
+                "cover_image": metadata.get("cover_image", ""),
                 }
     
     novel_data["author_id"] = author.id

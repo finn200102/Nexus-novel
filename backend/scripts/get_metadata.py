@@ -32,7 +32,7 @@ def parse_metadata(metadata):
     parsed_metadata = {} 
 
     for key in keys:
-        if metadata[key]:
+        if key in metadata:
             parsed_metadata[key] = metadata[key]
             
         # if key == 'genre' and isinstance(metadata[key], str):

@@ -1,4 +1,5 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from typing import Optional
 
 class NovelCreate(BaseModel):
     url: str
@@ -8,6 +9,7 @@ class Novel(BaseModel):
     id: int
     title: str
     url: str
+    cover_image: Optional[str] = None
     library_id: int
 
     class Config:
