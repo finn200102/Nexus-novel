@@ -41,6 +41,24 @@ export const chapterService = {
     }
   },
 
+  async getChapterContentByNumber(
+    chapterNumber: number,
+    libraryId: number,
+    novelId: number
+  ) {
+    try {
+      const response = await apiClient.get(
+        `/chapter/content/library/${libraryId}/${novelId}/${chapterNumber}`
+      );
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status !== 401) {
+        this.handleError(error, "Error fetching chapters");
+      }
+      throw error;
+    }
+  },
+
   handleError(error: any, message: string) {
     console.error(message + ":", error);
 
