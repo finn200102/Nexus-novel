@@ -5,6 +5,10 @@ interface CreateNovelSchema {
   url: string;
   library_id: number;
 }
+interface GetNovelSchema {
+  library_id: number;
+  novel_id: number;
+}
 
 export const novelService = {
   async getAllNovels(library_id: number) {
@@ -25,6 +29,25 @@ export const novelService = {
         library_id: library_id,
       };
       const response = await apiClient.post(`/novel/`, data);
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status != 401) {
+        this.handleError(error, "Error fetching libraries");
+      }
+      throw error;
+    }
+  },
+  async getNovelById(library_id: number, novel_id: number) {
+    try {
+      const data: GetNovelSchema = {
+        library_id: library_id,
+        novel_id: novel_id,
+      };
+
+      const response = await apiClient.get(
+        `/novel/${data.novel_id}?library_id=${data.library_id}`
+      );
+
       return response.data;
     } catch (error) {
       if (axios.isAxiosError(error) && error.response?.status != 401) {
