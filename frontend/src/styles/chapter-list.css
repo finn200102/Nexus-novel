@@ -1,0 +1,232 @@
+.chapter-list {
+  background-color: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.06);
+  padding: 1.5rem;
+  margin: 1.5rem auto;
+  max-width: 900px;
+}
+
+.chapter-list__title {
+  font-family: "Montserrat", "Helvetica Neue", sans-serif;
+  font-size: 1.6rem;
+  color: #333333;
+  margin-top: 0;
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #e0e0d5;
+  position: relative;
+}
+
+.chapter-list__title::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 60px;
+  height: 3px;
+  background: linear-gradient(to right, #4a777a, #e97451);
+}
+
+.chapter-list__loading,
+.chapter-list__error,
+.chapter-list__empty {
+  font-family: "Montserrat", "Helvetica Neue", sans-serif;
+  text-align: center;
+  padding: 1.5rem;
+  border-radius: 6px;
+  margin: 1rem 0;
+}
+
+.chapter-list__loading {
+  color: #4a777a;
+  background-color: rgba(74, 119, 122, 0.1);
+  position: relative;
+}
+
+.chapter-list__loading::after {
+  content: "";
+  display: block;
+  width: 40px;
+  height: 3px;
+  background-color: #4a777a;
+  margin: 1rem auto 0;
+  animation: loadingPulse 1.5s infinite ease-in-out;
+}
+
+@keyframes loadingPulse {
+  0% {
+    width: 40px;
+    opacity: 0.6;
+  }
+  50% {
+    width: 80px;
+    opacity: 1;
+  }
+  100% {
+    width: 40px;
+    opacity: 0.6;
+  }
+}
+
+.chapter-list__error {
+  color: #d32f2f;
+  background-color: rgba(211, 47, 47, 0.1);
+  border: 1px solid rgba(211, 47, 47, 0.3);
+}
+
+.chapter-list__empty {
+  color: #666666;
+  background-color: #f5f5dc;
+  font-style: italic;
+}
+
+.chapter-list__container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding-right: 0.5rem;
+}
+
+/* Scrollbar styling */
+.chapter-list__container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chapter-list__container::-webkit-scrollbar-track {
+  background: #f0f0f0;
+  border-radius: 10px;
+}
+
+.chapter-list__container::-webkit-scrollbar-thumb {
+  background: #cccccc;
+  border-radius: 10px;
+}
+
+.chapter-list__container::-webkit-scrollbar-thumb:hover {
+  background: #4a777a;
+}
+
+.chapter-item {
+  display: grid;
+  grid-template-columns: 100px 1fr 100px;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background-color: #f5f5dc;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-left: 3px solid transparent;
+}
+
+.chapter-item:hover {
+  background-color: #e0e0d5;
+  transform: translateX(3px);
+}
+
+.chapter-item--selected {
+  background-color: rgba(74, 119, 122, 0.1);
+  border-left: 3px solid #4a777a;
+}
+
+.chapter-number {
+  font-family: "Montserrat", "Helvetica Neue", sans-serif;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #4a777a;
+}
+
+.chapter-title {
+  font-family: "Merriweather", Georgia, serif;
+  font-size: 1rem;
+  color: #333333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 1rem;
+}
+
+.chapter-status {
+  font-family: "Montserrat", "Helvetica Neue", sans-serif;
+  font-size: 0.8rem;
+  text-align: right;
+  color: #666666;
+  text-transform: capitalize;
+}
+
+/* Status-specific styling */
+.chapter-item[data-status="complete"] .chapter-status {
+  color: #388e3c;
+}
+
+.chapter-item[data-status="pending"] .chapter-status {
+  color: #f57c00;
+}
+
+.chapter-item[data-status="error"] .chapter-status {
+  color: #d32f2f;
+}
+
+/* Add a subtle animation when chapters appear */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.chapter-list__container {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .chapter-list {
+    padding: 1rem;
+    margin: 1rem;
+  }
+
+  .chapter-list__title {
+    font-size: 1.4rem;
+    margin-bottom: 1rem;
+  }
+
+  .chapter-item {
+    grid-template-columns: 80px 1fr 80px;
+    padding: 0.6rem 0.75rem;
+  }
+
+  .chapter-number {
+    font-size: 0.8rem;
+  }
+
+  .chapter-title {
+    font-size: 0.9rem;
+    padding: 0 0.5rem;
+  }
+
+  .chapter-status {
+    font-size: 0.75rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .chapter-item {
+    grid-template-columns: 70px 1fr;
+    grid-template-rows: auto auto;
+  }
+
+  .chapter-status {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    text-align: left;
+    margin-top: 0.25rem;
+    padding-left: 70px;
+  }
+}
