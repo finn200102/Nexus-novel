@@ -1,5 +1,4 @@
-// src/App.tsx
-import React, { useState } from "react";
+import React from "react";
 import {
   BrowserRouter as Router,
   Routes,
@@ -10,6 +9,7 @@ import Home from "./pages/Home";
 import Signup from "./pages/Signup";
 import Login from "./pages/Login";
 import LibraryPage from "./pages/Library";
+import NovelDetail from "./pages/NovelDetail";
 
 const App: React.FC = () => {
   return (
@@ -18,17 +18,44 @@ const App: React.FC = () => {
         <Route path="/" element={<Home />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/login" element={<Login />} />
-        <Route path="/library/:libraryId" element={<LibraryWrapper />}></Route>
+        <Route path="/library/:libraryId" element={<LibraryWrapper />} />
+        <Route
+          path="/library/:libraryId/novels/:novelId"
+          element={<NovelWrapper />}
+        />
       </Routes>
     </Router>
   );
 };
 
-const LibraryWrapper = () => {
-  const { libraryId } = useParams<{ libraryId: string }>();
+const NovelWrapper = () => {
+  const { libraryId, novelId } = useParams<{
+    libraryId: string;
+    novelId: string;
+  }>();
+
   if (!libraryId) {
     return <div>Invalid library ID</div>;
   }
+  if (!novelId) {
+    return <div>Invalid novel ID</div>;
+  }
+
+  return (
+    <NovelDetail
+      libraryId={parseInt(libraryId, 10)}
+      novelId={parseInt(novelId, 10)}
+    />
+  );
+};
+
+const LibraryWrapper = () => {
+  const { libraryId } = useParams<{ libraryId: string }>();
+
+  if (!libraryId) {
+    return <div>Invalid library ID</div>;
+  }
+
   return <LibraryPage library_id={parseInt(libraryId, 10)} />;
 };
 

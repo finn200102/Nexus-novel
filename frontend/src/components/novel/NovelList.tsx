@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { novelService } from "../../services/novelService";
 import NovelCard from "./NovelCard";
 import "../../styles/novel-list.css";
+import { useNavigate } from "react-router-dom";
 
 interface NovelSchema {
   id: number;
@@ -23,6 +24,7 @@ const NovelList: React.FC<NovelListProps> = ({ library_id }) => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedNovelId, setSelectedNovelId] = useState<number | null>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchNovels = async () => {
@@ -50,6 +52,7 @@ const NovelList: React.FC<NovelListProps> = ({ library_id }) => {
 
   const handleNovelClick = (novelId: number) => {
     setSelectedNovelId(novelId === selectedNovelId ? null : novelId);
+    navigate(`/library/${library_id}/novels/${novelId}`);
   };
 
   return (
