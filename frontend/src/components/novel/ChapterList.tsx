@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { chapterService } from "../../services/chapterService";
 import "../../styles/chapter-list.css";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
 interface ChapterSchema {
   id: number;
@@ -25,9 +25,9 @@ const ChapterList: React.FC<ChapterListProps> = ({ novel_id }) => {
   const [isEditMode, setIsEditMode] = useState<boolean>(false);
   const [selectedChapters, setSelectedChapters] = useState<number[]>([]);
   const [downloadLoading, setDownloadLoading] = useState<boolean>(false);
+  const { libraryId } = useParams<{ libraryId: string }>();
   const navigate = useNavigate();
 
-  // Use useCallback to memoize the fetchChapters function
   const fetchChapters = useCallback(async () => {
     try {
       setLoading(true);
@@ -35,7 +35,6 @@ const ChapterList: React.FC<ChapterListProps> = ({ novel_id }) => {
 
       console.log("Raw API response:", data);
 
-      // Ensure we have an array of chapters
       if (Array.isArray(data)) {
         const sortedChapters = [...data].sort(
           (a, b) => a.chapter_number - b.chapter_number
@@ -51,31 +50,34 @@ const ChapterList: React.FC<ChapterListProps> = ({ novel_id }) => {
     } finally {
       setLoading(false);
     }
-  }, [novel_id]); // Include novel_id in the dependency array
+  }, [novel_id]);
 
   useEffect(() => {
     fetchChapters();
-  }, [fetchChapters]); // Now fetchChapters is the only dependency
+  }, [fetchChapters]);
 
-  const handleChapterClick = (chapterId: number) => {
+  const handleChapterClick = (chapter: ChapterSchema) => {
     if (isEditMode) {
-      // In edit mode, toggle selection
+      // In edit mode, toggle selection using chapter ID
       setSelectedChapters((prev) =>
-        prev.includes(chapterId)
-          ? prev.filter((id) => id !== chapterId)
-          : [...prev, chapterId]
+        prev.includes(chapter.id)
+          ? prev.filter((id) => id !== chapter.id)
+          : [...prev, chapter.id]
       );
     } else {
-      // In normal mode, navigate to chapter
-      setSelectedChapterId(chapterId === selectedChapterId ? null : chapterId);
-      navigate(`/novel/${novel_id}/chapter/${chapterId}`);
+      // In normal mode, navigate to chapter using chapter_number
+      setSelectedChapterId(
+        chapter.id === selectedChapterId ? null : chapter.id
+      );
+      navigate(
+        `/library/${libraryId}/novels/${novel_id}/${chapter.chapter_number}`
+      );
     }
   };
 
   const toggleEditMode = () => {
     setIsEditMode(!isEditMode);
     if (!isEditMode) {
-      // Entering edit mode, clear selections
       setSelectedChapters([]);
     }
   };
@@ -100,7 +102,6 @@ const ChapterList: React.FC<ChapterListProps> = ({ novel_id }) => {
       setIsEditMode(false);
       setSelectedChapters([]);
 
-      // Refresh the chapter list to show updated status
       fetchChapters();
     } catch (err) {
       console.error("Failed to download chapters:", err);
@@ -156,7 +157,7 @@ const ChapterList: React.FC<ChapterListProps> = ({ novel_id }) => {
                   ? "chapter-item--selected"
                   : ""
               }`}
-              onClick={() => handleChapterClick(chapter.id)}
+              onClick={() => handleChapterClick(chapter)}
             >
               {isEditMode && (
                 <input
