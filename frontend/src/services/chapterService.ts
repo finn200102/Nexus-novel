@@ -59,6 +59,32 @@ export const chapterService = {
     }
   },
 
+  async deleteChapterById(chapterId: number) {
+    try {
+      const response = await apiClient.delete(`/chapter/${chapterId}`);
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status !== 401) {
+        this.handleError(error, "Error deleting chapter");
+      }
+      throw error;
+    }
+  },
+  async deleteChaptersByIds(chapterIds: number[]) {
+    try {
+      const deletePromises = chapterIds.map((chapterId) =>
+        this.deleteChapterById(chapterId)
+      );
+
+      return await Promise.all(deletePromises);
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status !== 401) {
+        this.handleError(error, "Error delete chapters");
+      }
+      throw error;
+    }
+  },
+
   handleError(error: any, message: string) {
     console.error(message + ":", error);
 

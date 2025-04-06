@@ -25,6 +25,7 @@ const ChapterList: React.FC<ChapterListProps> = ({ novel_id }) => {
   const [isEditMode, setIsEditMode] = useState<boolean>(false);
   const [selectedChapters, setSelectedChapters] = useState<number[]>([]);
   const [downloadLoading, setDownloadLoading] = useState<boolean>(false);
+  const [deletingLoading, setDeletingLoading] = useState<boolean>(false);
   const { libraryId } = useParams<{ libraryId: string }>();
   const navigate = useNavigate();
 
@@ -111,6 +112,35 @@ const ChapterList: React.FC<ChapterListProps> = ({ novel_id }) => {
     }
   };
 
+  const handleDeleteSelected = async () => {
+    if (selectedChapters.length === 0) {
+      alert("Please select at least one chapter to delete");
+      return;
+    }
+
+    try {
+      setDeletingLoading(true);
+
+      // Get chapter ids from selected IDs
+      const chaptersToDelete = chapters
+        .filter((chapter) => selectedChapters.includes(chapter.id))
+        .map((chapter) => chapter.id);
+
+      await chapterService.deleteChaptersByIds(chaptersToDelete);
+
+      alert("Chapters deleted successfully");
+      setIsEditMode(false);
+      setSelectedChapters([]);
+
+      fetchChapters();
+    } catch (err) {
+      console.error("Failed to delete chapters:", err);
+      alert("Failed to delete chapters");
+    } finally {
+      setDeletingLoading(false);
+    }
+  };
+
   return (
     <div className="chapter-list">
       <div className="chapter-list__header">
@@ -130,6 +160,15 @@ const ChapterList: React.FC<ChapterListProps> = ({ novel_id }) => {
               disabled={selectedChapters.length === 0 || downloadLoading}
             >
               {downloadLoading ? "Downloading..." : "Download Selected"}
+            </button>
+          )}
+          {isEditMode && (
+            <button
+              className="delete-button"
+              onClick={handleDeleteSelected}
+              disabled={selectedChapters.length === 0 || deletingLoading}
+            >
+              {deletingLoading ? "Deleting..." : "Deleting Selected"}
             </button>
           )}
         </div>
