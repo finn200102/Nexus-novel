@@ -6,6 +6,64 @@
   margin: 1.5rem auto;
   max-width: 900px;
 }
+/* General Button Styles */
+button {
+  font-family: "Montserrat", "Helvetica Neue", sans-serif;
+  font-size: 1rem;
+  font-weight: 600;
+  border-radius: 6px;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  border: none;
+  transition: background-color 0.3s ease, transform 0.3s ease;
+}
+
+/* Edit Button */
+.edit-button {
+  background-color: #4a777a;
+  color: #ffffff;
+  border: 1px solid #4a777a;
+}
+
+.edit-button:hover {
+  background-color: #3e6461;
+  transform: translateY(-2px);
+}
+
+.edit-button.active {
+  background-color: #e97451;
+  border: 1px solid #e97451;
+}
+
+.edit-button.active:hover {
+  background-color: #c56e4c;
+}
+
+/* Download Button */
+.download-button {
+  background-color: #388e3c;
+  color: #ffffff;
+  border: 1px solid #388e3c;
+  margin-left: 1rem;
+}
+
+.download-button:hover {
+  background-color: #2f6f2a;
+  transform: translateY(-2px);
+}
+
+.download-button:disabled {
+  background-color: #e0e0e0;
+  color: #b0b0b0;
+  border: 1px solid #e0e0e0;
+  cursor: not-allowed;
+}
+
+/* Active state on hover */
+.download-button:hover:enabled {
+  background-color: #388e3c;
+  transform: translateY(-2px);
+}
 
 .chapter-list__title {
   font-family: "Montserrat", "Helvetica Neue", sans-serif;

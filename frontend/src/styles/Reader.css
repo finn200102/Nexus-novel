@@ -2,7 +2,7 @@
 
 /* --- Overall Container --- */
 .reader-container {
-  max-width: 800px; /* Limit width for readability */
+  max-width: 960px; /* Limit width for readability */
   margin: 40px auto; /* Center the container with space top/bottom */
   padding: 30px 40px; /* Generous padding inside */
   background-color: #fdfdfd; /* Slightly off-white, less harsh than pure white */
@@ -45,13 +45,14 @@
 
 /* --- Content Section --- */
 .reader-content {
-  font-family: "Georgia", "Times New Roman", serif; /* Classic serif for reading */
-  font-size: 1.15em; /* Comfortable reading size (adjust as needed) */
-  line-height: 1.7; /* Generous line spacing is key for readability */
-  color: #282828; /* Dark gray, easier on eyes than pure black */
-  text-align: left; /* Left align is generally better for web readability than justify */
-  /* Consider adding hyphens if using text-align: justify */
-  /* hyphens: auto; */
+  font-family: "Georgia", "Times New Roman", serif;
+  font-size: 1.15em; /* Consider increasing the font size slightly if needed */
+  line-height: 1.7;
+  color: #282828;
+  text-align: left;
+  padding: 0 15px; /* Adjust padding to increase content width */
+  /* Consider reducing left and right padding here */
+  max-width: 100%; /* Allow content to take full width */
 }
 
 .reader-content p {
@@ -142,17 +143,18 @@
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   }
 
+  .reader-content {
+    font-size: 1.1em; /* Slightly smaller on tablets */
+    line-height: 1.65;
+    padding: 0 10px; /* Reduce padding for smaller devices */
+  }
+
   .novel-title {
     font-size: 1.8em;
   }
 
   .chapter-title {
     font-size: 1.3em;
-  }
-
-  .reader-content {
-    font-size: 1.1em; /* Slightly smaller on tablets */
-    line-height: 1.65;
   }
 
   .reader-navigation button {
@@ -165,9 +167,15 @@
   .reader-container {
     margin: 10px auto;
     padding: 15px 15px;
-    border-radius: 4px; /* Less rounding on small screens */
-    box-shadow: none; /* Remove shadow on very small screens */
-    border: 1px solid #eee; /* Add a border instead */
+    border-radius: 4px;
+    box-shadow: none;
+    border: 1px solid #eee;
+  }
+
+  .reader-content {
+    font-size: 1em;
+    line-height: 1.6;
+    padding: 0 10px; /* Reduce padding even more on small screens */
   }
 
   .novel-title {
@@ -176,11 +184,6 @@
 
   .chapter-title {
     font-size: 1.15em;
-  }
-
-  .reader-content {
-    font-size: 1em; /* Base font size for mobile */
-    line-height: 1.6;
   }
 
   .reader-header,
