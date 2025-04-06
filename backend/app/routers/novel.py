@@ -199,7 +199,7 @@ def get_novel_by_id(novel_id: int,
 
 
 @router.post("/delete/{novel_id:int}", response_model=NovelSchema)
-def delete_novel_by_id(novel_id: int, db: Session = Depends(get_db),
+def delete_novel_by_id(novel_id: int, library_id: int, db: Session = Depends(get_db),
                        current_user: User = Depends(get_current_user)):
     """
     Delete a single novel by ID
@@ -211,7 +211,7 @@ def delete_novel_by_id(novel_id: int, db: Session = Depends(get_db),
             detail=f"Novel with ID {novel_id} not found"
         )
 
-    library = check_library(db, novel.id, current_user)
+    library = check_library(db, library_id, current_user)
     novel_services.delete_novel(db, novel.id)
     return novel
 
