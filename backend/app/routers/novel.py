@@ -12,6 +12,7 @@ import app.services.novel_services as novel_services
 from app.services.author_services import create_author, get_author_by_name
 from app.services.chapter_services import create_chapter, get_chapters
 from app.services.library_services import get_library_by_id
+import app.services.chapter_services as chapter_services
 from scripts.get_metadata import get_story_metadata
 from app.auth.dependencies import get_current_user
 
@@ -108,6 +109,41 @@ def add_novel(novel: NovelCreate, db: Session = Depends(get_db),
     return novel
 
 
+@router.get("/update/chapters/{novel_id:int}", response_model=NovelSchema)
+def update_novelchapters_by_id(novel_id: int,
+                    library_id: int,
+                    db: Session = Depends(get_db),
+                    current_user: User = Depends(get_current_user)):
+    """
+    update chapters of a single novel by ID
+    """
+    # check library
+    check_library(db, library_id, current_user)
+    novel = novel_services.get_novel_by_id(db, novel_id)
+    if not novel:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Novel with ID {novel_id} not found"
+        )
+    metadata = get_story_metadata(novel.url)
+    chapter_numbers = metadata["numChapters"]
+    chapters = chapter_services.get_chapters_by_novel_id(db, novel.id)
+    chapter_numbers_set = {chapter.chapter_number for chapter in chapters}
+    for i in range(int(chapter_numbers)):
+        chapter_num = i + 1
+        if chapter_num not in chapter_numbers_set:
+            chapter_data = {"novel_id": novel.id,
+                            "chapter_number": chapter_num,
+                            "title": "",
+                            "content_status": ContentStatus.MISSING}
+            create_chapter(db, chapter_data)    
+
+    return novel
+    
+
+
+
+
 @router.get("/", response_model=list[NovelSchema])
 def get_novels(
         library_id: int,
@@ -192,7 +228,7 @@ def update_novel(novel: NovelUpdate, db: Session = Depends(get_db),
     if not novel:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Novel with ID {novel_id} not found"
+            detail=f"Novel with ID {novel.id} not found"
         )
     library = check_library(db, novel.id, current_user)
 
