@@ -75,6 +75,39 @@ export const novelService = {
       throw error;
     }
   },
+  async deleteNovel(library_id: number, novel_id: number) {
+    try {
+      const data = {
+        library_id: library_id,
+        novel_id: novel_id,
+      };
+
+      const response = await apiClient.post(
+        `/novel/delete/${data.novel_id}?library_id=${data.library_id}`
+      );
+
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status != 401) {
+        this.handleError(error, "Error deleting novel");
+      }
+      throw error;
+    }
+  },
+  async deleteNovelsByIds(libraryId: number, novelIds: number[]) {
+    try {
+      const deletePromises = novelIds.map((novelId) =>
+        this.deleteNovel(libraryId, novelId)
+      );
+
+      return await Promise.all(deletePromises);
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status !== 401) {
+        this.handleError(error, "Error delete novels");
+      }
+      throw error;
+    }
+  },
 
   handleError(error: any, message: string) {
     console.error(message + ":", error);
