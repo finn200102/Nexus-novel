@@ -6,6 +6,10 @@ class ContentStatus(str, Enum):
     PRESENT = "PRESENT"
     PROCESSING = "PROCESSING"
 
+class AudioStatus(str, Enum):
+    MISSING = "MISSING"
+    PRESENT = "PRESENT"
+    PROCESSING = "PROCESSING"
 
 class ChapterCreate(BaseModel):
     novel_id: int
@@ -20,6 +24,7 @@ class Chapter(BaseModel):
     chapter_number: int
     title: str
     content_status: ContentStatus
+    audio_status: AudioStatus
     
     
 
