@@ -3,14 +3,14 @@ import defaultCoverImage from "../../assets/cover.png";
 import "../../styles/novel-card.css";
 
 interface NovelSchema {
-  id: number;
+  id?: number;
   title: string;
-  author_id: number;
+  author_id?: number;
   url: string;
-  library_id: number;
-  cover_image: string | null;
-  created_at: string;
-  updated_at: string;
+  library_id?: number;
+  cover_image?: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 interface NovelCardProps {
