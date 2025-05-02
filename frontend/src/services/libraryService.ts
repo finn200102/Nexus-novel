@@ -29,6 +29,40 @@ export const libraryService = {
     }
   },
 
+  async deletelibrary(library_id: number) {
+    try {
+      const data = {
+        library_id: library_id,
+      };
+
+      const response = await apiClient.post(
+        `/library/delete/${data.library_id}`
+      );
+
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status != 401) {
+        this.handleError(error, "Error deleting library");
+      }
+      throw error;
+    }
+  },
+
+  async deleteLibraryByIds(libraryIds: number[]) {
+    try {
+      const deletePromises = libraryIds.map((libraryId) =>
+        this.deletelibrary(libraryId)
+      );
+
+      return await Promise.all(deletePromises);
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status !== 401) {
+        this.handleError(error, "Error delete library");
+      }
+      throw error;
+    }
+  },
+
   handleError(error: any, message: string) {
     console.error(message + ":", error);
 
