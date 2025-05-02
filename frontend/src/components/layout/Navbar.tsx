@@ -5,10 +5,10 @@ const Navbar: React.FC = () => {
   // Get the library ID from URL parameters if available
   const { libraryId } = useParams<{ libraryId?: string }>();
   const location = useLocation();
-  
+
   // Determine if we're on a page that has a libraryId
   const hasLibraryContext = libraryId !== undefined;
-  
+
   // Styling for the navbar
   const navStyle: React.CSSProperties = {
     display: "flex",
@@ -41,6 +41,12 @@ const Navbar: React.FC = () => {
       <div>
         <Link to="/" style={linkStyle}>
           Home
+        </Link>
+        <Link to="/signup" style={linkStyle}>
+          Signup
+        </Link>
+        <Link to="/login" style={linkStyle}>
+          Login
         </Link>
         {hasLibraryContext && (
           <Link to={`/library/${libraryId}`} style={linkStyle}>
