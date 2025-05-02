@@ -3,7 +3,7 @@ from fanficfare.adapters import getAdapter
 from fanficfare.configurable import Configuration
 from fanficfare.writers import getWriter
 
-def download_novel_chapter(url, output_dir, story_name, format_type="txt", chapter_number=1):
+def download_novel_chapter(url, output_dir, story_name, username, library, format_type="txt", chapter_number=1):
     # Ensure the main directory exists
     os.makedirs(output_dir, exist_ok=True)
 
@@ -13,6 +13,10 @@ def download_novel_chapter(url, output_dir, story_name, format_type="txt", chapt
 
     # Get absolute path for story directory
     abs_story_path = os.path.abspath(story_path)
+    
+    abs_story_path = os.path.join(abs_story_path, username)
+    abs_story_path = os.path.join(abs_story_path, library)
+    os.makedirs(abs_story_path, exist_ok=True)
 
     # Define output filename
     output_filename = f"chapter_{chapter_number}.{format_type}"

@@ -81,15 +81,15 @@ def add_chapter(chapter: ChapterCreate, db: Session = Depends(get_db),
     
     return new_chapter
 
-@router.get("/download/{novel_id:int}/{chapter_number:int}", response_model=ChapterSchema)
-def download_chapter(novel_id: int, chapter_number: int, db: Session = Depends(get_db),
+@router.get("/download/{library_id}/{novel_id:int}/{chapter_number:int}", response_model=ChapterSchema)
+def download_chapter(library_id: int, novel_id: int, chapter_number: int, db: Session = Depends(get_db),
                      current_user: User = Depends(get_current_user)):
     chapter = check_chapter(db, novel_id, chapter_number, current_user)
     novel = novel_services.get_novel_by_id(db, chapter.novel_id)
 
     #base_dir = "/Users/finng/Home/Programmieren/Projects/nexus-novel/backend/app/downloads/"
     base_dir = os.environ.get("DOWNLOAD_PATH")
-    success = download_novel_chapter(novel.url, base_dir, novel.title, "txt", chapter_number)
+    success = download_novel_chapter(novel.url, base_dir, str(current_user.username), str(library_id), novel.title, "txt", chapter_number)
 
     if success:
         chapter_data = {"content_status": "PRESENT"}

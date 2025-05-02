@@ -216,6 +216,7 @@ def delete_novel_by_id(novel_id: int, library_id: int, db: Session = Depends(get
     library = check_library(db, library_id, current_user)
     # delete local files
     base_dir = os.environ.get("DOWNLOAD_PATH")
+    base_dir = os.path.join(base_dir, str(current_user.username), str(library_id))
     novel_path = os.path.join(base_dir, novel.title)
     
     if os.path.isdir(novel_path):
