@@ -162,7 +162,7 @@ def get_novels(
     check_library(db, library_id, current_user)
     
     # Start with base query
-    query = novel_services.get_novels(db)
+    query = novel_services.get_novels(db).filter(Novel.library_id == library_id)
 
     # Apply filters if provided
     if title:
