@@ -176,7 +176,9 @@ def get_chapter_content(library_id: int, novel_id: int, chapter_number: int, db:
     
     # Read chapter content from file
     download_folder_base_dir = os.environ.get("DOWNLOAD_PATH")
+    download_folder_base_dir = os.path.join(download_folder_base_dir, str(current_user.username), str(library_id))
     story_folder = f"{novel.title}"
+    
     story_path = os.path.join(download_folder_base_dir, story_folder)
     chapter_file_path = os.path.join(story_path, f"chapter_{chapter_number}.txt")
 
