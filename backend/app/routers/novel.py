@@ -15,6 +15,8 @@ from app.services.library_services import get_library_by_id
 import app.services.chapter_services as chapter_services
 from scripts.get_metadata import get_story_metadata
 from app.auth.dependencies import get_current_user
+import os
+import shutil
 
 router = APIRouter(
     prefix="/novel",
@@ -212,6 +214,16 @@ def delete_novel_by_id(novel_id: int, library_id: int, db: Session = Depends(get
         )
 
     library = check_library(db, library_id, current_user)
+    # delete local files
+    base_dir = os.environ.get("DOWNLOAD_PATH")
+    novel_path = os.path.join(base_dir, novel.title)
+    
+    if os.path.isdir(novel_path):
+        shutil.rmtree(novel_path)
+    else:
+        print(f"Directory does not exist: {novel_path}")
+
+
     novel_services.delete_novel(db, novel.id)
     return novel
 
