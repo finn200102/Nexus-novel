@@ -1,13 +1,21 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
+import logging
 from config.database import engine, Base
 from app.routers import auth, novel, library, chapter, discovery
+
+
 # Import other routers as needed
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+)
 
+logger = logging.getLogger(__name__)
 # Initialize FastAPI app
 app = FastAPI(
     title="Your API",

@@ -5,15 +5,18 @@ from app.models.user import User
 from ..schemas.chapter import Chapter as ChapterSchema
 from ..schemas.chapter import ChapterCreate, ChapterUpdate, ChapterContent
 from app.models.chapter import Chapter
+from app.models.novel import Novel
 import app.services.chapter_services as chapter_services
 import app.services.library_services as library_services
 import app.services.novel_services as novel_services
 from app.auth.dependencies import get_current_user
 from scripts.novel_downloader import download_novel_chapter
+from scripts.tts import text_to_mp3
 from pathlib import Path
 import os
 import sys
 from dotenv import load_dotenv
+import logging
 
 # Load environment variables
 load_dotenv()
@@ -23,6 +26,7 @@ router = APIRouter(
     tags=["chapters"],
     responses={404: {"description": "Not found"}},
 )
+logger = logging.getLogger(__name__)
 
 def check_chapter(db, novel_id, chapter_number, current_user):
     chapter = chapter_services.get_chapter_by_chapter_number(db, chapter_number,
@@ -138,6 +142,133 @@ def get_chapter_by_number(novel_id: int, chapter_number: int, db: Session = Depe
     return chapter
 
 
+def check_chapter(db: Session, novel_id: int, chapter_number: int, user: User) -> Chapter:
+    chapter = db.query(Chapter).filter_by(novel_id=novel_id, chapter_number=chapter_number).first()
+    if not chapter:
+        raise HTTPException(status_code=404, detail="Chapter not found")
+    
+    novel = db.query(Novel).filter_by(id=novel_id).first()
+    if not novel or novel.library_id not in [lib.id for lib in user.libraries]:
+        raise HTTPException(status_code=403, detail="Access denied to this novel/chapter")
+    
+    return chapter
+
+
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+
+@router.get("/audio/{library_id}/{novel_id:int}/{chapter_number:int}", response_model=ChapterSchema)
+def create_audio_chapter(
+    library_id: int,
+    novel_id: int,
+    chapter_number: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    chapter = check_chapter(db, novel_id, chapter_number, current_user)
+    novel = novel_services.get_novel_by_id(db, chapter.novel_id)
+
+    base_dir = os.environ.get("DOWNLOAD_PATH")
+    if not base_dir:
+        raise HTTPException(status_code=500, detail="DOWNLOAD_PATH not set in environment")
+
+    input_text_file = os.path.join(base_dir, str(current_user.username), str(library_id), novel.title, f"chapter_{chapter_number}.txt")
+    output_audio_file = input_text_file.replace(".txt", ".mp3")
+
+    if not os.path.exists(input_text_file):
+        raise HTTPException(status_code=400, detail="Chapter text file not found")
+
+    # Optionally mark status as PROCESSING
+    chapter_services.update_chapter(db, chapter.id, {"audio_status": "PROCESSING"})
+
+    # Run generation in background
+    background_tasks.add_task(
+        generate_audio_and_update_status,
+        input_text_file,
+        output_audio_file,
+        db,
+        chapter.id
+    )
+
+    return chapter_services.get_chapter_by_id(db, chapter.id)
+
+def generate_audio_and_update_status(input_text_file, output_audio_file, db, chapter_id):
+    logger.info(f"▶️ Starting TTS for chapter {chapter_id}")
+    try:
+        text_to_mp3(
+            input_path=input_text_file,
+            output_path=output_audio_file,
+            lang_code='a',
+            voice='af_heart'
+        )
+        logger.info(f"✅ Finished TTS for chapter {chapter_id}")
+        chapter_services.update_chapter(db, chapter_id, {"audio_status": "PRESENT"})
+    except Exception as e:
+        logger.exception(f"❌ Failed TTS for chapter {chapter_id}: {e}")
+        chapter_services.update_chapter(db, chapter_id, {"audio_status": "FAILED"})
+
+
+
+import os
+import logging
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
+
+
+
+
+@router.get("/content/library/{library_id:int}/{novel_id:int}/{chapter_number:int}/audio")
+def stream_chapter_audio(
+    library_id: int,
+    novel_id: int,
+    chapter_number: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Stream the audio (MP3) file of a chapter by library ID, novel ID, and chapter number.
+    """
+    logger.info("🔍 Requesting audio: library_id=%d, novel_id=%d, chapter_number=%d, user=%s",
+                library_id, novel_id, chapter_number, current_user.username)
+
+    library = library_services.get_library_by_id(db, library_id)
+    if not library:
+        logger.warning("❌ Library ID %d not found", library_id)
+        raise HTTPException(status_code=404, detail=f"Library {library_id} not found")
+
+    if library.user_id != current_user.id:
+        logger.warning("🚫 User %s does not own library ID %d", current_user.username, library_id)
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    novel = novel_services.get_novel_by_id(db, novel_id)
+    if not novel or novel.library_id != library_id:
+        logger.warning("❌ Novel ID %d not found in library ID %d", novel_id, library_id)
+        raise HTTPException(status_code=404, detail=f"Novel {novel_id} not found in library {library_id}")
+
+    chapter = chapter_services.get_chapter_by_chapter_number(db, chapter_number, novel_id)
+    if not chapter:
+        logger.warning("❌ Chapter %d not found in novel %d", chapter_number, novel_id)
+        raise HTTPException(status_code=404, detail=f"Chapter {chapter_number} not found in novel {novel_id}")
+
+    download_base = os.environ.get("DOWNLOAD_PATH")
+    if not download_base:
+        logger.error("❌ DOWNLOAD_PATH not set")
+        raise HTTPException(status_code=500, detail="Server misconfiguration")
+
+    story_path = os.path.join(download_base, current_user.username, str(library_id), novel.title)
+    audio_file_path = os.path.join(story_path, f"chapter_{chapter_number}.mp3")
+
+    logger.info("📁 Checking audio path: %s", audio_file_path)
+
+    if not os.path.exists(audio_file_path):
+        logger.warning("❌ Audio file missing at: %s", audio_file_path)
+        raise HTTPException(status_code=404, detail=f"Audio file {audio_file_path} not found")
+
+    logger.info("✅ Streaming file: %s", audio_file_path)
+    audio_file = open(audio_file_path, "rb")
+    return StreamingResponse(audio_file, media_type="audio/mpeg")
+
+
 
 @router.get("/content/library/{library_id:int}/{novel_id:int}/{chapter_number:int}", response_model=ChapterContent)
 def get_chapter_content(library_id: int, novel_id: int, chapter_number: int, db: Session = Depends(get_db),
@@ -201,6 +332,9 @@ def get_chapter_content(library_id: int, novel_id: int, chapter_number: int, db:
         title=chapter.title,
         content=chapter_content
     )
+
+
+
 
 
 @router.delete("/{chapter_id:int}", response_model=ChapterSchema)
