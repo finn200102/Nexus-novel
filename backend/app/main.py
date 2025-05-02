@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config.database import engine, Base
-from app.routers import auth, novel, library, chapter
+from app.routers import auth, novel, library, chapter, discovery
 # Import other routers as needed
 
 # Create database tables
@@ -35,6 +35,7 @@ app.include_router(auth.router)
 app.include_router(novel.router)
 app.include_router(library.router)
 app.include_router(chapter.router)
+app.include_router(discovery.router)
 # Include other routers as needed
 
 # Root endpoint

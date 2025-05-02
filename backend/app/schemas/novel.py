@@ -15,6 +15,11 @@ class Novel(BaseModel):
     class Config:
         orm_mode = True
 
+class NovelSearch(BaseModel):
+    title: str
+    url: str
+    cover_image: Optional[str] = None
+
 class NovelUpdate(BaseModel):
     id: int
     title: str
