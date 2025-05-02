@@ -1,0 +1,54 @@
+#+TITLE: Requirements Gathering Document
+#+AUTHOR: finn
+#+DATE: 11.03.25
+
+* Introduction
+  Webnovel libary with import of the novels with [[https://github.com/Flameish/Novel-Grabber][Lightnovel Crawler]], [[https://github.com/JimmXinu/FanFicFare][Fan Fic Fare]].
+  Basic libary setup with user management. 
+
+* Scope
+** Frontend
+- React
+- MVC
+** Backend
+- Python Fastapi sqlalchemy
+- User registration and login
+- Token generation
+- List Novel, Author etc
+- Search for novel on one site or multiple
+- Import novel
+- update novel
+- metadata from novel and author
+- metadata from other sites
+- recommendations
+
+
+* User Stories
+  - As an active user, I want to stay updated on all my novels so that i miss nothing.
+  - As an casuel user, I want to find new novel without friction.
+
+* Features
+  - **Search for Novel**: Search for a Novel on a site
+    - **Priority**: Must Have
+    - **Functional Requirements**:
+      - Search a title on one site
+      - Search a title on multiple sites
+
+
+	Must Have / Should Have / Could Have / Won't Have
+
+* Prioritization
+  - Search for Novels
+
+* Application
+
+
+* Functional Requirements
+** Search for Novel
+*** Backend
+Call a subprocess with the command for the light novel crawler to search the title of a novel on the specifed page
+*** Frontend
+Pages for login, signup, libary, novel, author, text
+
+* Assumptions and Constraints
+  - 
