@@ -37,6 +37,18 @@ export const novelService = {
       throw error;
     }
   },
+  async addNovels(libraryId: number, urls: string[]) {
+    try {
+      const downloadPromises = urls.map((url) => this.addNovel(libraryId, url));
+
+      return await Promise.all(downloadPromises);
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status !== 401) {
+        this.handleError(error, "Error download novels");
+      }
+      throw error;
+    }
+  },
   async getNovelById(library_id: number, novel_id: number) {
     try {
       const data: GetNovelSchema = {

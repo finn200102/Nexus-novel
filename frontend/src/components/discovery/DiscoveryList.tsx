@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import NovelCard from "../novel/NovelCard";
 import { discoveryService } from "../../services/discoveryService";
+import { novelService } from "../../services/novelService";
 import "../../styles/novel-list.css";
 
 interface NovelSchema {
@@ -22,6 +23,7 @@ const DiscoveryList: React.FC<DiscoveryListProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedNovels, setSelectedNovels] = useState<Set<string>>(new Set());
+  const [downloadLoading, setDownloadLoading] = useState<boolean>(false);
 
   useEffect(() => {
     const loadNovels = async () => {
@@ -55,6 +57,31 @@ const DiscoveryList: React.FC<DiscoveryListProps> = ({
     setSelectedNovels(newSelected);
   };
 
+  const handleDownloadSelected = async () => {
+    if (selectedNovels.size === 0) return;
+
+    if (
+      window.confirm(
+        `Are you sure you want to download ${selectedNovels.size} selected novels?`
+      )
+    ) {
+      setDownloadLoading(true);
+
+      try {
+        // Use the batch delete method
+        const novelUrlsArray = Array.from(selectedNovels);
+        await novelService.addNovels(library_id, novelUrlsArray);
+
+        setSelectedNovels(new Set());
+      } catch (err) {
+        console.error("Failed to download novels:", err);
+        alert("Failed to download some novels. Please try again.");
+      } finally {
+        setDownloadLoading(false);
+      }
+    }
+  };
+
   return (
     <div className="novel-list">
       <div className="novel-list__header">
@@ -66,7 +93,17 @@ const DiscoveryList: React.FC<DiscoveryListProps> = ({
       {!loading && novels.length === 0 && (
         <p className="novel-list__empty">No novels found</p>
       )}
-
+      <div className="discovery-list__actions">
+        <button
+          className="discovery-list__download-btn"
+          onClick={handleDownloadSelected}
+          disabled={selectedNovels.size === 0 || downloadLoading}
+        >
+          {downloadLoading
+            ? "Downloading..."
+            : `Download (${selectedNovels.size})`}
+        </button>
+      </div>
       {novels.length > 0 && (
         <div className="novel-list__grid">
           {novels.map((novel) => (
