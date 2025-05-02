@@ -1,8 +1,10 @@
 # get_metadata.py
 import os
 import sys
+from scripts.get_cover_image import get_royalroad_cover_image
 from fanficfare.adapters import getAdapter
 from fanficfare.configurable import Configuration
+
 
 def get_story_metadata(url):
     # Create a basic configuration
@@ -16,6 +18,9 @@ def get_story_metadata(url):
 
     # Get the metadata as a dictionary
     metadata = adapter.getStoryMetadataOnly().getAllMetadata()
+    if "royal" in url:
+        cover_url = get_royalroad_cover_image(url)
+        metadata["cover_image"] = cover_url
 
     return parse_metadata(metadata)
 
