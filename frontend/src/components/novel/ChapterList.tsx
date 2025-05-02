@@ -12,10 +12,11 @@ interface ChapterSchema {
 }
 
 interface ChapterListProps {
+  library_id: number;
   novel_id: number;
 }
 
-const ChapterList: React.FC<ChapterListProps> = ({ novel_id }) => {
+const ChapterList: React.FC<ChapterListProps> = ({ novel_id, library_id }) => {
   const [chapters, setChapters] = useState<ChapterSchema[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -97,7 +98,11 @@ const ChapterList: React.FC<ChapterListProps> = ({ novel_id }) => {
         .filter((chapter) => selectedChapters.includes(chapter.id))
         .map((chapter) => chapter.chapter_number);
 
-      await chapterService.downloadChapters(novel_id, chaptersToDownload);
+      await chapterService.downloadChapters(
+        library_id,
+        novel_id,
+        chaptersToDownload
+      );
 
       alert("Chapters downloaded successfully");
       setIsEditMode(false);

@@ -114,7 +114,7 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
               </p>
             )}
           </div>
-          <ChapterList novel_id={novel.id} />
+          <ChapterList novel_id={novel.id} library_id={libraryId} />
         </div>
       )}
     </div>

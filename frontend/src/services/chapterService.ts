@@ -13,10 +13,14 @@ export const chapterService = {
       throw error;
     }
   },
-  async downloadChapter(novelId: number, chapterNumber: number) {
+  async downloadChapter(
+    library_id: number,
+    novelId: number,
+    chapterNumber: number
+  ) {
     try {
       const response = await apiClient.get(
-        `/chapter/download/${novelId}/${chapterNumber}`
+        `/chapter/download/${library_id}/${novelId}/${chapterNumber}`
       );
       return response.data;
     } catch (error) {
@@ -26,10 +30,14 @@ export const chapterService = {
       throw error;
     }
   },
-  async downloadChapters(novelId: number, chapterNumbers: number[]) {
+  async downloadChapters(
+    library_id: number,
+    novelId: number,
+    chapterNumbers: number[]
+  ) {
     try {
       const downloadPromises = chapterNumbers.map((chapterNumber) =>
-        this.downloadChapter(novelId, chapterNumber)
+        this.downloadChapter(library_id, novelId, chapterNumber)
       );
 
       return await Promise.all(downloadPromises);
