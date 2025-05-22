@@ -5,3 +5,5 @@ alembic revision --autogenerate -m "Description of change"
 # 4. Apply the migration
 alembic upgrade head
 
+uvicorn app.main:app --reload
+
