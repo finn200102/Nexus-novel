@@ -1,4 +1,5 @@
 fastapi
+starlette==0.27.0
 uvicorn
 sqlalchemy
 alembic
@@ -10,4 +11,4 @@ beautifulsoup4
 fanficfare
 pydantic
 pytest
-httpx
+httpx==0.24.1
