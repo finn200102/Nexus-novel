@@ -1,4 +1,50 @@
 * README
 
+This project contains a FastAPI backend and a React frontend.
+
+** Setup
+
+1. Create a Python virtual environment and install backend dependencies:
+   #+begin_src shell
+   python3 -m venv venv
+   source venv/bin/activate
+   pip install -r requirements.txt
+   #+end_src
+
+2. Install frontend dependencies (requires Node.js 18+):
+   #+begin_src shell
+   cd frontend
+   npm install   # installs packages from package.json
+   #+end_src
+
+3. Run the backend (from project root):
+   #+begin_src shell
+   uvicorn backend.app.main:app --reload
+   #+end_src
+
+4. Run the frontend development server:
+   #+begin_src shell
+   npm run dev
+   #+end_src
+
+5. Run backend tests:
+   #+begin_src shell
+   pytest -q
+   #+end_src
+
+6. Run frontend tests:
+   #+begin_src shell
+   cd frontend
+   npm test
+   #+end_src
+
+** Dependencies
+
+The backend dependencies are listed in ~requirements.txt~. The frontend
+uses ~package.json~ to track both runtime and development packages for
+React, Vite and testing via Vitest. Running ~npm install~ in the
+~frontend~ directory installs these automatically.
+
 ** Ideas
-Like in jellyfin add a character section where all characters of the story are, that means parsing the chapters and collecting information
+Like in jellyfin add a character section where all characters of the story are,
+that means parsing the chapters and collecting information
