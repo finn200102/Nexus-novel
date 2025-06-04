@@ -32,8 +32,9 @@ def get_author_by_id(db: Session, id):
     """
     Returns author that match that id
     """
-
-    authors = db.query(Author).filter(Author.id == id).firt()
+    author = db.query(Author).filter(Author.id == id).first()
+    if not author:
+        return None
     return author
 
 
