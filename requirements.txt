@@ -10,3 +10,4 @@ beautifulsoup4
 fanficfare
 pydantic
 pytest
+httpx
