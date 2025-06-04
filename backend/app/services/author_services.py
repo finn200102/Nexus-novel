@@ -30,10 +30,10 @@ def get_author_by_name(db: Session, name):
 
 def get_author_by_id(db: Session, id):
     """
-    Returns author that match that id
+    Returns author that matches the given id
     """
 
-    authors = db.query(Author).filter(Author.id == id).firt()
+    author = db.query(Author).filter(Author.id == id).first()
     return author
 
 
