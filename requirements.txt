@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+sqlalchemy
+alembic
+python-dotenv
+bcrypt
+python-jose
+requests
+beautifulsoup4
+fanficfare
+pydantic
+pytest
