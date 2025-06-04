@@ -138,3 +138,43 @@ def test_update_novel(db):
     updated_novel = db.query(Novel).filter(Novel.id == novel.id).first()
     assert updated_novel.title == "Harry Potter 1"
 
+
+def test_get_novels(db):
+    """Verify get_novels returns all novels"""
+    library = create_test_library(db)
+
+    # Create multiple novels
+    create_novel(db, {"title": "Novel1", "library_id": library.id})
+    create_novel(db, {"title": "Novel2", "library_id": library.id})
+
+    novels_query = get_novels(db)
+    novels = novels_query.all()
+
+    assert len(novels) == 2
+    titles = {n.title for n in novels}
+    assert titles == {"Novel1", "Novel2"}
+
+
+def test_get_novel_by_id(db):
+    """Verify get_novel_by_id fetches the correct novel"""
+    library = create_test_library(db)
+    novel = create_novel(db, {"title": "Novel1", "library_id": library.id})
+
+    fetched = get_novel_by_id(db, novel.id)
+
+    assert fetched is not None
+    assert fetched.id == novel.id
+    assert fetched.title == "Novel1"
+
+
+def test_get_novel_by_url(db):
+    """Verify get_novel_by_url returns novels with the given URL"""
+    library = create_test_library(db)
+    url = "https://example.com/novel1"
+    novel = create_novel(db, {"title": "Novel1", "library_id": library.id, "url": url})
+
+    novels = get_novel_by_url(db, url)
+
+    assert novels[0].id == novel.id
+    assert novels[0].url == url
+
