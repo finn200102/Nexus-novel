@@ -12,3 +12,4 @@ fanficfare
 pydantic
 pytest
 httpx==0.24.1
+cloudscraper

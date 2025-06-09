@@ -2,11 +2,17 @@
 import os
 import sys
 from scripts.get_cover_image import get_royalroad_cover_image
+from .fanfiction_importer import get_fanfiction_metadata
 from fanficfare.adapters import getAdapter
 from fanficfare.configurable import Configuration
 
 
 def get_story_metadata(url):
+    """Return parsed metadata for a supported story URL."""
+    if "fanfiction.net" in url:
+        metadata = get_fanfiction_metadata(url)
+        return parse_metadata(metadata)
+
     # Create a basic configuration
     configuration = Configuration(["defaults.ini"], "DEFAULTS")
 
