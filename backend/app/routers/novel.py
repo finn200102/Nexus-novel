@@ -25,8 +25,11 @@ router = APIRouter(
 )
 
 def supported_src(url):
-    supported = ["www.royalroad.com",
-                 "forums.spacebattles.com"]
+    supported = [
+        "www.royalroad.com",
+        "forums.spacebattles.com",
+        "www.fanfiction.net",
+    ]
     def check_url_supported(url):
         for s in supported:
             if s in url:

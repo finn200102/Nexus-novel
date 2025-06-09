@@ -45,6 +45,13 @@ uses ~package.json~ to track both runtime and development packages for
 React, Vite and testing via Vitest. Running ~npm install~ in the
 ~frontend~ directory installs these automatically.
 
+** Supported Sources
+
+Stories can currently be imported from the following sites:
+- [[https://www.royalroad.com][RoyalRoad]]
+- [[https://forums.spacebattles.com][SpaceBattles]]
+- [[https://www.fanfiction.net][FanFiction.Net]]
+
 ** Ideas
 Like in jellyfin add a character section where all characters of the story are,
 that means parsing the chapters and collecting information
