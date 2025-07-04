@@ -17,6 +17,8 @@ class Novel(BaseModel):
 
     title = Column(String(255), nullable=False, index=True)
     author_id = Column(Integer, ForeignKey('authors.id'))
+    site_story_id = Column(Integer)
+    site = Column(String(255))
     url = Column(String(255))
     description = Column(Text)
     cover_image = Column(String(255))

@@ -17,6 +17,10 @@ from scripts.get_metadata import get_story_metadata
 from app.auth.dependencies import get_current_user
 import os
 import shutil
+import pybindings
+from app.services.novel_downloader.fetcher import fetch_story_data_by_url
+from app.services.novel_downloader.parser import parse_novel_data, parse_author_data, parse_chapter_data
+import asyncio
 
 router = APIRouter(
     prefix="/novel",
@@ -26,7 +30,8 @@ router = APIRouter(
 
 def supported_src(url):
     supported = ["www.royalroad.com",
-                 "forums.spacebattles.com"]
+                 "forums.spacebattles.com",
+                 "www.fanfiction.net"]
     def check_url_supported(url):
         for s in supported:
             if s in url:
@@ -69,44 +74,52 @@ def add_novel(novel: NovelCreate, db: Session = Depends(get_db),
 
     # check if url is supported
     if not supported_src(novel.url):
-        raise HTTPExeption(
+        raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Not a supported source url"
             )
 
-    # get metadata
-    metadata = get_story_metadata(novel.url)
+    # Fetch chapter data from scraper
 
-    # check if author already exists
-    authors = get_author_by_name(db, metadata["author"])
-    # create author
-    author_data = {
-        "name": metadata["author"]
-    }
-    if authors.first():
-        author = authors.first()
-    else:
-        author = create_author(db, author_data)
+    py_story = asyncio.run(fetch_story_data_by_url(novel.url, 'fanfiction'))
 
-    novel_data={"url": novel.url,
-                "title": metadata["title"],
-                "library_id": novel.library_id,
-                "cover_image": metadata.get("cover_image", ""),
-                }
+    author_data = parse_author_data(py_story)
     
-    novel_data["author_id"] = author.id
+    # check author is present if not create
+
+    authors_db = get_author_by_name(db, author_data.get('name')).first()
+    if authors_db:
+        author = authors_db
+
+    else:
+        author = create_author(db,
+                               author_data)
+
+
+    # parse the novel_data
+
+    novel_data = parse_novel_data(py_story)
+    novel_data['url'] = novel.url
+    novel_data['library_id'] = novel.library_id
+    novel_data['cover_image'] = ""
+    novel_data['author_id'] = author.id
+
+    # create novel
+
     novel = novel_services.create_novel(db, novel_data)
 
-    # add chapters to db
-    chapter_number = metadata["numChapters"]
-    print(chapter_number)
-    for c in range(int(chapter_number)-1):
-        num_chapter = c + 1
-        chapter_data = {"novel_id": novel.id,
-                        "chapter_number": num_chapter,
-                        "title": "",
-                        "content_status": ContentStatus.MISSING}
-        create_chapter(db, chapter_data)    
+    # parse chapters
+
+    chapter_list = parse_chapter_data(py_story)
+
+    # update new values
+
+    #[c.update({'novel_id': novel.id} for c in chapter_list]
+
+    for idx, chapter in enumerate(chapter_list):
+        chapter['novel_id'] = novel.id
+        create_chapter(db, chapter)
+
     
     return novel
 

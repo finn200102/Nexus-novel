@@ -16,6 +16,7 @@ class Chapter(BaseModel):
     content = Column(Text)
     chapter_number = Column(Integer, nullable=False)
     novel_id = Column(Integer, ForeignKey('novels.id'))
+    site_chapter_id = Column(Integer)
     novel = relationship("Novel", back_populates="chapters")
     content_status = Column(Enum(ContentStatus), default=ContentStatus.MISSING, nullable=False)
 
