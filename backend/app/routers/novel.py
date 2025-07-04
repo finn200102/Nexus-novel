@@ -144,12 +144,12 @@ def update_novelchapters_by_id(novel_id: int,
     chapter_numbers = metadata["numChapters"]
     chapters = chapter_services.get_chapters_by_novel_id(db, novel.id)
     chapter_numbers_set = {chapter.chapter_number for chapter in chapters}
-    for i in range(int(chapter_numbers)):
+    for i, chap in zip(range(int(chapter_numbers)), chapters):
         chapter_num = i + 1
         if chapter_num not in chapter_numbers_set:
             chapter_data = {"novel_id": novel.id,
                             "chapter_number": chapter_num,
-                            "title": "",
+                            "title": chap.title,
                             "content_status": ContentStatus.MISSING}
             create_chapter(db, chapter_data)    
 

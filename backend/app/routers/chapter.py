@@ -15,6 +15,11 @@ import os
 import sys
 from dotenv import load_dotenv
 
+import pybindings
+from app.services.novel_downloader.fetcher import fetch_story_data_by_url, fetch_chapter
+from app.services.novel_downloader.parser import parse_novel_data, parse_author_data, parse_chapter_data, parse_single_chapter_data
+import asyncio
+
 # Load environment variables
 load_dotenv()
 
@@ -87,12 +92,20 @@ def download_chapter(library_id: int, novel_id: int, chapter_number: int, db: Se
     chapter = check_chapter(db, novel_id, chapter_number, current_user)
     novel = novel_services.get_novel_by_id(db, chapter.novel_id)
 
+
+
     #base_dir = "/Users/finng/Home/Programmieren/Projects/nexus-novel/backend/app/downloads/"
     base_dir = os.environ.get("DOWNLOAD_PATH")
-    success = download_novel_chapter(novel.url, base_dir, str(current_user.username), str(library_id), novel.title, "txt", chapter_number)
 
-    if success:
-        chapter_data = {"content_status": "PRESENT"}
+    # fetch chapter
+    site_story_id = novel.site_story_id
+    site_chapter_id = chapter.site_chapter_id
+    site_name = 'fanfiction'
+    py_chapter = asyncio.run(fetch_chapter(site_story_id, chapter_number, site_chapter_id, site_name))
+    chapter_data = parse_single_chapter_data(py_chapter)
+
+    if chapter_data:
+        chapter_data["content_status"] = "PRESENT"
         chapter_services.update_chapter(db, chapter.id, chapter_data)
     else:
         raise HTTPException(
@@ -173,7 +186,7 @@ def get_chapter_content(library_id: int, novel_id: int, chapter_number: int, db:
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Chapter {chapter_number} not found in novel {novel_id}"
         )
-    
+    """    
     # Read chapter content from file
     download_folder_base_dir = os.environ.get("DOWNLOAD_PATH")
     download_folder_base_dir = os.path.join(download_folder_base_dir, str(current_user.username), str(library_id))
@@ -193,13 +206,15 @@ def get_chapter_content(library_id: int, novel_id: int, chapter_number: int, db:
     # If the file exists, read its content
     with open(chapter_file_path, "r") as f:
         chapter_content = f.read()
+    """
 
+    
     return ChapterContent(
         id=chapter.id,
         novel_id=chapter.novel_id,
         chapter_number=chapter.chapter_number,
         title=chapter.title,
-        content=chapter_content
+        content=chapter.content
     )
 
 

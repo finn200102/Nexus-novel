@@ -46,3 +46,17 @@ def parse_chapter_data(py_story):
 
     return chapter_data_list
 
+def parse_single_chapter_data(py_story):
+    """
+    Parse a PyStory object into a list(chapter_data) format.
+    """
+
+
+    chapter_data = {
+            'content': py_story.text,
+            'chapter_number': py_story.chapter_number,
+            }
+
+
+
+    return chapter_data
