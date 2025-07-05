@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { chapterService } from "../../services/chapterService";
 import "../../styles/chapter-list.css";
 import { useNavigate, useParams } from "react-router-dom";
+import ChapterAudioPlayer from "../audio/ChapterAudioPlayer";
 
 interface ChapterSchema {
   id: number;
@@ -9,6 +10,7 @@ interface ChapterSchema {
   chapter_number: number;
   title: string;
   content_status: string;
+  audio_status: string;
 }
 
 interface ChapterListProps {
@@ -58,6 +60,13 @@ const ChapterList: React.FC<ChapterListProps> = ({ novel_id, library_id }) => {
     fetchChapters();
   }, [fetchChapters]);
 
+  const handleAudioChapterClick = (chapter: ChapterSchema) => {
+    setSelectedChapterId(chapter.id === selectedChapterId ? null : chapter.id);
+    navigate(
+      `/library/${libraryId}/novels/${novel_id}/${chapter.chapter_number}/audio`
+    );
+  };
+
   const handleChapterClick = (chapter: ChapterSchema) => {
     if (isEditMode) {
       // In edit mode, toggle selection using chapter ID
@@ -105,6 +114,47 @@ const ChapterList: React.FC<ChapterListProps> = ({ novel_id, library_id }) => {
       );
 
       alert("Chapters downloaded successfully");
+      setIsEditMode(false);
+      setSelectedChapters([]);
+
+      fetchChapters();
+    } catch (err) {
+      console.error("Failed to download chapters:", err);
+      alert("Failed to download chapters");
+    } finally {
+      setDownloadLoading(false);
+    }
+  };
+
+  const handleCreateAudioSelected = async () => {
+    if (selectedChapters.length === 0) {
+      alert("Please select at least one chapter to create audio");
+      return;
+    }
+
+    try {
+      setDownloadLoading(true);
+
+      // Get chapter numbers from selected IDs
+      const chaptersToDownload = chapters
+        .filter((chapter) => selectedChapters.includes(chapter.id))
+        .map((chapter) => chapter.chapter_number);
+
+      await chapterService
+        .createAudioChapters(library_id, novel_id, chaptersToDownload)
+        .then((responses) => {
+          const failed = responses.filter(
+            (chapter) => chapter.audio_status !== "PRESENT"
+          );
+          if (failed.length > 0) {
+            alert("Some chapters failed to create audio");
+          } else {
+            alert("Audio created successfully");
+          }
+        });
+
+      alert("Audio creation completed");
+
       setIsEditMode(false);
       setSelectedChapters([]);
 
@@ -176,6 +226,15 @@ const ChapterList: React.FC<ChapterListProps> = ({ novel_id, library_id }) => {
               {deletingLoading ? "Deleting..." : "Deleting Selected"}
             </button>
           )}
+          {isEditMode && (
+            <button
+              className="create-audio-button"
+              onClick={handleCreateAudioSelected}
+              disabled={selectedChapters.length === 0 || deletingLoading}
+            >
+              {deletingLoading ? "Creating.." : "Create Audio Selected"}
+            </button>
+          )}
         </div>
       </div>
 
@@ -190,42 +249,54 @@ const ChapterList: React.FC<ChapterListProps> = ({ novel_id, library_id }) => {
       {chapters.length > 0 && (
         <div className="chapter-list__container">
           {chapters.map((chapter) => (
-            <div
-              key={chapter.id}
-              className={`chapter-item ${
-                isEditMode
-                  ? selectedChapters.includes(chapter.id)
+            <div>
+              <div
+                key={chapter.id}
+                className={`chapter-item ${
+                  isEditMode
+                    ? selectedChapters.includes(chapter.id)
+                      ? "chapter-item--selected"
+                      : ""
+                    : chapter.id === selectedChapterId
                     ? "chapter-item--selected"
                     : ""
-                  : chapter.id === selectedChapterId
-                  ? "chapter-item--selected"
-                  : ""
-              }`}
-              onClick={() => handleChapterClick(chapter)}
-            >
-              {isEditMode && (
-                <input
-                  type="checkbox"
-                  className="chapter-checkbox"
-                  checked={selectedChapters.includes(chapter.id)}
-                  onChange={() => {}} // Handled by the div click
-                />
-              )}
-              <span className="chapter-number">
-                Chapter {chapter.chapter_number}
-              </span>
-              <span className="chapter-title">
-                {chapter.title || "Untitled"}
-              </span>
-              <span
-                className={`chapter-status ${
-                  chapter.content_status === "PRESENT"
-                    ? "chapter-status--present"
-                    : ""
                 }`}
+                onClick={() => handleChapterClick(chapter)}
               >
-                {chapter.content_status}
-              </span>
+                {isEditMode && (
+                  <input
+                    type="checkbox"
+                    className="chapter-checkbox"
+                    checked={selectedChapters.includes(chapter.id)}
+                    onChange={() => {}} // Handled by the div click
+                  />
+                )}
+                <span className="chapter-number">
+                  Chapter {chapter.chapter_number}
+                </span>
+                <span className="chapter-title">
+                  {chapter.title || "Untitled"}
+                </span>
+                <span
+                  className={`chapter-status ${
+                    chapter.content_status === "PRESENT"
+                      ? "chapter-status--present"
+                      : ""
+                  }`}
+                >
+                  {chapter.content_status}
+                </span>
+                <span
+                  className={`chapter-audio ${
+                    chapter.audio_status === "PRESENT"
+                      ? "chapter-audio--present"
+                      : ""
+                  }`}
+                >
+                  {chapter.audio_status}
+                </span>
+              </div>
+              <div onClick={() => handleAudioChapterClick(chapter)}>Audio</div>
             </div>
           ))}
         </div>
