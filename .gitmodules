@@ -1,0 +1,3 @@
+[submodule "rustbindings"]
+	path = rustbindings
+	url = https://github.com/finn200102/nexus-scraper.git
