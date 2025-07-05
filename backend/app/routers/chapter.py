@@ -20,6 +20,10 @@ from app.services.novel_downloader.fetcher import fetch_story_data_by_url, fetch
 from app.services.novel_downloader.parser import parse_novel_data, parse_author_data, parse_chapter_data, parse_single_chapter_data
 import asyncio
 
+import textwrap
+import nltk
+import random
+
 # Load environment variables
 load_dotenv()
 
@@ -28,6 +32,29 @@ router = APIRouter(
     tags=["chapters"],
     responses={404: {"description": "Not found"}},
 )
+
+def supported_src(url):
+    supported = ["www.royalroad.com",
+                 "forums.spacebattles.com",
+                 "www.fanfiction.net",
+                 "archiveofourown.org"]
+    def check_url_supported(url):
+        for s in supported:
+            if s in url:
+                return True
+        return False
+
+    return check_url_supported(url)
+
+def get_site_name_from_url(url):
+    if "royalroad" in url:
+        return 'royalroad'
+    if 'fanfiction' in url:
+        return 'fanfiction'
+    if 'spacebattles' in url:
+        return 'spacebattles'
+    if 'archiveofourown' in url:
+        return 'archive'
 
 def check_chapter(db, novel_id, chapter_number, current_user):
     chapter = chapter_services.get_chapter_by_chapter_number(db, chapter_number,
@@ -100,7 +127,7 @@ def download_chapter(library_id: int, novel_id: int, chapter_number: int, db: Se
     # fetch chapter
     site_story_id = novel.site_story_id
     site_chapter_id = chapter.site_chapter_id
-    site_name = 'fanfiction'
+    site_name = get_site_name_from_url(novel.url)
     py_chapter = asyncio.run(fetch_chapter(site_story_id, chapter_number, site_chapter_id, site_name))
     chapter_data = parse_single_chapter_data(py_chapter)
 
@@ -186,27 +213,40 @@ def get_chapter_content(library_id: int, novel_id: int, chapter_number: int, db:
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Chapter {chapter_number} not found in novel {novel_id}"
         )
-    """    
-    # Read chapter content from file
-    download_folder_base_dir = os.environ.get("DOWNLOAD_PATH")
-    download_folder_base_dir = os.path.join(download_folder_base_dir, str(current_user.username), str(library_id))
-    story_folder = f"{novel.title}"
-    
-    story_path = os.path.join(download_folder_base_dir, story_folder)
-    chapter_file_path = os.path.join(story_path, f"chapter_{chapter_number}.txt")
+    # foramt text for chapter
 
-    
-    # Check if the file exists and raise an error if not
-    if not os.path.exists(chapter_file_path):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Chapter file {chapter_file_path} not found"
-        )
-    
-    # If the file exists, read its content
-    with open(chapter_file_path, "r") as f:
-        chapter_content = f.read()
-    """
+    MIN_SENTENCES_PER_PARAGRAPH = 3
+    MAX_SENTENCES_PER_PARAGRAPH = 5
+    WRAP_WIDTH = 90
+
+    sentences = nltk.sent_tokenize(chapter.content)
+    paragraphs = []
+    current_paragraph_sentences = []
+    # Loop through the sentences and group them into paragraphs
+    while sentences:
+        # Decide how many sentences this paragraph will have
+        num_sentences = random.randint(MIN_SENTENCES_PER_PARAGRAPH, MAX_SENTENCES_PER_PARAGRAPH)
+        
+        # Grab that many sentences, but not more than are left
+        sentences_for_this_paragraph = sentences[:num_sentences]
+        del sentences[:num_sentences] # Remove them from the main list
+
+        # Join them into a single string for this paragraph
+        paragraph_text = " ".join(sentences_for_this_paragraph)
+        paragraphs.append(paragraph_text)
+
+
+    # 2. Now, format each paragraph with textwrap
+    formatted_paragraphs = []
+    for p_text in paragraphs:
+        wrapped_text = textwrap.fill(p_text, width=WRAP_WIDTH)
+        formatted_paragraphs.append(wrapped_text)
+
+    # 3. Join the formatted paragraphs with two newlines to separate them
+    final_story_text = "\n\n".join(formatted_paragraphs)
+
+
+
 
     
     return ChapterContent(
@@ -214,7 +254,7 @@ def get_chapter_content(library_id: int, novel_id: int, chapter_number: int, db:
         novel_id=chapter.novel_id,
         chapter_number=chapter.chapter_number,
         title=chapter.title,
-        content=chapter.content
+        content=final_story_text#chapter.content
     )
 
 

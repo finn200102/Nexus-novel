@@ -31,7 +31,8 @@ router = APIRouter(
 def supported_src(url):
     supported = ["www.royalroad.com",
                  "forums.spacebattles.com",
-                 "www.fanfiction.net"]
+                 "www.fanfiction.net",
+                 "archiveofourown.org"]
     def check_url_supported(url):
         for s in supported:
             if s in url:
@@ -39,6 +40,18 @@ def supported_src(url):
         return False
 
     return check_url_supported(url)
+
+def get_site_name_from_url(url):
+    if "royalroad" in url:
+        return 'royalroad'
+    if 'fanfiction' in url:
+        return 'fanfiction'
+    if 'spacebattles' in url:
+        return 'spacebattles'
+    if 'archiveofourown' in url:
+        return 'archive'
+
+
 
 
 def check_library(db, library_id, current_user):
@@ -81,7 +94,9 @@ def add_novel(novel: NovelCreate, db: Session = Depends(get_db),
 
     # Fetch chapter data from scraper
 
-    py_story = asyncio.run(fetch_story_data_by_url(novel.url, 'fanfiction'))
+    site_name = get_site_name_from_url(novel.url)
+
+    py_story = asyncio.run(fetch_story_data_by_url(novel.url, site_name)) 
 
     author_data = parse_author_data(py_story)
     
