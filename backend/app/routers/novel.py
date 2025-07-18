@@ -13,7 +13,6 @@ from app.services.author_services import create_author, get_author_by_name
 from app.services.chapter_services import create_chapter, get_chapters
 from app.services.library_services import get_library_by_id
 import app.services.chapter_services as chapter_services
-from scripts.get_metadata import get_story_metadata
 from app.auth.dependencies import get_current_user
 import os
 import shutil
@@ -155,7 +154,7 @@ def update_novelchapters_by_id(novel_id: int,
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Novel with ID {novel_id} not found"
         )
-    metadata = get_story_metadata(novel.url)
+    metadata = {} #get_story_metadata(novel.url)
     chapter_numbers = metadata["numChapters"]
     chapters = chapter_services.get_chapters_by_novel_id(db, novel.id)
     chapter_numbers_set = {chapter.chapter_number for chapter in chapters}
