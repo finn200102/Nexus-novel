@@ -54,7 +54,6 @@ def parse_single_chapter_data(py_story):
 
     chapter_data = {
             'content': py_story.text,
-            'chapter_number': py_story.chapter_number,
             }
 
 

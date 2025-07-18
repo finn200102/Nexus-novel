@@ -32,3 +32,10 @@ dist-ssr
 *.sw?
 backend/app/downloads/Matabar/analysis_cache.pkl
 backend/app/downloads
+backend/app/checkpoints/kokoro-v1.0.onnx
+backend/app/data/voices-v1.0.bin
+*.wav
+*.onnx
+*.bin
+*.txt
+*.mp3

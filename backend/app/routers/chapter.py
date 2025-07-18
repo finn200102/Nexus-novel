@@ -11,7 +11,8 @@ import app.services.library_services as library_services
 import app.services.novel_services as novel_services
 from app.auth.dependencies import get_current_user
 from scripts.novel_downloader import download_novel_chapter
-from scripts.tts import text_to_mp3
+#from scripts.tts import text_to_mp3
+from app.services.audio_service.tts import text_to_mp3
 from pathlib import Path
 import os
 import sys
@@ -212,11 +213,42 @@ def create_audio_chapter(
     if not base_dir:
         raise HTTPException(status_code=500, detail="DOWNLOAD_PATH not set in environment")
 
-    input_text_file = os.path.join(base_dir, str(current_user.username), str(library_id), novel.title, f"chapter_{chapter_number}.txt")
-    output_audio_file = input_text_file.replace(".txt", ".mp3")
+    output_file = os.path.join(base_dir, str(current_user.username), str(library_id), novel.title, f"chapter_{chapter_number}.mp3")
 
-    if not os.path.exists(input_text_file):
-        raise HTTPException(status_code=400, detail="Chapter text file not found")
+    # foramt text for chapter
+
+    MIN_SENTENCES_PER_PARAGRAPH = 1
+    MAX_SENTENCES_PER_PARAGRAPH = 2
+    WRAP_WIDTH = 90
+
+    sentences = nltk.sent_tokenize(chapter.content)
+    paragraphs = []
+    current_paragraph_sentences = []
+    # Loop through the sentences and group them into paragraphs
+    while sentences:
+        # Decide how many sentences this paragraph will have
+        num_sentences = random.randint(MIN_SENTENCES_PER_PARAGRAPH, MAX_SENTENCES_PER_PARAGRAPH)
+        
+        # Grab that many sentences, but not more than are left
+        sentences_for_this_paragraph = sentences[:num_sentences]
+        del sentences[:num_sentences] # Remove them from the main list
+
+        # Join them into a single string for this paragraph
+        paragraph_text = " ".join(sentences_for_this_paragraph)
+        paragraphs.append(paragraph_text)
+
+
+    # 2. Now, format each paragraph with textwrap
+    formatted_paragraphs = []
+    for p_text in paragraphs:
+        wrapped_text = textwrap.fill(p_text, width=WRAP_WIDTH)
+        formatted_paragraphs.append(wrapped_text)
+
+    # 3. Join the formatted paragraphs with two newlines to separate them
+    input_text = "\n\n".join(formatted_paragraphs)
+
+
+
 
     # Optionally mark status as PROCESSING
     chapter_services.update_chapter(db, chapter.id, {"audio_status": "PROCESSING"})
@@ -224,22 +256,23 @@ def create_audio_chapter(
     # Run generation in background
     background_tasks.add_task(
         generate_audio_and_update_status,
-        input_text_file,
-        output_audio_file,
+        input_text,
+        output_file,
         db,
         chapter.id
     )
 
     return chapter_services.get_chapter_by_id(db, chapter.id)
 
-def generate_audio_and_update_status(input_text_file, output_audio_file, db, chapter_id):
+def generate_audio_and_update_status(input_text, output_file, db, chapter_id):
     logger.info(f"▶️ Starting TTS for chapter {chapter_id}")
+    with open("dump", "w") as f:
+        text = f.write(input_text)
+
     try:
         text_to_mp3(
-            input_path=input_text_file,
-            output_path=output_audio_file,
-            lang_code='a',
-            voice='af_heart'
+            input_text=input_text,
+            output_path=output_file,
         )
         logger.info(f"✅ Finished TTS for chapter {chapter_id}")
         chapter_services.update_chapter(db, chapter_id, {"audio_status": "PRESENT"})

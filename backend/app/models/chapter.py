@@ -13,6 +13,7 @@ class AudioStatus(enum.Enum):
     MISSING = "MISSING"
     PRESENT = "PRESENT"
     PROCESSING = "PROCESSING"
+    FAILED = "FAILED"
 
 class Chapter(BaseModel):
     __tablename__ = "chapters"

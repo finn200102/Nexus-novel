@@ -3,11 +3,9 @@ import soundfile as sf
 from pydub import AudioSegment
 import torch
 
-def text_to_mp3(input_path='text.txt', output_path='output.mp3', lang_code='a', voice='af_heart'):
+def text_to_mp3(input_text='', output_path='output.mp3', lang_code='a', voice='af_heart'):
     # Read the input text
-    with open(input_path, 'r', encoding='utf-8') as f:
-        text = f.read()
-
+    text = input_text
     # Initialize Kokoro TTS pipeline
     pipeline = KPipeline(lang_code=lang_code)
 

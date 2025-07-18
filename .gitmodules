@@ -1,3 +1,6 @@
 [submodule "rustbindings"]
 	path = rustbindings
 	url = https://github.com/finn200102/nexus-scraper.git
+[submodule "tools/Kokoros"]
+	path = tools/Kokoros
+	url = https://github.com/lucasjinreal/Kokoros.git

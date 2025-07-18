@@ -10,6 +10,7 @@ class AudioStatus(str, Enum):
     MISSING = "MISSING"
     PRESENT = "PRESENT"
     PROCESSING = "PROCESSING"
+    FAILED = "FAILED"
 
 class ChapterCreate(BaseModel):
     novel_id: int
