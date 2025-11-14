@@ -22,35 +22,37 @@ interface NovelListProps {
 const NovelList: React.FC<NovelListProps> = ({ library_id }) => {
   const [novels, setNovels] = useState<NovelSchema[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [search, setSearch] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [selectedNovelId, setSelectedNovelId] = useState<number | null>(null);
   const [editMode, setEditMode] = useState<boolean>(false);
   const [selectedNovels, setSelectedNovels] = useState<Set<number>>(new Set());
   const [deleteLoading, setDeleteLoading] = useState<boolean>(false);
   const navigate = useNavigate();
+  const fetchNovels = async () => {
+        try {
+          setLoading(true);
+          const data = await novelService.getAllNovels(library_id, search);
+
+          // Ensure we have an array of novels
+          if (Array.isArray(data)) {
+            setNovels(data);
+          } else {
+            console.error("Expected array but got:", data);
+            setError("Unexpected data format");
+          }
+        } catch (err) {
+          console.error("Failed to fetch novels:", err);
+          setError("Failed to load novels");
+        } finally {
+          setLoading(false);
+        }
+      };
+
+
 
   useEffect(() => {
-    const fetchNovels = async () => {
-      try {
-        setLoading(true);
-        const data = await novelService.getAllNovels(library_id);
-
-        // Ensure we have an array of novels
-        if (Array.isArray(data)) {
-          setNovels(data);
-        } else {
-          console.error("Expected array but got:", data);
-          setError("Unexpected data format");
-        }
-      } catch (err) {
-        console.error("Failed to fetch novels:", err);
-        setError("Failed to load novels");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchNovels();
+        fetchNovels();
   }, [library_id]);
 
   const handleNovelClick = (novelId: number) => {
@@ -108,6 +110,11 @@ const NovelList: React.FC<NovelListProps> = ({ library_id }) => {
     }
   };
 
+  const handleSubmit = (e) => {
+   e.preventDefault(); 
+    fetchNovels();
+  }
+
   const selectAll = () => {
     const allIds = novels.map((novel) => novel.id);
     setSelectedNovels(new Set(allIds));
@@ -121,6 +128,10 @@ const NovelList: React.FC<NovelListProps> = ({ library_id }) => {
     <div className="novel-list">
       <div className="novel-list__header">
         <h2 className="novel-list__title">My Novels</h2>
+        <form onSubmit={handleSubmit}>
+          <input value={search} onChange={(e) => setSearch(e.target.value)}/>
+        </form>
+        </div>
 
         <div className="novel-list__actions">
           <button
@@ -158,7 +169,6 @@ const NovelList: React.FC<NovelListProps> = ({ library_id }) => {
             </>
           )}
         </div>
-      </div>
 
       {loading && <p className="novel-list__loading">Loading...</p>}
 

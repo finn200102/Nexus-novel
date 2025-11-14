@@ -11,9 +11,9 @@ interface GetNovelSchema {
 }
 
 export const novelService = {
-  async getAllNovels(library_id: number) {
+  async getAllNovels(library_id: number, query: string = "") {
     try {
-      const response = await apiClient.get(`/novel/?library_id=${library_id}`);
+      const response = await apiClient.get(`/novel/?library_id=${library_id}&search=${query}`);
       return response.data;
     } catch (error) {
       if (axios.isAxiosError(error) && error.response?.status != 401) {
