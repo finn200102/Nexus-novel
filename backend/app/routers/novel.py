@@ -189,9 +189,10 @@ def update_novelchapters_by_id(
 @router.get("/", response_model=list[NovelSchema])
 def get_novels(
     library_id: int,
-    title: str = None,
-    author_name: int = None,
-    genre_id: int = None,
+    title: str = "",
+    search: str = "",
+    author_name: str | None = None,
+    genre_id: int | None = None,
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
@@ -216,6 +217,9 @@ def get_novels(
 
     if genre_id:
         query = query.filter(Novel.genre_id == genre_id)
+
+    if search:
+        query = query.filter(Novel.title.like(f"%{search}%"))
 
     # Apply pagination and return results
     novels = query.offset(skip).limit(limit).all()
