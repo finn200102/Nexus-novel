@@ -10,7 +10,6 @@ import app.services.chapter_services as chapter_services
 import app.services.library_services as library_services
 import app.services.novel_services as novel_services
 from app.auth.dependencies import get_current_user
-from scripts.novel_downloader import download_novel_chapter
 #from scripts.tts import text_to_mp3
 from app.services.audio_service.tts import text_to_mp3
 from pathlib import Path

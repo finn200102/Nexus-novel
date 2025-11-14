@@ -17,28 +17,31 @@ router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
+
 @router.post("/signup", response_model=UserSchema, status_code=status.HTTP_201_CREATED)
 def signup(user: UserCreate, db: Session = Depends(get_db)):
     if get_user_by_username(db, user.username).first():
         raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Username already registered"
-            )
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username already registered",
+        )
 
     # Hash the password
-    hashed_password = bcrypt.hashpw(user.password.encode('utf-8'), bcrypt.gensalt())
-    
+    hashed_password = bcrypt.hashpw(user.password.encode("utf-8"), bcrypt.gensalt())
+
     # Debug information
     print(f"Original password: {user.password}")
     print(f"Hashed password type: {type(hashed_password)}")
     print(f"Hashed password: {hashed_password}")
 
     # Convert bytes to string for storage
-    hashed_password_str = hashed_password.decode('utf-8')
-    
-    result = create_user(db, user_data={"username": user.username, "password": hashed_password_str})
+    hashed_password_str = hashed_password.decode("utf-8")
+
+    result = create_user(
+        db, user_data={"username": user.username, "password": hashed_password_str}
+    )
     print(result)
-    
+
     return result
 
 
@@ -51,21 +54,21 @@ def login(user_data: UserLogin, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid username or password"
+            detail="Invalid username or password",
         )
 
     try:
         # Verify password - handle different password formats
-        password_bytes = user_data.password.encode('utf-8')
+        password_bytes = user_data.password.encode("utf-8")
         stored_password = user.password
-        
+
         # Debug information
         print(f"Input password: {user_data.password}")
         print(f"Stored password type: {type(stored_password)}")
         print(f"Stored password: {stored_password}")
-        
+
         # Check if the stored password is a hex string representation of bytes
-        if stored_password.startswith('\\x'):
+        if stored_password.startswith("\\x"):
             # This is likely a hex representation from PostgreSQL
             print("Detected hex string format, attempting to convert")
             try:
@@ -75,16 +78,18 @@ def login(user_data: UserLogin, db: Session = Depends(get_db)):
                 print(f"Error converting hex password: {str(e)}")
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid username or password"
+                    detail="Invalid username or password",
                 )
         else:
             # Normal bcrypt string format
-            password_valid = bcrypt.checkpw(password_bytes, stored_password.encode('utf-8'))
-            
+            password_valid = bcrypt.checkpw(
+                password_bytes, stored_password.encode("utf-8")
+            )
+
             if not password_valid:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid username or password"
+                    detail="Invalid username or password",
                 )
     except ValueError as e:
         # If we get a ValueError (invalid salt), the password is definitely wrong
@@ -92,15 +97,13 @@ def login(user_data: UserLogin, db: Session = Depends(get_db)):
         print(f"ValueError during password check: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid username or password"
+            detail="Invalid username or password",
         )
-
 
     # Generate access token
     access_token_expires = timedelta(minutes=30)  # Token valid for 30 minutes
     access_token = create_access_token(
-        data={"sub": str(user.id)},
-        expires_delta=access_token_expires
+        data={"sub": str(user.id)}, expires_delta=access_token_expires
     )
 
     # Return user data with token
@@ -109,8 +112,9 @@ def login(user_data: UserLogin, db: Session = Depends(get_db)):
         "username": user.username,
         "message": "Login successful",
         "access_token": access_token,
-        "token_type": "bearer"
+        "token_type": "bearer",
     }
+
 
 @router.post("/test-user", status_code=status.HTTP_201_CREATED)
 def create_test_user(db: Session = Depends(get_db)):
@@ -120,24 +124,24 @@ def create_test_user(db: Session = Depends(get_db)):
         user = get_user_by_username(db, "testuser2").first()
         db.delete(user)
         db.commit()
-    
+
     # Create a new user with properly stored password
     password = "testpassword"
-    hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
-    hashed_password_str = hashed_password.decode('utf-8')
-    
-    user = create_user(db, user_data={"username": "testuser2", "password": hashed_password_str})
-    
-    return {"message": "Test user created", "username": "testuser2", "password": "testpassword"}
+    hashed_password = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt())
+    hashed_password_str = hashed_password.decode("utf-8")
+
+    user = create_user(
+        db, user_data={"username": "testuser2", "password": hashed_password_str}
+    )
+
+    return {
+        "message": "Test user created",
+        "username": "testuser2",
+        "password": "testpassword",
+    }
 
 
 @router.get("/verify-token", response_model=UserSchema)
 def verify_token_endpoint(current_user: User = Depends(get_current_user)):
     """Endpoint to verify if the current token is valid"""
     return current_user
-
-
-
-
-    
-    

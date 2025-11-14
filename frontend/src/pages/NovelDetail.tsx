@@ -11,6 +11,7 @@ interface NovelSchema {
   cover_image: string;
   library_id: number;
   created_at: string;
+  description: string;
   updated_at: string;
 }
 
@@ -91,12 +92,22 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
       {novel && (
         <div>
           <div className="novel-header">
-            <NovelCard
+            <div>
+              <NovelCard
               key={novel.id}
               novel={novel}
               isSelected={false}
               onClick={() => {}}
             />
+              <div>
+                <h>Description</h>
+                <p>
+                {novel.description}
+              </p>
+            </div>
+
+            </div>
+
             <button
               onClick={handleUpdateChapters}
               disabled={updating}
