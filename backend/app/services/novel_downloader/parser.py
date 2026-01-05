@@ -8,6 +8,7 @@ def parse_novel_data(py_story):
         "site": py_story.site,
         "description": py_story.description,
         "site_story_id": py_story.story_id,
+        "cover_image": py_story.img_url,
     }
 
     return novel_data

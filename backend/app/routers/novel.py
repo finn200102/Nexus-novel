@@ -131,7 +131,6 @@ def add_novel(
     novel_data = parse_novel_data(py_story)
     novel_data["url"] = novel.url
     novel_data["library_id"] = novel.library_id
-    novel_data["cover_image"] = ""
     novel_data["author_id"] = author.id
 
     # create novel
