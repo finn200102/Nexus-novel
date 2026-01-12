@@ -53,11 +53,6 @@ const Navbar: React.FC = () => {
             Library
           </Link>
         )}
-        {hasLibraryContext && (
-          <Link to={`/library/${libraryId}/discovery`} style={linkStyle}>
-            Discovery
-          </Link>
-        )}
       </div>
     </nav>
   );

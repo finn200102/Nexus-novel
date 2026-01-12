@@ -12,7 +12,6 @@ import Login from "./pages/Login";
 import LibraryPage from "./pages/Library";
 import NovelDetail from "./pages/NovelDetail";
 import Reader from "./pages/Reader";
-import Discovery from "./pages/Discovery";
 
 // Wrap individual components with Layout
 const WrappedHome = () => (
@@ -45,11 +44,7 @@ const App: React.FC = () => {
           path="/library/:libraryId/novels/:novelId"
           element={<NovelWrapper />}
         />
-        <Route
-          path="/library/:libraryId/discovery"
-          element={<DiscoveryWrapper />}
-        />
-        <Route
+       <Route
           path="/library/:libraryId/novels/:novelId/:chapterNumber"
           element={<ChapterWrapper />}
         />
@@ -77,22 +72,6 @@ const NovelWrapper = () => {
         libraryId={parseInt(libraryId, 10)}
         novelId={parseInt(novelId, 10)}
       />
-    </Layout>
-  );
-};
-
-const DiscoveryWrapper = () => {
-  const { libraryId } = useParams<{
-    libraryId: string;
-  }>();
-
-  if (!libraryId) {
-    return <div>Invalid library ID</div>;
-  }
-
-  return (
-    <Layout>
-      <Discovery libraryId={parseInt(libraryId, 10)} />
     </Layout>
   );
 };
