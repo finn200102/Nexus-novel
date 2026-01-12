@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import NovelCard from "../components/novel/NovelCard";
 import { novelService } from "../services/novelService";
 import ChapterList from "../components/novel/ChapterList";
+import NovelDetails from "../components/novel/NovelDetails.tsx";
 import "../styles/novel-detail.css";
 
 
@@ -110,6 +111,12 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
 
             </div>
 
+            </div>
+          <div className="novel-data-holder">
+            <div className="novel-details-holder">
+              <div className="novel-buttons-holder">
+                <h2>Novel Functions</h2>
+                <div className="novel-buttons">
             <button
               onClick={handleUpdateChapters}
               disabled={updating}
@@ -126,8 +133,14 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
                 {updateMessage}
               </p>
             )}
+                </div>
+
+     
+              </div>
+            <NovelDetails novel={novel}/>
+            </div>
+            <ChapterList novel_id={novel.id} library_id={libraryId} />
           </div>
-          <ChapterList novel_id={novel.id} library_id={libraryId} />
         </div>
       )}
     </div>
