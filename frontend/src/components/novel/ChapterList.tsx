@@ -2,7 +2,6 @@ import React, { useEffect, useState, useCallback } from "react";
 import { chapterService } from "../../services/chapterService";
 import "../../styles/chapter-list.css";
 import { useNavigate, useParams } from "react-router-dom";
-import ChapterAudioPlayer from "../audio/ChapterAudioPlayer";
 
 interface ChapterSchema {
   id: number;
@@ -10,7 +9,6 @@ interface ChapterSchema {
   chapter_number: number;
   title: string;
   content_status: string;
-  audio_status: string;
 }
 
 interface ChapterListProps {
@@ -59,13 +57,6 @@ const ChapterList: React.FC<ChapterListProps> = ({ novel_id, library_id }) => {
   useEffect(() => {
     fetchChapters();
   }, [fetchChapters]);
-
-  const handleAudioChapterClick = (chapter: ChapterSchema) => {
-    setSelectedChapterId(chapter.id === selectedChapterId ? null : chapter.id);
-    navigate(
-      `/library/${libraryId}/novels/${novel_id}/${chapter.chapter_number}/audio`
-    );
-  };
 
   const handleChapterClick = (chapter: ChapterSchema) => {
     if (isEditMode) {
@@ -126,48 +117,7 @@ const ChapterList: React.FC<ChapterListProps> = ({ novel_id, library_id }) => {
     }
   };
 
-  const handleCreateAudioSelected = async () => {
-    if (selectedChapters.length === 0) {
-      alert("Please select at least one chapter to create audio");
-      return;
-    }
-
-    try {
-      setDownloadLoading(true);
-
-      // Get chapter numbers from selected IDs
-      const chaptersToDownload = chapters
-        .filter((chapter) => selectedChapters.includes(chapter.id))
-        .map((chapter) => chapter.chapter_number);
-
-      await chapterService
-        .createAudioChapters(library_id, novel_id, chaptersToDownload)
-        .then((responses) => {
-          const failed = responses.filter(
-            (chapter) => chapter.audio_status !== "PRESENT"
-          );
-          if (failed.length > 0) {
-            alert("Some chapters failed to create audio");
-          } else {
-            alert("Audio created successfully");
-          }
-        });
-
-      alert("Audio creation completed");
-
-      setIsEditMode(false);
-      setSelectedChapters([]);
-
-      fetchChapters();
-    } catch (err) {
-      console.error("Failed to download chapters:", err);
-      alert("Failed to download chapters");
-    } finally {
-      setDownloadLoading(false);
-    }
-  };
-
-  const handleDeleteSelected = async () => {
+    const handleDeleteSelected = async () => {
     if (selectedChapters.length === 0) {
       alert("Please select at least one chapter to delete");
       return;
@@ -226,16 +176,7 @@ const ChapterList: React.FC<ChapterListProps> = ({ novel_id, library_id }) => {
               {deletingLoading ? "Deleting..." : "Deleting Selected"}
             </button>
           )}
-          {isEditMode && (
-            <button
-              className="create-audio-button"
-              onClick={handleCreateAudioSelected}
-              disabled={selectedChapters.length === 0 || deletingLoading}
-            >
-              {deletingLoading ? "Creating.." : "Create Audio Selected"}
-            </button>
-          )}
-        </div>
+       </div>
       </div>
 
       {loading && <p className="chapter-list__loading">Loading...</p>}
@@ -286,17 +227,7 @@ const ChapterList: React.FC<ChapterListProps> = ({ novel_id, library_id }) => {
                 >
                   {chapter.content_status}
                 </span>
-                <span
-                  className={`chapter-audio ${
-                    chapter.audio_status === "PRESENT"
-                      ? "chapter-audio--present"
-                      : ""
-                  }`}
-                >
-                  {chapter.audio_status}
-                </span>
-              </div>
-              <div onClick={() => handleAudioChapterClick(chapter)}>Audio</div>
+                </div>
             </div>
           ))}
         </div>

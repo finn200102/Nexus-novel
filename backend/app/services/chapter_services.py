@@ -16,6 +16,7 @@ def create_chapter(db: Session, chapter_data: dict):
     db.refresh(chapter)
     return chapter
 
+
 def get_chapters(db: Session):
     """
     Returns all chapters
@@ -23,6 +24,7 @@ def get_chapters(db: Session):
 
     chapters = db.query(Chapter)
     return chapters
+
 
 def get_chapter_by_id(db: Session, id):
     """
@@ -32,6 +34,7 @@ def get_chapter_by_id(db: Session, id):
     chapter = db.query(Chapter).filter(Chapter.id == id).first()
     return chapter
 
+
 def get_chapters_by_novel_id(db: Session, novel_id):
     """
     Returns chapters that matches that novel_id
@@ -40,11 +43,17 @@ def get_chapters_by_novel_id(db: Session, novel_id):
     chapters = db.query(Chapter).filter(Chapter.novel_id == novel_id)
     return chapters
 
+
 def get_chapter_by_chapter_number(db: Session, chapter_number, novel_id):
     """
     Returns chapter with chapter_number and novel_id
     """
-    chapter = db.query(Chapter).filter(Chapter.novel_id == novel_id).filter(Chapter.chapter_number == chapter_number).first()
+    chapter = (
+        db.query(Chapter)
+        .filter(Chapter.novel_id == novel_id)
+        .filter(Chapter.chapter_number == chapter_number)
+        .first()
+    )
     return chapter
 
 
@@ -77,4 +86,3 @@ def update_chapter(db: Session, chapter_id, chapter_data):
     db.commit()
     db.refresh(chapter)
     return chapter
-

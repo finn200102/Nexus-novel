@@ -13,7 +13,6 @@ import LibraryPage from "./pages/Library";
 import NovelDetail from "./pages/NovelDetail";
 import Reader from "./pages/Reader";
 import Discovery from "./pages/Discovery";
-import ChapterAudioPlayer from "./components/audio/ChapterAudioPlayer";
 
 // Wrap individual components with Layout
 const WrappedHome = () => (
@@ -54,11 +53,7 @@ const App: React.FC = () => {
           path="/library/:libraryId/novels/:novelId/:chapterNumber"
           element={<ChapterWrapper />}
         />
-        <Route
-          path="/library/:libraryId/novels/:novelId/:chapterNumber/audio"
-          element={<AudioChapterWrapper />}
-        />
-      </Routes>
+         </Routes>
     </Router>
   );
 };
