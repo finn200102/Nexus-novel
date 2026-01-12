@@ -1,0 +1,30 @@
+.novel-description {
+  display: flex;
+  flex-direction: column;
+  background-color: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  padding: 20px;
+  gap: 30px;
+ 
+}
+
+.novel-description > h2 {
+  font-size: 30px;
+}
+
+.novel-details {
+  display: flex;
+  flex-direction: row;
+  gap: 20px;
+}
+
+.novel-details > :first-child {
+  flex: 3;
+  min-width: 220px;
+}
+
+.novel-details > :second-child {
+  float: 7;
+}
+

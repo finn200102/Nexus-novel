@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import NovelCard from "../components/novel/NovelCard";
 import { novelService } from "../services/novelService";
 import ChapterList from "../components/novel/ChapterList";
+import "../styles/novel-detail.css";
+
 
 interface NovelSchema {
   id: number;
@@ -92,15 +94,15 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
       {novel && (
         <div>
           <div className="novel-header">
-            <div>
+            <div className="novel-details">
               <NovelCard
               key={novel.id}
               novel={novel}
               isSelected={false}
               onClick={() => {}}
             />
-              <div>
-                <h>Description</h>
+              <div className="novel-description">
+                <h2>Description</h2>
                 <p>
                 {novel.description}
               </p>
