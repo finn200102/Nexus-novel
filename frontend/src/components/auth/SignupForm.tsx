@@ -1,6 +1,6 @@
-import React, { FormEvent } from "react";
-import { useState } from "react";
-import axios from "axios";
+import React, { FormEvent, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { authService } from "../../services/authService";
 import "../../styles/auth-styles.css";
 
 interface FormData {
@@ -14,9 +14,8 @@ const SignupForm: React.FC = () => {
     password: "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitStatus, setSubmitStatus] = useState<"success" | "error" | null>(
-    null
-  );
+  const [submitStatus, setSubmitStatus] = useState<"success" | "error" | null>(null);
+  const navigate = useNavigate();
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -24,12 +23,12 @@ const SignupForm: React.FC = () => {
     setSubmitStatus(null);
 
     try {
-      await axios.post("/api/auth/signup", formData);
+      await authService.register(formData);
       setSubmitStatus("success");
       setFormData({ username: "", password: "" });
-    } catch (error) {
+      navigate("/");
+    } catch {
       setSubmitStatus("error");
-      console.error("Error submitting form:", error);
     } finally {
       setIsSubmitting(false);
     }
