@@ -7,9 +7,13 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   return (
-    <div>
+    <div className="layout-shell">
       <Navbar />
-      <main style={{ padding: "1rem 2rem" }}>{children}</main>
+      <main className="layout-main">
+        <div className="app-container">
+          <div className="app-content">{children}</div>
+        </div>
+      </main>
     </div>
   );
 };
