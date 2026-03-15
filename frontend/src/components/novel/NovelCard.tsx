@@ -1,30 +1,47 @@
 import React from "react";
 import defaultCoverImage from "../../assets/cover.png";
+import { Novel } from "../../types/novel";
 import "../../styles/novel-card.css";
 
-interface NovelSchema {
-  id?: number;
-  title: string;
-  author_id?: number;
-  url: string;
-  library_id?: number;
-  cover_image?: string | null;
-  created_at?: string;
-  updated_at?: string;
-}
-
 interface NovelCardProps {
-  novel: NovelSchema;
+  novel: Novel;
   isSelected?: boolean;
   onClick?: () => void;
 }
+
+const formatWordCount = (wordCount: number | null | undefined): string => {
+  if (wordCount === null || wordCount === undefined) return "";
+  if (wordCount >= 1000000) return `${(wordCount / 1000000).toFixed(1)}M words`;
+  if (wordCount >= 1000) return `${(wordCount / 1000).toFixed(0)}K words`;
+  return `${wordCount} words`;
+};
+
+const getDisplayStatus = (novel: Novel): string => {
+  if (novel.status === "Complete") return "Complete";
+  
+  if (novel.updated_date) {
+    const updated = new Date(novel.updated_date);
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+    
+    if (updated > oneYearAgo) {
+      return "Ongoing";
+    }
+  }
+  
+  return novel.status || "Unknown";
+};
 
 const NovelCard: React.FC<NovelCardProps> = ({
   novel,
   isSelected,
   onClick,
 }) => {
-  const coverImageSrc = novel.cover_image || defaultCoverImage;
+  const coverImageSrc = novel.img_url || novel.cover_image || defaultCoverImage;
+  const displayStatus = getDisplayStatus(novel);
+  const updatedDate = novel.updated_date
+    ? new Date(novel.updated_date).toLocaleDateString()
+    : null;
 
   return (
     <div
@@ -42,8 +59,49 @@ const NovelCard: React.FC<NovelCardProps> = ({
         />
       </div>
       <div className="novel-card__content">
+        <div className="novel-card__badge-row">
+          {novel.novel_site && (
+            <span className="novel-card__badge">
+              {novel.novel_site.toUpperCase()}
+            </span>
+          )}
+          {novel.scrape_status && novel.scrape_status !== "completed" && (
+            <span className={`novel-card__scrape novel-card__scrape--${novel.scrape_status}`}>
+              {novel.scrape_status === "pending" ? "Pending" : "Needs Attention"}
+            </span>
+          )}
+        </div>
         <h3 className="novel-card__title">{novel.title}</h3>
-        <div className="novel-card__meta"></div>
+        <div className="novel-card__meta">
+          {novel.author && (
+            <span className="novel-card__author">{novel.author}</span>
+          )}
+          <div className="novel-card__stats">
+            {novel.word_count && (
+              <span className="novel-card__stat">
+                {formatWordCount(novel.word_count)}
+              </span>
+            )}
+            {novel.chapter_count && (
+              <span className="novel-card__stat">
+                {novel.chapter_count} ch
+              </span>
+            )}
+            {novel.rating && (
+              <span className="novel-card__stat rating">
+                ★ {novel.rating.toFixed(1)}
+              </span>
+            )}
+          </div>
+          {displayStatus && displayStatus !== "Unknown" && (
+            <span className={`novel-card__status status-${displayStatus.toLowerCase().replace(/\s+/g, '-')}`}>
+              {displayStatus}
+            </span>
+          )}
+          {updatedDate && (
+            <span className="novel-card__updated">Updated {updatedDate}</span>
+          )}
+        </div>
       </div>
     </div>
   );
