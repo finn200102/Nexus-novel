@@ -1,22 +1,10 @@
 import React, { useEffect, useState } from "react";
-import NovelCard from "../components/novel/NovelCard";
+import defaultCoverImage from "../assets/cover.png";
 import { novelService } from "../services/novelService";
 import ChapterList from "../components/novel/ChapterList";
-import NovelDetails from "../components/novel/NovelDetails.tsx";
+import NovelDetails from "../components/novel/NovelDetails";
+import { Novel } from "../types/novel";
 import "../styles/novel-detail.css";
-
-
-interface NovelSchema {
-  id: number;
-  title: string;
-  author_id: number;
-  url: string;
-  cover_image: string;
-  library_id: number;
-  created_at: string;
-  description: string;
-  updated_at: string;
-}
 
 interface NovelDetailProps {
   novelId: number;
@@ -24,33 +12,32 @@ interface NovelDetailProps {
 }
 
 const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
-  const [novel, setNovel] = useState<NovelSchema | null>(null);
+  const [novel, setNovel] = useState<Novel | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [updating, setUpdating] = useState<boolean>(false);
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchNovel = async () => {
-      try {
-        setLoading(true);
-        const data = await novelService.getNovelById(libraryId, novelId);
+  const fetchNovel = async () => {
+    try {
+      setLoading(true);
+      const data = await novelService.getNovelById(libraryId, novelId);
 
-        // Check if we received a valid novel object
-        if (data && typeof data === "object" && "id" in data) {
-          setNovel(data);
-        } else {
-          console.error("Expected novel object but got:", data);
-          setError("Unexpected data format");
-        }
-      } catch (err) {
-        console.error("Failed to fetch novel:", err);
-        setError("Failed to load novel details");
-      } finally {
-        setLoading(false);
+      if (data && typeof data === "object" && "id" in data) {
+        setNovel(data);
+      } else {
+        console.error("Expected novel object but got:", data);
+        setError("Unexpected data format");
       }
-    };
+    } catch (err) {
+      console.error("Failed to fetch novel:", err);
+      setError("Failed to load novel details");
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchNovel();
   }, [libraryId, novelId]);
 
@@ -59,17 +46,14 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
       setUpdating(true);
       setUpdateMessage("Updating chapters...");
 
-      // Call the update chapters endpoint
       const updatedNovel = await novelService.updateNovelChapters(
         libraryId,
         novelId
       );
 
-      // Update the novel state with the latest data
       setNovel(updatedNovel);
       setUpdateMessage("Chapters updated successfully!");
 
-      // Clear the success message after 3 seconds
       setTimeout(() => {
         setUpdateMessage(null);
       }, 3000);
@@ -77,7 +61,6 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
       console.error("Failed to update chapters:", err);
       setUpdateMessage("Failed to update chapters");
 
-      // Clear the error message after 5 seconds
       setTimeout(() => {
         setUpdateMessage(null);
       }, 5000);
@@ -85,6 +68,89 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
       setUpdating(false);
     }
   };
+
+  const handleRefreshMetadata = async () => {
+    try {
+      setUpdating(true);
+      setUpdateMessage("Refreshing metadata from server...");
+
+      const updatedNovel = await novelService.refreshMetadata(libraryId, novelId);
+
+      setNovel(updatedNovel);
+      setUpdateMessage("Metadata refreshed successfully!");
+
+      setTimeout(() => {
+        setUpdateMessage(null);
+      }, 3000);
+    } catch (err) {
+      console.error("Failed to refresh metadata:", err);
+      setUpdateMessage("Failed to refresh metadata");
+
+      setTimeout(() => {
+        setUpdateMessage(null);
+      }, 5000);
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleCheckStatus = async () => {
+    try {
+      setUpdating(true);
+      setUpdateMessage("Checking scrape status...");
+
+      const updatedNovel = await novelService.refreshMetadata(libraryId, novelId);
+
+      setNovel(updatedNovel);
+      
+      if (updatedNovel.scrape_status === "completed") {
+        setUpdateMessage("Scrape completed! Metadata updated.");
+      } else if (updatedNovel.scrape_status === "failed") {
+        setUpdateMessage(`Scrape failed: ${updatedNovel.scrape_error || "Unknown error"}`);
+      } else {
+        setUpdateMessage("Still scraping... Try again in a few seconds.");
+      }
+
+      setTimeout(() => {
+        setUpdateMessage(null);
+      }, 5000);
+    } catch (err) {
+      console.error("Failed to check status:", err);
+      setUpdateMessage("Failed to check status");
+
+      setTimeout(() => {
+        setUpdateMessage(null);
+      }, 5000);
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const getScrapeStatusIndicator = () => {
+    if (!novel?.scrape_status || novel.scrape_status === "completed") {
+      return null;
+    }
+
+    if (novel.scrape_status === "pending") {
+      return (
+        <span className="scrape-status scrape-status--pending" title="Scraping in progress">
+          ⏳
+        </span>
+      );
+    }
+
+    if (novel.scrape_status === "failed") {
+      return (
+        <span className="scrape-status scrape-status--failed" title={novel.scrape_error || "Scrape failed"}>
+          ⚠️
+        </span>
+      );
+    }
+
+    return null;
+  };
+
+  const coverImageSrc = novel?.img_url || novel?.cover_image || defaultCoverImage;
 
   return (
     <div>
@@ -94,50 +160,71 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
 
       {novel && (
         <div>
-          <div className="novel-header">
-            <div className="novel-details">
-              <NovelCard
-              key={novel.id}
-              novel={novel}
-              isSelected={false}
-              onClick={() => {}}
-            />
-              <div className="novel-description">
-                <h2>Description</h2>
-                <p>
-                {novel.description}
-              </p>
+          <div className="novel-hero">
+            <div className="novel-hero__cover">
+              <img
+                src={coverImageSrc}
+                alt={`Cover for ${novel.title}`}
+                className="novel-hero__image"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = defaultCoverImage;
+                }}
+              />
             </div>
-
+            <div className="novel-hero__info">
+              <h1 className="novel-hero__title">
+                {novel.title}
+                {getScrapeStatusIndicator()}
+              </h1>
+              {novel.author && (
+                <p className="novel-hero__author">by {novel.author}</p>
+              )}
+              {novel.description && (
+                <p className="novel-hero__description">{novel.description}</p>
+              )}
             </div>
-
-            </div>
+          </div>
+          
           <div className="novel-data-holder">
             <div className="novel-details-holder">
               <div className="novel-buttons-holder">
                 <h2>Novel Functions</h2>
                 <div className="novel-buttons">
-            <button
-              onClick={handleUpdateChapters}
-              disabled={updating}
-              className="update-button"
-            >
-              {updating ? "Updating..." : "Update Chapters"}
-            </button>
-            {updateMessage && (
-              <p
-                className={`update-message ${
-                  updating ? "updating" : "updated"
-                }`}
-              >
-                {updateMessage}
-              </p>
-            )}
+                  <button
+                    onClick={handleUpdateChapters}
+                    disabled={updating}
+                    className="update-button"
+                  >
+                    {updating ? "Updating..." : "Update Chapters"}
+                  </button>
+                  <button
+                    onClick={handleRefreshMetadata}
+                    disabled={updating}
+                    className="refresh-button"
+                  >
+                    {updating ? "Refreshing..." : "Refresh Metadata"}
+                  </button>
+                  {(novel.scrape_status === "pending" || novel.scrape_status === "failed") && (
+                    <button
+                      onClick={handleCheckStatus}
+                      disabled={updating}
+                      className="check-status-button"
+                    >
+                      {updating ? "Checking..." : "Check Scrape Status"}
+                    </button>
+                  )}
+                  {updateMessage && (
+                    <p
+                      className={`update-message ${
+                        updating ? "updating" : "updated"
+                      }`}
+                    >
+                      {updateMessage}
+                    </p>
+                  )}
                 </div>
-
-     
               </div>
-            <NovelDetails novel={novel}/>
+              <NovelDetails novel={novel} />
             </div>
             <ChapterList novel_id={novel.id} library_id={libraryId} />
           </div>

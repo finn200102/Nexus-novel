@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status, HTTPException
+from fastapi import APIRouter, Depends, status, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from config.database import get_db
 from ..schemas.novel import Novel as NovelSchema
@@ -24,6 +24,83 @@ import os
 import shutil
 
 logger = get_logger(__name__)
+
+import asyncio
+
+
+def scrape_novel_background(
+    novel_id: int,
+    metadata_id: int,
+    db_session_factory,
+):
+    """Background task to scrape and update novel metadata."""
+    import time
+
+    db = db_session_factory()
+    try:
+        logger.info(
+            "Starting background scrape",
+            extra={"extra": {"novel_id": novel_id, "metadata_id": metadata_id}},
+        )
+
+        time.sleep(3)
+
+        try:
+            scraped_data = asyncio.run(metadata_client.get_novel_metadata(metadata_id))
+
+            novel_data = {
+                "title": scraped_data.get("title"),
+                "author": scraped_data.get("author"),
+                "author_site_id": scraped_data.get("author_id"),
+                "source_url": scraped_data.get("source_url"),
+                "img_url": scraped_data.get("img_url"),
+                "description": scraped_data.get("description"),
+                "word_count": scraped_data.get("word_count"),
+                "reviews": scraped_data.get("reviews"),
+                "favorites": scraped_data.get("favorites"),
+                "follows": scraped_data.get("follows"),
+                "status": scraped_data.get("status"),
+                "views": scraped_data.get("views"),
+                "rating": scraped_data.get("rating"),
+                "publish_date": scraped_data.get("publish_date"),
+                "updated_date": scraped_data.get("updated_date"),
+                "chapter_count": scraped_data.get("chapter_count"),
+                "scrape_status": "completed",
+                "scrape_error": None,
+            }
+
+            novel_services.update_novel(db, novel_id, novel_data)
+
+            chapters_data = asyncio.run(
+                metadata_client.get_chapters_from_metadata(metadata_id)
+            )
+            for chapter_meta in chapters_data:
+                chapter_data = {
+                    "novel_id": novel_id,
+                    "chapter_number": chapter_meta.get("chapter_number"),
+                    "title": chapter_meta.get("title"),
+                    "site_chapter_id": chapter_meta.get("chapter_id"),
+                    "word_count": chapter_meta.get("word_count"),
+                    "content_status": ContentStatus.MISSING,
+                }
+                create_chapter(db, chapter_data)
+
+            logger.info(
+                "Background scrape completed",
+                extra={"extra": {"novel_id": novel_id, "metadata_id": metadata_id}},
+            )
+
+        except Exception as e:
+            logger.error(
+                "Background scrape failed",
+                extra={"extra": {"novel_id": novel_id, "error": str(e)}},
+            )
+            novel_services.update_novel(
+                db, novel_id, {"scrape_status": "failed", "scrape_error": str(e)}
+            )
+    finally:
+        db.close()
+
 
 router = APIRouter(
     prefix="/novel",
@@ -81,6 +158,7 @@ def check_library(db, library_id, current_user):
 @router.post("/", response_model=NovelSchema, status_code=status.HTTP_201_CREATED)
 async def add_novel(
     novel: NovelCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -103,107 +181,48 @@ async def add_novel(
             detail="Could not determine site from URL",
         )
 
-    scraped_data = await metadata_client.scrape_novel_by_url(novel.url, site_name)
+    scrape_result = await metadata_client.scrape_novel_by_url(novel.url, site_name)
 
-    metadata_id = (
-        scraped_data.get("id") if scraped_data and scraped_data.get("id") else None
-    )
+    if not scrape_result or not scrape_result.get("success"):
+        error_msg = (
+            scrape_result.get("message", "Failed to start scraping")
+            if scrape_result
+            else "Failed to start scraping"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to add novel: {error_msg}",
+        )
 
-    if (
-        not metadata_id
-        and scraped_data is None
-        or (scraped_data and not scraped_data.get("id"))
-    ):
-        try:
-            search_result = await metadata_client.search_novel_by_url(novel.url)
-            if search_result and search_result.get("data"):
-                metadata_id = search_result["data"][0].get("id")
-                scraped_data = search_result["data"][0]
-        except Exception as e:
-            logger.warning(
-                "Error searching for novel",
-                extra={"extra": {"error": str(e), "url": novel.url}},
-            )
+    metadata_id = scrape_result.get("novel_id")
+    if not metadata_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to add novel: No metadata ID returned",
+        )
 
     title_from_url = novel.url.split("/")[-1] if novel.url else "New Novel"
-
-    if scraped_data and scraped_data.get("title"):
-        title = scraped_data.get("title")
-    else:
-        title = title_from_url.replace("-", " ").title()
-
-    if scraped_data and scraped_data.get("author"):
-        author_name = scraped_data.get("author")
-        authors_db = get_author_by_name(db, author_name).first()
-        if authors_db:
-            author = authors_db
-        else:
-            author_data = {
-                "name": author_name,
-                "site_author_id": scraped_data.get("author_id")
-                if scraped_data
-                else None,
-                "site": site_name,
-            }
-            author = create_author(db, author_data)
-    else:
-        author = None
-        author_name = None
+    title = title_from_url.replace("-", " ").title()
 
     novel_data = {
         "title": title,
         "url": novel.url,
         "library_id": novel.library_id,
         "metadata_id": metadata_id,
-        "author": author_name,
-        "author_site_id": scraped_data.get("author_id") if scraped_data else None,
-        "author_id": author.id if author else None,
-        "source_url": scraped_data.get("source_url") if scraped_data else None,
-        "story_id": scraped_data.get("story_id") if scraped_data else None,
-        "site_story_id": scraped_data.get("story_id") if scraped_data else None,
-        "novel_site": scraped_data.get("novel_site") if scraped_data else site_name,
-        "img_url": scraped_data.get("img_url") if scraped_data else None,
-        "description": scraped_data.get("description") if scraped_data else None,
-        "word_count": scraped_data.get("word_count") if scraped_data else None,
-        "reviews": scraped_data.get("reviews") if scraped_data else None,
-        "favorites": scraped_data.get("favorites") if scraped_data else None,
-        "follows": scraped_data.get("follows") if scraped_data else None,
-        "status": scraped_data.get("status") if scraped_data else None,
-        "views": scraped_data.get("views") if scraped_data else None,
-        "rating": scraped_data.get("rating") if scraped_data else None,
-        "publish_date": scraped_data.get("publish_date") if scraped_data else None,
-        "updated_date": scraped_data.get("updated_date") if scraped_data else None,
-        "chapter_count": scraped_data.get("chapter_count") if scraped_data else None,
-        "analyzed_at": scraped_data.get("analyzed_at") if scraped_data else None,
-        "analysis_type": scraped_data.get("analysis_type") if scraped_data else None,
-        "analyzed_chapter_count": scraped_data.get("analyzed_chapter_count")
-        if scraped_data
-        else None,
-        "parsed_at": scraped_data.get("parsed_at") if scraped_data else None,
+        "novel_site": site_name,
+        "scrape_status": "pending",
     }
 
     novel_obj = novel_services.create_novel(db, novel_data)
 
-    if metadata_id:
-        try:
-            chapters_data = await metadata_client.get_chapters_from_metadata(
-                metadata_id
-            )
-            for chapter_meta in chapters_data:
-                chapter_data = {
-                    "novel_id": novel_obj.id,
-                    "chapter_number": chapter_meta.get("chapter_number"),
-                    "title": chapter_meta.get("title"),
-                    "site_chapter_id": chapter_meta.get("chapter_id"),
-                    "word_count": chapter_meta.get("word_count"),
-                    "content_status": ContentStatus.MISSING,
-                }
-                create_chapter(db, chapter_data)
-        except Exception as e:
-            logger.warning(
-                "Error fetching chapters",
-                extra={"extra": {"error": str(e), "novel_id": novel_obj.id}},
-            )
+    from config.database import SessionLocal
+
+    background_tasks.add_task(
+        scrape_novel_background,
+        int(novel_obj.id),
+        metadata_id,
+        SessionLocal,
+    )
 
     return novel_obj
 
@@ -224,13 +243,34 @@ async def refresh_novel_metadata(
             detail=f"Novel with ID {novel_id} not found",
         )
 
-    if not novel.metadata_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Novel does not have metadata_id - cannot refresh",
-        )
+    metadata_id = novel.metadata_id
 
-    refreshed_data = await metadata_client.refresh_novel_metadata(novel.metadata_id)
+    if not metadata_id:
+        site_name = get_site_name_from_url(novel.url)
+        if not site_name:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Could not determine site from URL",
+            )
+
+        scrape_result = await metadata_client.scrape_novel_by_url(novel.url, site_name)
+
+        if not scrape_result or not scrape_result.get("success"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to scrape novel",
+            )
+
+        metadata_id = scrape_result.get("novel_id")
+        if not metadata_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to get metadata ID from scrape",
+            )
+
+        novel_services.update_novel(db, novel_id, {"metadata_id": metadata_id})
+
+    refreshed_data = await metadata_client.refresh_novel_metadata(metadata_id)
 
     novel_data = {
         "title": refreshed_data.get("title"),
@@ -257,7 +297,7 @@ async def refresh_novel_metadata(
 
     updated_novel = novel_services.update_novel(db, novel_id, novel_data)
 
-    chapters_data = await metadata_client.get_chapters_from_metadata(novel.metadata_id)
+    chapters_data = await metadata_client.get_chapters_from_metadata(metadata_id)
     existing_chapter_numbers = {
         ch.chapter_number for ch in get_chapters_by_novel_id(db, novel_id).all()
     }

@@ -93,6 +93,12 @@ def client_with_auth(db, test_user, test_library):
 
     app.dependency_overrides[get_db] = override_get_db
 
+    mock_scrape_response = {
+        "success": True,
+        "novel_id": 1,
+        "message": "scraping started",
+    }
+
     mock_scraped_data = {
         "id": 1,
         "title": "Mother of Learning",
@@ -151,7 +157,7 @@ def client_with_auth(db, test_user, test_library):
             "app.routers.novel.metadata_client.invalidate_novel_cache",
         ) as mock_invalidate_cache,
     ):
-        mock_scrape.return_value = mock_scraped_data
+        mock_scrape.return_value = mock_scrape_response
         mock_chapters_fn.return_value = mock_chapters
         mock_get_metadata.return_value = mock_scraped_data
         mock_invalidate_cache.return_value = None
