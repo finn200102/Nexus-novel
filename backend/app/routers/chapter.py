@@ -19,6 +19,7 @@ import logging
 
 import pybindings
 from app.services.novel_downloader.fetcher import fetch_story_data_by_url, fetch_chapter
+from app.services import metadata_client
 from app.services.novel_downloader.parser import (
     parse_novel_data,
     parse_author_data,
@@ -148,22 +149,74 @@ def download_chapter(
     chapter = check_chapter(db, novel_id, chapter_number, current_user)
     novel = novel_services.get_novel_by_id(db, chapter.novel_id)
 
-    # Get story_id - check both columns for compatibility
     site_story_id = novel.story_id or novel.site_story_id
-    if not site_story_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Novel does not have story_id. Please refresh metadata first.",
-        )
+    metadata_id = novel.metadata_id
+    site_name = get_site_name_from_url(novel.url)
 
-    # base_dir = "/Users/finng/Home/Programmieren/Projects/nexus-novel/backend/app/downloads/"
+    if not site_story_id:
+        metadata_data = None
+
+        if metadata_id:
+            metadata_data = asyncio.run(
+                metadata_client.get_novel_metadata(int(metadata_id))
+            )
+        elif site_name:
+            scrape_result = asyncio.run(
+                metadata_client.scrape_novel_by_url(novel.url, site_name)
+            )
+            if scrape_result and scrape_result.get("success"):
+                metadata_id = scrape_result.get("novel_id")
+                if metadata_id:
+                    novel_services.update_novel(
+                        db,
+                        novel.id,
+                        {
+                            "metadata_id": metadata_id,
+                            "scrape_status": "pending",
+                        },
+                    )
+                    metadata_data = asyncio.run(
+                        metadata_client.get_novel_metadata(int(metadata_id))
+                    )
+
+        if metadata_data:
+            fetched_story_id = metadata_data.get("story_id")
+            if fetched_story_id:
+                site_story_id = fetched_story_id
+                novel_services.update_novel(
+                    db,
+                    novel.id,
+                    {
+                        "story_id": fetched_story_id,
+                        "site_story_id": fetched_story_id,
+                    },
+                )
+
+        if not site_story_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Novel metadata incomplete. Please refresh metadata before downloading.",
+            )
+
     base_dir = os.environ.get("DOWNLOAD_PATH")
 
-    # fetch chapter
     site_chapter_id = chapter.site_chapter_id
-    site_name = get_site_name_from_url(novel.url)
+    if site_chapter_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Chapter is missing remote chapter_id; refresh metadata first.",
+        )
+
+    if not site_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Could not determine site name for this novel.",
+        )
+
     py_chapter = asyncio.run(
-        fetch_chapter(site_story_id, chapter_number, site_chapter_id, site_name)
+        fetch_chapter(
+            int(site_story_id), chapter_number, int(site_chapter_id), site_name
+        )
     )
     chapter_data = parse_single_chapter_data(py_chapter)
 

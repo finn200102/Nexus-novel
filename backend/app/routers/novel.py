@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, status, HTTPException, BackgroundTasks
+import httpx
 from sqlalchemy.orm import Session
 from config.database import get_db
 from ..schemas.novel import Novel as NovelSchema
@@ -48,6 +49,8 @@ def scrape_novel_background(
         try:
             scraped_data = asyncio.run(metadata_client.get_novel_metadata(metadata_id))
 
+            story_id = scraped_data.get("story_id")
+
             novel_data = {
                 "title": scraped_data.get("title"),
                 "author": scraped_data.get("author"),
@@ -65,7 +68,8 @@ def scrape_novel_background(
                 "publish_date": scraped_data.get("publish_date"),
                 "updated_date": scraped_data.get("updated_date"),
                 "chapter_count": scraped_data.get("chapter_count"),
-                "story_id": scraped_data.get("story_id"),
+                "story_id": story_id,
+                "site_story_id": story_id,
                 "scrape_status": "completed",
                 "scrape_error": None,
             }
@@ -271,7 +275,20 @@ async def refresh_novel_metadata(
 
         novel_services.update_novel(db, novel_id, {"metadata_id": metadata_id})
 
-    refreshed_data = await metadata_client.refresh_novel_metadata(metadata_id)
+    try:
+        refreshed_data = await metadata_client.refresh_novel_metadata(metadata_id)
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(
+            status_code=exc.response.status_code,
+            detail=f"Metadata server error while refreshing novel: {exc.response.text}",
+        ) from exc
+    except Exception as exc:  # pylint: disable=broad-except
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to refresh metadata: {exc}",
+        ) from exc
+
+    story_id = refreshed_data.get("story_id")
 
     novel_data = {
         "title": refreshed_data.get("title"),
@@ -294,6 +311,8 @@ async def refresh_novel_metadata(
         "analysis_type": refreshed_data.get("analysis_type"),
         "analyzed_chapter_count": refreshed_data.get("analyzed_chapter_count"),
         "parsed_at": refreshed_data.get("parsed_at"),
+        "story_id": story_id,
+        "site_story_id": story_id,
     }
 
     updated_novel = novel_services.update_novel(db, novel_id, novel_data)
