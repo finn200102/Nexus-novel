@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import defaultCoverImage from "../assets/cover.png";
 import { novelService } from "../services/novelService";
 import ChapterList from "../components/novel/ChapterList";
@@ -18,7 +18,7 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
   const [updating, setUpdating] = useState<boolean>(false);
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
 
-  const fetchNovel = async () => {
+  const fetchNovel = useCallback(async () => {
     try {
       setLoading(true);
       const data = await novelService.getNovelById(libraryId, novelId);
@@ -35,11 +35,11 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [libraryId, novelId]);
 
   useEffect(() => {
     fetchNovel();
-  }, [libraryId, novelId]);
+  }, [fetchNovel]);
 
   const handleUpdateChapters = async () => {
     try {
@@ -166,6 +166,8 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
                 src={coverImageSrc}
                 alt={`Cover for ${novel.title}`}
                 className="novel-hero__image"
+                referrerPolicy="no-referrer"
+                loading="lazy"
                 onError={(e) => {
                   (e.target as HTMLImageElement).src = defaultCoverImage;
                 }}
