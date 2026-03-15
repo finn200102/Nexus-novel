@@ -192,22 +192,26 @@
 
 .novel-description-section {
   margin-top: 2rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid rgba(148, 163, 184, 0.2);
+  padding: 1.5rem;
+  border-radius: 20px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  box-shadow: inset 0 0 25px rgba(15, 23, 42, 0.35);
 }
 
 .novel-description-section h3 {
-  font-size: 1.1rem;
+  font-size: 1.05rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #cbd5f5;
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.85rem;
 }
 
 .novel-description {
-  color: #e2e8f0;
-  line-height: 1.85;
+  color: #f1f5f9;
+  line-height: 1.9;
   font-size: 1rem;
+  margin: 0;
 }
 
 .novel-metadata-info {
