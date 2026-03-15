@@ -1,4 +1,13 @@
-from sqlalchemy import Column, String, Text, Integer, ForeignKey, Table, DateTime
+from sqlalchemy import (
+    Column,
+    String,
+    Text,
+    Integer,
+    BigInteger,
+    ForeignKey,
+    Table,
+    DateTime,
+)
 from sqlalchemy.orm import relationship
 from app.models.base import BaseModel
 
@@ -15,7 +24,7 @@ class Novel(BaseModel):
 
     title = Column(String(255), nullable=False, index=True)
     author_id = Column(Integer, ForeignKey("authors.id"))
-    site_story_id = Column(Integer)
+    site_story_id = Column(BigInteger)
     site = Column(String(255))
     url = Column(String(255))
     description = Column(Text)
@@ -31,7 +40,7 @@ class Novel(BaseModel):
     author = Column(String(255))
     author_site_id = Column(Integer)
     source_url = Column(String(500))
-    story_id = Column(Integer)
+    story_id = Column(BigInteger)
     novel_site = Column(String(50))
     img_url = Column(String(500))
     word_count = Column(Integer)
@@ -59,4 +68,7 @@ class Novel(BaseModel):
     tags = relationship("Tag", secondary=novel_tag, back_populates="novels")
 
     def __repr__(self):
-        return f"<Novel {self.title} by {self.author}>"
+        data = object.__getattribute__(self, "__dict__")
+        title = data.get("title", "Unknown")
+        author = data.get("author", "Unknown")
+        return f"<Novel {title} by {author}>"
