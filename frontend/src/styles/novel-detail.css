@@ -217,27 +217,6 @@
   border: 1px solid rgba(56, 189, 248, 0.2);
 }
 
-.novel-description {
-  display: flex;
-  flex-direction: column;
-  background-color: #ffffff;
-  border-radius: 18px;
-  box-shadow: 0 15px 40px rgba(15, 23, 42, 0.08);
-  padding: 24px;
-  gap: 24px;
-}
-
-.novel-description > h2 {
-  font-size: 1.5rem;
-  margin: 0;
-}
-
-.novel-details {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
 .error-message {
   color: #dc2626;
   background: #fee2e2;
