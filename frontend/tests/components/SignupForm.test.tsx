@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axios from "axios";
 import SignupForm from "../../src/components/auth/SignupForm";
@@ -50,7 +50,7 @@ describe("SignupForm", () => {
     await user.click(screen.getByRole("button", { name: /submit/i }));
 
     // Check if axios was called with correct data
-    expect(mockedAxios.post).toHaveBeenCalledWith("/api/signup", {
+    expect(mockedAxios.post).toHaveBeenCalledWith("/api/auth/signup", {
       username: "testuser",
       password: "password123",
     });

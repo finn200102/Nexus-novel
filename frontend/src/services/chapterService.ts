@@ -93,7 +93,7 @@ export const chapterService = {
     }
   },
 
-  handleError(error: any, message: string) {
+  handleError(error: unknown, message: string) {
     console.error(message + ":", error);
 
     if (axios.isAxiosError(error)) {

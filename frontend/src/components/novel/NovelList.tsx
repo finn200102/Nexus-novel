@@ -3,24 +3,14 @@ import { novelService } from "../../services/novelService";
 import NovelCard from "./NovelCard";
 import "../../styles/novel-list.css";
 import { useNavigate } from "react-router-dom";
-
-interface NovelSchema {
-  id: number;
-  title: string;
-  author_id: number;
-  url: string;
-  cover_image: string;
-  library_id: number;
-  created_at: string;
-  updated_at: string;
-}
+import { Novel } from "../../types/novel";
 
 interface NovelListProps {
   library_id: number;
 }
 
 const NovelList: React.FC<NovelListProps> = ({ library_id }) => {
-  const [novels, setNovels] = useState<NovelSchema[]>([]);
+  const [novels, setNovels] = useState<Novel[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [search, setSearch] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
@@ -29,31 +19,28 @@ const NovelList: React.FC<NovelListProps> = ({ library_id }) => {
   const [selectedNovels, setSelectedNovels] = useState<Set<number>>(new Set());
   const [deleteLoading, setDeleteLoading] = useState<boolean>(false);
   const navigate = useNavigate();
-  const fetchNovels = async () => {
-        try {
-          setLoading(true);
-          const data = await novelService.getAllNovels(library_id, search);
-
-          // Ensure we have an array of novels
-          if (Array.isArray(data)) {
-            setNovels(data);
-          } else {
-            console.error("Expected array but got:", data);
-            setError("Unexpected data format");
-          }
-        } catch (err) {
-          console.error("Failed to fetch novels:", err);
-          setError("Failed to load novels");
-        } finally {
-          setLoading(false);
-        }
-      };
-
-
-
   useEffect(() => {
-        fetchNovels();
-  }, [library_id]);
+    const fetchNovels = async () => {
+      try {
+        setLoading(true);
+        const data = await novelService.getAllNovels(library_id, search);
+
+        if (Array.isArray(data)) {
+          setNovels(data);
+        } else {
+          console.error("Expected array but got:", data);
+          setError("Unexpected data format");
+        }
+      } catch (err) {
+        console.error("Failed to fetch novels:", err);
+        setError("Failed to load novels");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchNovels();
+  }, [library_id, search]);
 
   const handleNovelClick = (novelId: number) => {
     if (editMode) {
@@ -110,9 +97,13 @@ const NovelList: React.FC<NovelListProps> = ({ library_id }) => {
     }
   };
 
-  const handleSubmit = (e) => {
-   e.preventDefault(); 
-    fetchNovels();
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault(); 
+    // Trigger re-fetch by updating search state (useEffect will handle it)
+    const searchInput = (e.target as HTMLFormElement).querySelector('input[type="search"]') as HTMLInputElement;
+    if (searchInput) {
+      setSearch(searchInput.value);
+    }
   }
 
   const selectAll = () => {

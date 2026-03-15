@@ -87,6 +87,19 @@ export const novelService = {
       throw error;
     }
   },
+  async refreshMetadata(library_id: number, novel_id: number) {
+    try {
+      const response = await apiClient.get(
+        `/novel/refresh/${novel_id}?library_id=${library_id}`
+      );
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status != 401) {
+        this.handleError(error, "Error refreshing metadata");
+      }
+      throw error;
+    }
+  },
   async deleteNovel(library_id: number, novel_id: number) {
     try {
       const data = {
@@ -121,7 +134,7 @@ export const novelService = {
     }
   },
 
-  handleError(error: any, message: string) {
+  handleError(error: unknown, message: string) {
     console.error(message + ":", error);
 
     if (axios.isAxiosError(error)) {
