@@ -65,6 +65,7 @@ def scrape_novel_background(
                 "publish_date": scraped_data.get("publish_date"),
                 "updated_date": scraped_data.get("updated_date"),
                 "chapter_count": scraped_data.get("chapter_count"),
+                "story_id": scraped_data.get("story_id"),
                 "scrape_status": "completed",
                 "scrape_error": None,
             }

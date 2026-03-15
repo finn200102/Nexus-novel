@@ -11,8 +11,6 @@ import app.services.library_services as library_services
 import app.services.novel_services as novel_services
 from app.auth.dependencies import get_current_user
 
-# from scripts.tts import text_to_mp3
-from app.services.audio_service.tts import text_to_mp3
 from pathlib import Path
 import os
 import sys
@@ -50,6 +48,7 @@ def supported_src(url):
         "forums.spacebattles.com",
         "www.fanfiction.net",
         "archiveofourown.org",
+        "www.webnovel.com",
     ]
 
     def check_url_supported(url):
@@ -70,6 +69,9 @@ def get_site_name_from_url(url):
         return "spacebattles"
     if "archiveofourown" in url:
         return "archive"
+    if "webnovel" in url:
+        return "webnovel"
+    return None
 
 
 def check_chapter(db, novel_id, chapter_number, current_user):
@@ -146,11 +148,18 @@ def download_chapter(
     chapter = check_chapter(db, novel_id, chapter_number, current_user)
     novel = novel_services.get_novel_by_id(db, chapter.novel_id)
 
+    # Get story_id - check both columns for compatibility
+    site_story_id = novel.story_id or novel.site_story_id
+    if not site_story_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Novel does not have story_id. Please refresh metadata first.",
+        )
+
     # base_dir = "/Users/finng/Home/Programmieren/Projects/nexus-novel/backend/app/downloads/"
     base_dir = os.environ.get("DOWNLOAD_PATH")
 
     # fetch chapter
-    site_story_id = novel.site_story_id
     site_chapter_id = chapter.site_chapter_id
     site_name = get_site_name_from_url(novel.url)
     py_chapter = asyncio.run(
