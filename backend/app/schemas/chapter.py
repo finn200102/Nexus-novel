@@ -1,10 +1,14 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from enum import Enum
+from typing import Optional
+from datetime import datetime
+
 
 class ContentStatus(str, Enum):
     MISSING = "MISSING"
     PRESENT = "PRESENT"
     PROCESSING = "PROCESSING"
+
 
 class AudioStatus(str, Enum):
     MISSING = "MISSING"
@@ -12,10 +16,11 @@ class AudioStatus(str, Enum):
     PROCESSING = "PROCESSING"
     FAILED = "FAILED"
 
+
 class ChapterCreate(BaseModel):
     novel_id: int
     chapter_number: int
-    title: str = None
+    title: Optional[str] = None
     content_status: ContentStatus = ContentStatus.MISSING
 
 
@@ -23,14 +28,16 @@ class Chapter(BaseModel):
     id: int
     novel_id: int
     chapter_number: int
-    title: str
+    title: Optional[str] = None
     content_status: ContentStatus
     audio_status: AudioStatus
-    
-    
+    site_chapter_id: Optional[int] = None
+    source_url: Optional[str] = None
+    word_count: Optional[int] = None
+    created_at: datetime
+    updated_at: datetime
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ChapterContent(BaseModel):
@@ -44,5 +51,5 @@ class ChapterContent(BaseModel):
 class ChapterUpdate(BaseModel):
     id: int
     novel_id: int
-    title: str
+    title: Optional[str] = None
     content_status: ContentStatus

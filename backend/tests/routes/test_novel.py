@@ -7,6 +7,7 @@ from app.services.library_services import create_library
 from app.services.user_services import create_user
 from app.auth.jwt import create_access_token
 
+
 def create_test_user(db):
     user_data = {}
     user_data["username"] = "user1"
@@ -14,14 +15,13 @@ def create_test_user(db):
     user = create_user(db, user_data)
     return user
 
+
 def create_test_library(db):
     user = create_test_user(db)
-    library_data = {
-        "name": "Library1",
-        "user_id": user.id
-        }
+    library_data = {"name": "Library1", "user_id": user.id}
     library = create_library(db, library_data)
     return library
+
 
 def get_auth_headers(user_id):
     """Generate authorization headers for a user"""
@@ -41,15 +41,16 @@ def add_novel_resources(client, db):
     user_id = library.user_id
     headers = get_auth_headers(user_id)
 
-
     # Make request
     response = client.post("/novel/", json=novel_data, headers=headers)
 
     return response, headers, novel_data, url, library
 
 
-def test_add_novel(client, db):
-    response, headers, novel_data, url, library = add_novel_resources(client, db)
+def test_add_novel(client_with_auth, db):
+    response, headers, novel_data, url, library = add_novel_resources(
+        client_with_auth, db
+    )
 
     # Assertions
     assert response.status_code == status.HTTP_201_CREATED
@@ -60,7 +61,7 @@ def test_add_novel(client, db):
     assert db_novel.url == url
 
 
-def test_add_novel_unauthorized(client, db):
+def test_add_novel_unauthorized(client_with_auth, db):
     """Test that adding a novel fails without authentication"""
     # Create a user and library
     user = create_test_user(db)
@@ -68,13 +69,10 @@ def test_add_novel_unauthorized(client, db):
 
     # Test data
     url = "https://www.royalroad.com/fiction/21220/mother-of-learning"
-    novel_data = {
-        "url": url,
-        "library_id": library.id
-    }
+    novel_data = {"url": url, "library_id": library.id}
 
     # Make request without auth
-    response = client.post("/novel/", json=novel_data)
+    response = client_with_auth.post("/novel/", json=novel_data)
 
     # Should fail with 401 Unauthorized
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
@@ -84,10 +82,11 @@ def test_add_novel_unauthorized(client, db):
     assert db_novel is None
 
 
+def test_get_novels(client_with_auth, db):
+    response, headers, novel_data, url, library = add_novel_resources(
+        client_with_auth, db
+    )
 
-def test_get_novels(client, db):
-    response, headers, novel_data, url, library = add_novel_resources(client, db)
-    
     # Assertions
     assert response.status_code == status.HTTP_201_CREATED
 
@@ -97,10 +96,9 @@ def test_get_novels(client, db):
     assert db_novel.url == url
 
     # get novel
-    response = client.get(f"/novel/?library_id={library.id}", headers=headers)
+    response = client_with_auth.get(f"/novel/?library_id={library.id}", headers=headers)
     print("Response status:", response.status_code)
     print("Response JSON:", response.json())
-
 
     # Assertions for the GET request
     assert response.status_code == 200
@@ -117,10 +115,11 @@ def test_get_novels(client, db):
     assert found, "Created novel not found in the response"
 
 
+def test_get_novel_by_id(client_with_auth, db):
+    response, headers, novel_data, url, library = add_novel_resources(
+        client_with_auth, db
+    )
 
-def test_get_novel_by_id(client, db):
-    response, headers, novel_data, url, library = add_novel_resources(client, db)
-    
     # Assertions
     assert response.status_code == status.HTTP_201_CREATED
 
@@ -130,10 +129,11 @@ def test_get_novel_by_id(client, db):
     assert db_novel.url == url
 
     # get novel
-    response = client.get(f"/novel/{db_novel.id}?library_id={library.id}", headers=headers)
+    response = client_with_auth.get(
+        f"/novel/{db_novel.id}?library_id={library.id}", headers=headers
+    )
     print("Response status:", response.status_code)
     print("Response JSON:", response.json())
-
 
     # Assertions for the GET request
     assert response.status_code == 200
@@ -142,9 +142,11 @@ def test_get_novel_by_id(client, db):
     assert novel["id"] == db_novel.id
 
 
-def test_delete_novel_by_id(client, db):
-    response, headers, novel_data, url, library = add_novel_resources(client, db)
-    
+def test_delete_novel_by_id(client_with_auth, db):
+    response, headers, novel_data, url, library = add_novel_resources(
+        client_with_auth, db
+    )
+
     # Assertions
     assert response.status_code == status.HTTP_201_CREATED
 
@@ -153,14 +155,19 @@ def test_delete_novel_by_id(client, db):
     assert db_novel is not None
 
     # delete novel
-    response = client.post(f"/novel/delete/{db_novel.id}", headers=headers)
+    response = client_with_auth.post(
+        f"/novel/delete/{db_novel.id}?library_id={library.id}", headers=headers
+    )
 
     # Verify nove was deleted
     db_novel = get_novel_by_url(db, url).first()
     assert db_novel is None
 
-def test_update_novel(client, db):
-    response, headers, novel_data, url, library = add_novel_resources(client, db)
+
+def test_update_novel(client_with_auth, db):
+    response, headers, novel_data, url, library = add_novel_resources(
+        client_with_auth, db
+    )
 
     # Assertions
     assert response.status_code == status.HTTP_201_CREATED
@@ -171,10 +178,11 @@ def test_update_novel(client, db):
     new_novel_data = novel_data
     new_novel_data["id"] = db_novel.id
     new_novel_data["title"] = "newtitle"
-    
 
     # update novel
-    response = client.post(f"/novel/update", json=new_novel_data, headers=headers)
+    response = client_with_auth.post(
+        f"/novel/update", json=new_novel_data, headers=headers
+    )
 
     # Verify nove was updated
     db_novel = get_novel_by_url(db, url).first()
