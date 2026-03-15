@@ -162,8 +162,22 @@
 }
 
 .novel-card__stat {
-  color: #9ca3af;
-  font-size: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  min-width: 60px;
+}
+
+.novel-card__stat-label {
+  color: #94a3b8;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.novel-card__stat-value {
+  color: #1f2937;
+  font-size: 0.95rem;
+  font-weight: 600;
 }
 
 .novel-card__stat.rating {

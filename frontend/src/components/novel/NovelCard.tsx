@@ -10,10 +10,10 @@ interface NovelCardProps {
 }
 
 const formatWordCount = (wordCount: number | null | undefined): string => {
-  if (wordCount === null || wordCount === undefined) return "";
-  if (wordCount >= 1000000) return `${(wordCount / 1000000).toFixed(1)}M words`;
-  if (wordCount >= 1000) return `${(wordCount / 1000).toFixed(0)}K words`;
-  return `${wordCount} words`;
+  if (wordCount === null || wordCount === undefined) return "—";
+  if (wordCount >= 1000000) return `${(wordCount / 1000000).toFixed(1)}M`;
+  if (wordCount >= 1000) return `${(wordCount / 1000).toFixed(0)}K`;
+  return `${wordCount}`;
 };
 
 const getDisplayStatus = (novel: Novel): string => {
@@ -42,6 +42,24 @@ const NovelCard: React.FC<NovelCardProps> = ({
   const updatedDate = novel.updated_date
     ? new Date(novel.updated_date).toLocaleDateString()
     : null;
+
+  const statItems = [
+    {
+      label: "Words",
+      value: formatWordCount(novel.word_count),
+    },
+    {
+      label: "Chapters",
+      value: novel.chapter_count !== null && novel.chapter_count !== undefined ? novel.chapter_count : "—",
+    },
+    {
+      label: "Rating",
+      value:
+        novel.rating !== null && novel.rating !== undefined
+          ? novel.rating.toFixed(1)
+          : "—",
+    },
+  ];
 
   return (
     <div
@@ -73,25 +91,14 @@ const NovelCard: React.FC<NovelCardProps> = ({
         </div>
         <h3 className="novel-card__title">{novel.title}</h3>
         <div className="novel-card__meta">
-          {novel.author && (
-            <span className="novel-card__author">{novel.author}</span>
-          )}
+          <span className="novel-card__author">{novel.author || "Unknown Author"}</span>
           <div className="novel-card__stats">
-            {novel.word_count && (
-              <span className="novel-card__stat">
-                {formatWordCount(novel.word_count)}
+            {statItems.map((stat) => (
+              <span key={stat.label} className="novel-card__stat">
+                <span className="novel-card__stat-label">{stat.label}</span>
+                <span className="novel-card__stat-value">{stat.value}</span>
               </span>
-            )}
-            {novel.chapter_count && (
-              <span className="novel-card__stat">
-                {novel.chapter_count} ch
-              </span>
-            )}
-            {novel.rating && (
-              <span className="novel-card__stat rating">
-                ★ {novel.rating.toFixed(1)}
-              </span>
-            )}
+            ))}
           </div>
           {displayStatus && displayStatus !== "Unknown" && (
             <span className={`novel-card__status status-${displayStatus.toLowerCase().replace(/\s+/g, '-')}`}>
