@@ -159,8 +159,8 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
       {!loading && !novel && !error && <p>Novel not found</p>}
 
       {novel && (
-        <div>
-          <div className="novel-hero">
+        <div className="novel-detail-wrapper">
+          <div className="novel-hero novel-hero--enhanced">
             <div className="novel-hero__cover">
               <img
                 src={coverImageSrc}
@@ -174,58 +174,54 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
               />
             </div>
             <div className="novel-hero__info">
-              <h1 className="novel-hero__title">
-                {novel.title}
+              <div className="novel-hero__eyebrow">
+                <span className="novel-site-badge">
+                  {novel.novel_site ? novel.novel_site.toUpperCase() : "UNKNOWN"}
+                </span>
                 {getScrapeStatusIndicator()}
-              </h1>
+              </div>
+              <h1 className="novel-hero__title">{novel.title}</h1>
               {novel.author && (
                 <p className="novel-hero__author">by {novel.author}</p>
               )}
               {novel.description && (
                 <p className="novel-hero__description">{novel.description}</p>
               )}
+              <div className="novel-hero__cta-row">
+                <button
+                  onClick={handleUpdateChapters}
+                  disabled={updating}
+                  className="action-button action-button--primary"
+                >
+                  {updating ? "Updating..." : "Update Chapters"}
+                </button>
+                <button
+                  onClick={handleRefreshMetadata}
+                  disabled={updating}
+                  className="action-button"
+                >
+                  {updating ? "Refreshing..." : "Refresh Metadata"}
+                </button>
+                {(novel.scrape_status === "pending" || novel.scrape_status === "failed") && (
+                  <button
+                    onClick={handleCheckStatus}
+                    disabled={updating}
+                    className="action-button action-button--ghost"
+                  >
+                    {updating ? "Checking..." : "Check Status"}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
-          
+
           <div className="novel-data-holder">
             <div className="novel-details-holder">
-              <div className="novel-buttons-holder">
-                <h2>Novel Functions</h2>
-                <div className="novel-buttons">
-                  <button
-                    onClick={handleUpdateChapters}
-                    disabled={updating}
-                    className="update-button"
-                  >
-                    {updating ? "Updating..." : "Update Chapters"}
-                  </button>
-                  <button
-                    onClick={handleRefreshMetadata}
-                    disabled={updating}
-                    className="refresh-button"
-                  >
-                    {updating ? "Refreshing..." : "Refresh Metadata"}
-                  </button>
-                  {(novel.scrape_status === "pending" || novel.scrape_status === "failed") && (
-                    <button
-                      onClick={handleCheckStatus}
-                      disabled={updating}
-                      className="check-status-button"
-                    >
-                      {updating ? "Checking..." : "Check Scrape Status"}
-                    </button>
-                  )}
-                  {updateMessage && (
-                    <p
-                      className={`update-message ${
-                        updating ? "updating" : "updated"
-                      }`}
-                    >
-                      {updateMessage}
-                    </p>
-                  )}
+              {updateMessage && (
+                <div className="novel-status-banner">
+                  <span>{updateMessage}</span>
                 </div>
-              </div>
+              )}
               <NovelDetails novel={novel} />
             </div>
             <ChapterList novel_id={novel.id} library_id={libraryId} />
