@@ -167,6 +167,7 @@
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
+  color: #e2e8f0;
 }
 
 .novel-detail-chapters {
