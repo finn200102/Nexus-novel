@@ -94,30 +94,6 @@ const ChapterWrapper = () => {
   );
 };
 
-const AudioChapterWrapper = () => {
-  const { libraryId, novelId, chapterNumber } = useParams<{
-    libraryId: string;
-    novelId: string;
-    chapterNumber: string;
-  }>();
-
-  if (!libraryId) return <div>Invalid library ID</div>;
-  if (!novelId) return <div>Invalid novel ID</div>;
-  if (!chapterNumber) return <div>Invalid chapter ID</div>;
-  const chapter_number = Number(chapterNumber);
-  const library_id = Number(libraryId);
-  const novel_id = Number(novelId);
-  return (
-    <Layout>
-      <ChapterAudioPlayer
-        libraryId={library_id}
-        novelId={novel_id}
-        chapterNumber={chapter_number}
-      />
-    </Layout>
-  );
-};
-
 const LibraryWrapper = () => {
   const { libraryId } = useParams<{ libraryId: string }>();
 

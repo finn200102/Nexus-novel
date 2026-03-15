@@ -1,33 +1,54 @@
-import React, { FormEvent } from "react";
-import { useState } from "react";
+import React, { FormEvent, useEffect, useState } from "react";
 import { novelService } from "../../services/novelService";
 import "../../styles/novel-form.css";
 
-interface NovelData {
-  url: string;
-  library_id: number;
-}
 interface CreateNovelProps {
   library_id: number;
+  isOpen: boolean;
+  onClose: () => void;
+  onSuccess?: () => void;
 }
 
-const CreateNovelForm: React.FC<CreateNovelProps> = ({ library_id }) => {
-  const [novelData, setNovelData] = useState<NovelData>({
-    url: "",
-    library_id: library_id,
-  });
+type DrawerMode = "single" | "batch";
+
+const CreateNovelForm: React.FC<CreateNovelProps> = ({
+  library_id,
+  isOpen,
+  onClose,
+  onSuccess,
+}) => {
+  const [mode, setMode] = useState<DrawerMode>("single");
+  const [urlInput, setUrlInput] = useState("");
+  const [batchInput, setBatchInput] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<"success" | "error" | null>(
     null
   );
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setNovelData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
+  useEffect(() => {
+    const handleKeydown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+    if (isOpen) {
+      document.addEventListener("keydown", handleKeydown);
+    }
+    return () => document.removeEventListener("keydown", handleKeydown);
+  }, [isOpen, onClose]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setSubmitStatus(null);
+      setUrlInput("");
+      setBatchInput("");
+      setMode("single");
+    }
+  }, [isOpen, library_id]);
+
+  if (!isOpen) {
+    return null;
+  }
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -35,14 +56,28 @@ const CreateNovelForm: React.FC<CreateNovelProps> = ({ library_id }) => {
     setSubmitStatus(null);
 
     try {
-      // Create the library using the service
-      await novelService.addNovel(novelData.library_id, novelData.url);
+      if (mode === "single") {
+        await novelService.addNovel(library_id, urlInput.trim());
+      } else {
+        const urls = batchInput
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean);
+        if (urls.length === 0) {
+          throw new Error("Please provide at least one URL");
+        }
+        await novelService.addNovels(library_id, urls);
+      }
 
-      // Reset form and set success status
-      setNovelData({ library_id: library_id, url: "" });
       setSubmitStatus("success");
+      onSuccess?.();
+      if (mode === "single") {
+        setUrlInput("");
+      } else {
+        setBatchInput("");
+      }
     } catch (error) {
-      console.error("Failed to create library:", error);
+      console.error("Failed to add novel", error);
       setSubmitStatus("error");
     } finally {
       setIsSubmitting(false);
@@ -50,46 +85,87 @@ const CreateNovelForm: React.FC<CreateNovelProps> = ({ library_id }) => {
   };
 
   return (
-    <div className="novel-form">
-      <h2 className="novel-form__title">Add New Novel</h2>
-
-      {submitStatus === "success" && (
-        <div className="novel-form__status novel-form__status--success">
-          Novel added successfully!
-        </div>
-      )}
-
-      {submitStatus === "error" && (
-        <div className="novel-form__status novel-form__status--error">
-          Failed to add Novel. Please try again.
-        </div>
-      )}
-
-      <form className="novel-form__form" onSubmit={handleSubmit}>
-        <div className="novel-form__group">
-          <label htmlFor="url" className="novel-form__label">
-            Novel URL
-          </label>
-          <input
-            type="text"
-            id="url"
-            name="url"
-            value={novelData.url}
-            onChange={handleInputChange}
-            required
-            disabled={isSubmitting}
-            className="novel-form__input"
-          />
+    <div className="novel-drawer" role="dialog" aria-modal="true">
+      <div className="novel-drawer__overlay" onClick={onClose} />
+      <div className="novel-drawer__panel">
+        <header className="novel-drawer__header">
+          <div>
+            <p>Add novels</p>
+            <h2>Import by URL</h2>
+          </div>
+          <button type="button" className="novel-drawer__close" onClick={onClose}>
+            Close
+          </button>
+        </header>
+        <div className="novel-drawer__tabs">
+          <button
+            type="button"
+            className={mode === "single" ? "is-active" : ""}
+            onClick={() => setMode("single")}
+          >
+            Single URL
+          </button>
+          <button
+            type="button"
+            className={mode === "batch" ? "is-active" : ""}
+            onClick={() => setMode("batch")}
+          >
+            Multiple URLs
+          </button>
         </div>
 
-        <button
-          type="submit"
-          disabled={isSubmitting || !novelData.url.trim()}
-          className="novel-form__button"
-        >
-          {isSubmitting ? "Adding..." : "Add Novel"}
-        </button>
-      </form>
+        <form className="novel-drawer__form" onSubmit={handleSubmit}>
+          {mode === "single" ? (
+            <div className="novel-drawer__group">
+              <label htmlFor="novel-url">Novel URL</label>
+              <input
+                id="novel-url"
+                type="url"
+                placeholder="https://www.royalroad.com/fiction/..."
+                value={urlInput}
+                onChange={(event) => setUrlInput(event.target.value)}
+                required
+                disabled={isSubmitting}
+              />
+            </div>
+          ) : (
+            <div className="novel-drawer__group">
+              <label htmlFor="novel-batch">One URL per line</label>
+              <textarea
+                id="novel-batch"
+                rows={6}
+                placeholder="https://...
+https://..."
+                value={batchInput}
+                onChange={(event) => setBatchInput(event.target.value)}
+                disabled={isSubmitting}
+              />
+            </div>
+          )}
+
+          {submitStatus === "success" && (
+            <p className="novel-drawer__status is-success">
+              Novels queued for download.
+            </p>
+          )}
+          {submitStatus === "error" && (
+            <p className="novel-drawer__status is-error">
+              Something went wrong. Please try again.
+            </p>
+          )}
+
+          <button
+            type="submit"
+            className="novel-drawer__submit"
+            disabled={
+              isSubmitting ||
+              (mode === "single" ? !urlInput.trim() : !batchInput.trim())
+            }
+          >
+            {isSubmitting ? "Adding..." : "Add to library"}
+          </button>
+        </form>
+      </div>
     </div>
   );
 };

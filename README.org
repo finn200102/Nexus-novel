@@ -1,38 +1,61 @@
 * README
 
-This project contains a FastAPI backend and a React frontend.
+This project contains a FastAPI backend and a React frontend for reading and managing web novels.
+
+** Architecture
+
+Nexus Novel now uses a metadata server architecture:
+
+- [[https://github.com/finn200102/nexus-server][nexus-server]] - A separate metadata server that scrapes and stores novel metadata from various sources
+- nexus-novel (this project) - The main application that:
+  - Stores a reference to metadata via =metadata_id=
+  - Caches metadata locally for fast access
+  - Downloads and stores chapter text locally
+  - Provides the user interface for reading
 
 ** Setup
 
-1. Create a Python virtual environment and install backend dependencies:
+1. Start the metadata server (nexus-server) on http://127.0.0.1:8004
+
+2. Create a Python virtual environment and install backend dependencies:
    #+begin_src shell
-   python3 -m venv venv
-   source venv/bin/activate
-   pip install -r requirements.txt
+   cd backend
+   python3 -m venv .venv
+   source .venv/bin/activate
+   pip install -r ../requirements.txt
    #+end_src
 
-2. Install frontend dependencies (requires Node.js 18+):
+3. Install frontend dependencies (requires Node.js 18+):
    #+begin_src shell
    cd frontend
-   npm install   # installs packages from package.json
+   npm install
    #+end_src
 
-3. Run the backend (from project root):
+4. Run the backend (from project root):
    #+begin_src shell
-   uvicorn backend.app.main:app --reload
+   uvicorn backend.app.main:app --reload --port $(grep BACKEND_PORT backend/.env | cut -d= -f2)
    #+end_src
 
-4. Run the frontend development server:
+   Or manually specify the port:
    #+begin_src shell
+   uvicorn backend.app.main:app --reload --port 8000
+   #+end_src
+
+   Configure port in =backend/.env= with =BACKEND_PORT=
+
+5. Run the frontend development server:
+   #+begin_src shell
+   cd frontend
    npm run dev
    #+end_src
 
-5. Run backend tests:
+6. Run backend tests:
    #+begin_src shell
+   cd backend
    pytest -q
    #+end_src
 
-6. Run frontend tests:
+7. Run frontend tests:
    #+begin_src shell
    cd frontend
    npm test
@@ -42,16 +65,30 @@ This project contains a FastAPI backend and a React frontend.
 
 The backend dependencies are listed in ~requirements.txt~. The frontend
 uses ~package.json~ to track both runtime and development packages for
-React, Vite and testing via Vitest. Running ~npm install~ in the
-~frontend~ directory installs these automatically.
+React, Vite and testing via Vitest.
+
+Key runtime dependencies:
+- FastAPI + Uvicorn for the web server
+- SQLAlchemy for database ORM
+- httpx for async HTTP calls to metadata server
 
 ** Supported Sources
 
-Stories can currently be imported from the following sites:
+Stories can be imported from sites supported by the metadata server:
 - [[https://www.royalroad.com][RoyalRoad]]
 - [[https://forums.spacebattles.com][SpaceBattles]]
 - [[https://www.fanfiction.net][FanFiction.Net]]
+- [[https://archiveofourown.org][Archive of Our Own]]
+- [[https://www.webnovel.com][WebNovel]]
 
-** Ideas
-Like in jellyfin add a character section where all characters of the story are,
-that means parsing the chapters and collecting information
+** API Integration
+
+When importing a novel:
+1. Nexus-novel calls the metadata server (=POST /scrape/by-url=)
+2. Metadata server scrapes the source and returns novel/chapter metadata
+3. Nexus-novel stores the =metadata_id= and caches relevant metadata locally
+4. Chapter text is downloaded on-demand using local scrapers
+
+Metadata refresh:
+- Call =GET /novel/refresh/{novel_id}= to refresh metadata from the server
+- This also checks for new chapters and adds them to the local database

@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { authService, AuthResponse } from "./authService";
+import { authService, AuthResponse } from "../services/authService";
 
 interface AuthContextType {
   user: AuthResponse | null;

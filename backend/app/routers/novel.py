@@ -121,6 +121,7 @@ def supported_src(url):
         "www.fanfiction.net",
         "archiveofourown.org",
         "www.webnovel.com",
+        "webnovel.com",
     ]
 
     def check_url_supported(url):
@@ -141,6 +142,8 @@ def get_site_name_from_url(url):
         return "spacebattles"
     if "archiveofourown" in url:
         return "archive"
+    if "webnovel" in url:
+        return "webnovel"
     return None
 
 
@@ -189,14 +192,14 @@ async def add_novel(
     scrape_result = await metadata_client.scrape_novel_by_url(novel.url, site_name)
 
     if not scrape_result or not scrape_result.get("success"):
-        error_msg = (
+        message = (
             scrape_result.get("message", "Failed to start scraping")
             if scrape_result
             else "Failed to start scraping"
         )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to add novel: {error_msg}",
+            detail=f"Failed to add novel: {message}",
         )
 
     metadata_id = scrape_result.get("novel_id")

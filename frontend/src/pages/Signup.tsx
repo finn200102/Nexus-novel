@@ -1,20 +1,21 @@
 import React from "react";
+import { Link } from "react-router-dom";
 import SignupForm from "../components/auth/SignupForm";
+import AuthLayout from "../components/auth/AuthLayout";
 
 const SignupPage: React.FC = () => {
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        height: "100vh",
-      }}
+    <AuthLayout
+      title="Create your account"
+      subtitle="Join Nexus Novel"
+      footer={
+        <p>
+          Already registered? <Link to="/login">Sign in</Link>
+        </p>
+      }
     >
-      <h1>Signup</h1>
       <SignupForm />
-    </div>
+    </AuthLayout>
   );
 };
 

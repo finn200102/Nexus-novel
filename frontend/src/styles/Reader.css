@@ -1,201 +1,196 @@
-/* Reader.css */
-
-/* --- Overall Container --- */
-.reader-container {
-  max-width: 960px; /* Limit width for readability */
-  margin: 40px auto; /* Center the container with space top/bottom */
-  padding: 30px 40px; /* Generous padding inside */
-  background-color: #fdfdfd; /* Slightly off-white, less harsh than pure white */
-  border-radius: 8px; /* Soften corners */
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1); /* Subtle shadow for depth */
-  color: #333; /* Default text color */
-  font-family: sans-serif; /* Fallback font */
+.reader-shell {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 2rem;
+  background: rgba(5, 10, 24, 0.85);
+  border-radius: 36px;
+  padding: 2rem;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  box-shadow: 0 30px 70px rgba(2, 6, 23, 0.55);
 }
 
-/* --- Header Section --- */
-.reader-header {
-  text-align: center;
-  margin-bottom: 40px; /* Space below header */
-  padding-bottom: 20px; /* Space above the separator line */
-  border-bottom: 1px solid #eee; /* Subtle separator */
+.reader-shell--dusk {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(76, 29, 149, 0.5));
 }
 
-.novel-title {
-  font-size: 2em; /* Large novel title */
-  font-weight: bold;
-  color: #222;
-  margin-bottom: 0.3em;
-  font-family: "Merriweather", serif; /* Example serif font */
+.reader-shell--paper {
+  background: #f8f5ee;
+  color: #1f2937;
 }
 
-.chapter-title {
-  font-size: 1.5em; /* Slightly smaller chapter title */
-  font-weight: normal;
-  color: #444;
-  margin-bottom: 0.5em;
-  font-family: "Merriweather Sans", sans-serif; /* Example sans-serif for contrast */
+.reader-shell--paper .reader-body {
+  background: #ffffff;
+  color: #1f2937;
 }
 
-.chapter-info {
-  font-size: 0.9em;
-  color: #777;
+.reader-shell--paper .reader-content {
+  color: #1f2937;
+}
+
+.reader-shell--paper .reader-sidebar {
+  background: #fff9ea;
+  color: #1f2937;
+}
+
+.reader-sidebar {
+  background: rgba(11, 18, 35, 0.8);
+  border-radius: 24px;
+  padding: 1.25rem;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.reader-sidebar__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.9rem;
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 0.1em;
+  color: rgba(226, 232, 240, 0.7);
+  margin-bottom: 0.75rem;
 }
 
-/* --- Content Section --- */
-.reader-content {
-  font-family: "Georgia", "Times New Roman", serif;
-  font-size: 1.15em; /* Consider increasing the font size slightly if needed */
-  line-height: 1.7;
-  color: #282828;
+.reader-sidebar__list ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.reader-sidebar__list button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  border: none;
+  border-radius: 14px;
+  padding: 0.6rem 0.75rem;
+  background: transparent;
+  color: rgba(226, 232, 240, 0.85);
   text-align: left;
-  padding: 0 15px; /* Adjust padding to increase content width */
-  /* Consider reducing left and right padding here */
-  max-width: 100%; /* Allow content to take full width */
+  cursor: pointer;
+}
+
+.reader-sidebar__list button.is-active {
+  background: rgba(129, 140, 248, 0.2);
+}
+
+.reader-sidebar__status {
+  color: rgba(226, 232, 240, 0.8);
+}
+
+.reader-sidebar__status--error {
+  color: #fca5a5;
+}
+
+.reader-body {
+  background: rgba(8, 14, 32, 0.9);
+  border-radius: 30px;
+  padding: 2rem;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.reader-toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  color: #f8fafc;
+}
+
+.reader-toolbar__eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  font-size: 0.75rem;
+  color: rgba(148, 163, 184, 0.9);
+  margin: 0;
+}
+
+.reader-toolbar__controls {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.reader-type-controls,
+.reader-theme-controls {
+  display: inline-flex;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: rgba(15, 23, 42, 0.8);
+}
+
+.reader-type-controls button,
+.reader-theme-controls button {
+  border: none;
+  background: transparent;
+  color: rgba(226, 232, 240, 0.75);
+  padding: 0.35rem 0.9rem;
+  cursor: pointer;
+}
+
+.reader-theme-controls button.is-active {
+  background: rgba(248, 250, 252, 0.12);
+  color: #f8fafc;
+}
+
+.reader-content {
+  line-height: 1.8;
+  color: rgba(248, 250, 252, 0.9);
+  font-family: "Literata", "Georgia", serif;
 }
 
 .reader-content p {
-  margin-bottom: 1.2em; /* Space between paragraphs */
-  /* Ensure empty paragraphs from double line breaks still take up some space */
-  min-height: 1em;
+  margin-bottom: 1.2rem;
 }
 
-/* Style first paragraph differently if desired */
-/* .reader-content p:first-of-type {
-      font-size: 1.1em;
-      margin-bottom: 1.5em;
-    } */
-
-/* Add indentation to first line of paragraphs (optional classic book style) */
-/* .reader-content p {
-      text-indent: 2em;
-      margin-bottom: 0; // Remove bottom margin if using indent
-    } */
-
-/* --- Navigation Section --- */
 .reader-navigation {
   display: flex;
-  justify-content: space-between; /* Pushes buttons to opposite ends */
-  align-items: center;
-  margin-top: 40px; /* Space above navigation */
-  padding-top: 20px; /* Space below the separator line */
-  border-top: 1px solid #eee; /* Subtle separator */
+  justify-content: space-between;
+  margin-top: 1rem;
 }
 
 .reader-navigation button {
-  padding: 10px 20px;
-  font-size: 1em;
-  font-family: "Lato", sans-serif; /* Clear sans-serif for UI elements */
-  border: 1px solid #ccc;
-  background-color: #f8f8f8;
-  color: #333;
-  border-radius: 5px;
+  border: none;
+  border-radius: 999px;
+  padding: 0.6rem 1.4rem;
   cursor: pointer;
-  transition: background-color 0.2s ease, border-color 0.2s ease,
-    color 0.2s ease;
+  font-weight: 600;
 }
 
-.reader-navigation button:hover:not(:disabled) {
-  background-color: #e8e8e8;
-  border-color: #bbb;
-  color: #111;
+.reader-navigation .prev-button {
+  background: rgba(248, 250, 252, 0.1);
+  color: #f8fafc;
 }
 
-.reader-navigation button:active:not(:disabled) {
-  background-color: #ddd;
+.reader-navigation .next-button {
+  background: linear-gradient(135deg, #fbbf24, #f97316);
+  color: #04121e;
 }
 
-.reader-navigation button:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-  background-color: #f0f0f0;
-  border-color: #ddd;
-  color: #999;
+.reader-loading,
+.reader-error,
+.reader-not-found {
+  text-align: center;
+  padding: 3rem;
+  border-radius: 24px;
+  background: rgba(5, 10, 24, 0.85);
+  color: #e2e8f0;
 }
 
-/* Specific button styling (optional) */
-.prev-button {
-  /* Add specific styles if needed */
-}
-
-.next-button {
-  /* Add specific styles if needed */
-}
-
-/* --- Selection Highlight --- */
-/* Improve the look of selected text */
-::selection {
-  background-color: #cce2ff; /* Light blue background */
-  color: #333;
-}
-::-moz-selection {
-  /* Firefox */
-  background-color: #cce2ff;
-  color: #333;
-}
-
-/* --- Responsive Adjustments --- */
-@media (max-width: 768px) {
-  .reader-container {
-    margin: 20px auto;
-    padding: 20px 25px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+@media (max-width: 1024px) {
+  .reader-shell {
+    grid-template-columns: 1fr;
   }
 
-  .reader-content {
-    font-size: 1.1em; /* Slightly smaller on tablets */
-    line-height: 1.65;
-    padding: 0 10px; /* Reduce padding for smaller devices */
-  }
-
-  .novel-title {
-    font-size: 1.8em;
-  }
-
-  .chapter-title {
-    font-size: 1.3em;
-  }
-
-  .reader-navigation button {
-    padding: 8px 16px;
-    font-size: 0.95em;
-  }
-}
-
-@media (max-width: 480px) {
-  .reader-container {
-    margin: 10px auto;
-    padding: 15px 15px;
-    border-radius: 4px;
-    box-shadow: none;
-    border: 1px solid #eee;
-  }
-
-  .reader-content {
-    font-size: 1em;
-    line-height: 1.6;
-    padding: 0 10px; /* Reduce padding even more on small screens */
-  }
-
-  .novel-title {
-    font-size: 1.5em;
-  }
-
-  .chapter-title {
-    font-size: 1.15em;
-  }
-
-  .reader-header,
-  .reader-navigation {
-    margin-bottom: 25px;
-    padding-bottom: 15px;
-    margin-top: 25px;
-    padding-top: 15px;
-  }
-
-  .reader-navigation button {
-    padding: 8px 12px;
-    font-size: 0.9em;
+  .reader-sidebar {
+    max-height: none;
   }
 }

@@ -61,47 +61,45 @@ const LoginForm: React.FC = () => {
   };
 
   return (
-    <div className="login-container">
-      <form className="login-form" onSubmit={handleSubmit}>
-        <div className="form-group">
-          <label htmlFor="username" className="form-label">
-            Username:
-          </label>
-          <input
-            id="username"
-            name="username"
-            type="text"
-            value={formData.username}
-            onChange={handleChange}
-            required
-            className="form-input"
-          />
-        </div>
-        <div className="form-group">
-          <label htmlFor="password" className="form-label">
-            Password:
-          </label>
-          <input
-            id="password"
-            name="password"
-            type="password"
-            value={formData.password}
-            onChange={handleChange}
-            required
-            className="form-input"
-          />
-        </div>
-        <button type="submit" disabled={isSubmitting} className="login-button">
-          {isSubmitting ? "Logging in..." : "Login"}
-        </button>
-        {submitStatus === "success" && (
-          <p className="status-message success">Login successful!</p>
-        )}
-        {submitStatus === "error" && (
-          <p className="status-message error">Error: {errorMessage}</p>
-        )}
-      </form>
-    </div>
+    <form className="login-form" onSubmit={handleSubmit}>
+      <div className="form-group">
+        <label htmlFor="username" className="form-label">
+          Username:
+        </label>
+        <input
+          id="username"
+          name="username"
+          type="text"
+          value={formData.username}
+          onChange={handleChange}
+          required
+          className="form-input"
+        />
+      </div>
+      <div className="form-group">
+        <label htmlFor="password" className="form-label">
+          Password:
+        </label>
+        <input
+          id="password"
+          name="password"
+          type="password"
+          value={formData.password}
+          onChange={handleChange}
+          required
+          className="form-input"
+        />
+      </div>
+      <button type="submit" disabled={isSubmitting} className="login-button">
+        {isSubmitting ? "Logging in..." : "Login"}
+      </button>
+      {submitStatus === "success" && (
+        <p className="status-message success">Login successful!</p>
+      )}
+      {submitStatus === "error" && (
+        <p className="status-message error">Error: {errorMessage}</p>
+      )}
+    </form>
   );
 };
 
