@@ -215,8 +215,8 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
             </div>
           </div>
 
-          <div className="novel-data-holder">
-            <div className="novel-details-holder">
+          <div className="novel-detail-grid">
+            <div className="novel-detail-info">
               {updateMessage && (
                 <div className="novel-status-banner">
                   <span>{updateMessage}</span>
@@ -224,7 +224,35 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
               )}
               <NovelDetails novel={novel} />
             </div>
-            <ChapterList novel_id={novel.id} library_id={libraryId} />
+            <div className="novel-detail-chapters">
+              <div className="novel-detail-chapters__header">
+                <div>
+                  <h2>Chapters</h2>
+                  <p>
+                    {novel.chapter_count
+                      ? `${novel.chapter_count} available`
+                      : "Chapters pending"}
+                  </p>
+                </div>
+                <div className="novel-detail-chapters__actions">
+                  <button
+                    onClick={handleUpdateChapters}
+                    disabled={updating}
+                    className="action-button action-button--primary"
+                  >
+                    {updating ? "Updating..." : "Update Chapters"}
+                  </button>
+                  <button
+                    onClick={handleRefreshMetadata}
+                    disabled={updating}
+                    className="action-button"
+                  >
+                    {updating ? "Refreshing..." : "Refresh Metadata"}
+                  </button>
+                </div>
+              </div>
+              <ChapterList novel_id={novel.id} library_id={libraryId} />
+            </div>
           </div>
         </div>
       )}
