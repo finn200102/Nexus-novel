@@ -59,6 +59,12 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   const refreshLibraries = useCallback(async () => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      setLibraries([]);
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     try {
       const response = await libraryService.getLibraries();
@@ -76,7 +82,7 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({
 
   useEffect(() => {
     refreshLibraries();
-  }, [refreshLibraries]);
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") {
