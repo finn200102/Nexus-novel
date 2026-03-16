@@ -7,15 +7,21 @@ from uuid import uuid4
 
 from config.database import engine, Base
 from app.routers import auth, novel, library, chapter
-from app.logging_config import setup_logging, set_request_id, get_logger, get_request_id
+from app.logging_config import (
+    setup_logging,
+    set_request_id,
+    get_logger,
+    get_request_id,
+    set_user_context,
+    clear_user_context,
+)
 from app.exceptions import NexusNovelException
 
 setup_logging()
 logger = get_logger(__name__)
-# Initialize FastAPI app
+
 app = FastAPI(title="Your API", description="API description", version="0.1.0")
 
-# Configure CORS if needed
 origins = ["http://localhost", "http://localhost:3000", "http://localhost:5173"]
 
 app.add_middleware(
@@ -26,7 +32,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routers
 app.include_router(auth.router)
 app.include_router(novel.router)
 app.include_router(library.router)
@@ -37,35 +42,44 @@ app.include_router(chapter.router)
 async def log_requests(request: Request, call_next):
     request_id = str(uuid4())[:8]
     set_request_id(request_id)
+    clear_user_context()
+
+    user_id = request.headers.get("x-user-id")
+    if user_id:
+        try:
+            set_user_context(user_id=int(user_id))
+        except ValueError:
+            pass
 
     start_time = time.perf_counter()
 
     logger.info(
         "request_started",
-        extra={
-            "extra": {
-                "method": request.method,
-                "path": request.url.path,
-                "request_id": request_id,
-            }
-        },
+        method=request.method,
+        path=request.url.path,
     )
 
-    response = await call_next(request)
+    try:
+        response = await call_next(request)
+    except Exception as e:
+        duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+        logger.error(
+            "request_failed",
+            method=request.method,
+            path=request.url.path,
+            duration_ms=duration_ms,
+            error=str(e),
+        )
+        raise
 
-    duration = time.perf_counter() - start_time
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
 
     logger.info(
         "request_completed",
-        extra={
-            "extra": {
-                "method": request.method,
-                "path": request.url.path,
-                "status_code": response.status_code,
-                "duration_ms": round(duration * 1000, 2),
-                "request_id": request_id,
-            }
-        },
+        method=request.method,
+        path=request.url.path,
+        status_code=response.status_code,
+        duration_ms=duration_ms,
     )
 
     response.headers["X-Request-ID"] = request_id
@@ -76,13 +90,8 @@ async def log_requests(request: Request, call_next):
 async def nexus_exception_handler(request: Request, exc: NexusNovelException):
     logger.warning(
         "Application exception",
-        extra={
-            "extra": {
-                "error": exc.message,
-                "status_code": exc.status_code,
-                "request_id": get_request_id(),
-            }
-        },
+        error=exc.message,
+        status_code=exc.status_code,
     )
     return JSONResponse(
         status_code=exc.status_code,
@@ -94,14 +103,8 @@ async def nexus_exception_handler(request: Request, exc: NexusNovelException):
 async def general_exception_handler(request: Request, exc: Exception):
     logger.error(
         "Unhandled exception",
-        extra={
-            "extra": {
-                "error": str(exc),
-                "type": type(exc).__name__,
-                "request_id": get_request_id(),
-            }
-        },
-        exc_info=True,
+        error=str(exc),
+        type=type(exc).__name__,
     )
     return JSONResponse(
         status_code=500,
@@ -112,7 +115,6 @@ async def general_exception_handler(request: Request, exc: Exception):
     )
 
 
-# Root endpoint
 @app.get("/")
 async def root():
     return {"message": "Welcome to Your API"}
