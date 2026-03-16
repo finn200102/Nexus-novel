@@ -4,16 +4,16 @@ from typing import Optional, Any
 from dataclasses import dataclass
 
 from config.settings import settings
-from app.logging_config import get_logger
+from app.logging_config import get_logger, get_request_id
 
-logger = get_logger(__name__)
+logger = get_logger("metadata_client")
 
 CACHE_TTL = 300
 
 
 @dataclass
 class CacheEntry:
-    data: dict
+    data: Any
     expires_at: float
 
 
@@ -22,13 +22,13 @@ class MetadataCache:
         self._cache: dict[str, CacheEntry] = {}
         self._ttl = ttl
 
-    def get(self, key: str) -> Optional[dict]:
+    def get(self, key: str) -> Optional[Any]:
         entry = self._cache.get(key)
         if entry and entry.expires_at > time.time():
             return entry.data
         return None
 
-    def set(self, key: str, data: dict):
+    def set(self, key: str, data: Any):
         self._cache[key] = CacheEntry(data=data, expires_at=time.time() + self._ttl)
 
     def invalidate(self, key: str):
@@ -41,45 +41,59 @@ class MetadataCache:
 cache = MetadataCache()
 
 
+def _get_headers() -> dict:
+    request_id = get_request_id()
+    if request_id:
+        return {"X-Request-ID": request_id}
+    return {}
+
+
 async def scrape_novel_by_url(url: str, site: str) -> dict:
-    """
-    Call the metadata server to start scraping a novel.
-    Returns: { success: bool, novel_id: int | None, message: str }
-    If success is False or novel_id is None, the scrape failed.
-    """
     cache_key = f"scrape:{url}"
     cached = cache.get(cache_key)
     if cached:
+        logger.debug("Cache hit for scrape", url=url, site=site)
         return cached
+
+    logger.info("Calling metadata server to scrape novel", url=url, site=site)
 
     async with httpx.AsyncClient() as client:
         try:
             response = await client.post(
                 f"{settings.METADATA_SERVER_URL}/scrape/by-url",
                 json={"url": url, "site": site},
+                headers=_get_headers(),
                 timeout=30.0,
             )
             response.raise_for_status()
             data = response.json()
             cache.set(cache_key, data)
+            logger.info(
+                "Successfully scraped novel", url=url, novel_id=data.get("novel_id")
+            )
             return data
         except httpx.HTTPError as e:
-            logger.error(f"Failed to scrape novel: {e}")
+            logger.error("Failed to scrape novel", url=url, error=str(e))
             return {"success": False, "novel_id": None, "message": str(e)}
 
 
 async def wait_for_scrape_complete(
     metadata_id: int, wait_seconds: int = 3
 ) -> dict | None:
-    """
-    Wait for scrape to complete and return metadata.
-    Returns novel metadata dict if successful, None if failed.
-    """
+    logger.info(
+        "Waiting for scrape to complete",
+        metadata_id=metadata_id,
+        wait_seconds=wait_seconds,
+    )
     time.sleep(wait_seconds)
     try:
         return await get_novel_metadata(metadata_id)
     except Exception as e:
-        logger.warning(f"Failed to get metadata after waiting: {e}")
+        logger.warning(
+            "Failed to get metadata after waiting",
+            metadata_id=metadata_id,
+            error=str(e),
+        )
         return None
 
 
@@ -87,30 +101,38 @@ async def get_novel_metadata(novel_id: int) -> dict:
     cache_key = f"novel:{novel_id}"
     cached = cache.get(cache_key)
     if cached:
+        logger.debug("Cache hit for novel metadata", novel_id=novel_id)
         return cached
+
+    logger.info("Fetching novel metadata from server", novel_id=novel_id)
 
     async with httpx.AsyncClient() as client:
         response = await client.get(
             f"{settings.METADATA_SERVER_URL}/novels/{novel_id}",
+            headers=_get_headers(),
             timeout=30.0,
         )
         response.raise_for_status()
         data = response.json()
         cache.set(cache_key, data)
+        logger.info("Successfully fetched novel metadata", novel_id=novel_id)
         return data
 
 
 async def refresh_novel_metadata(novel_id: int) -> dict:
+    logger.info("Refreshing novel metadata", novel_id=novel_id)
     cache.invalidate(f"novel:{novel_id}")
 
     async with httpx.AsyncClient() as client:
         response = await client.put(
             f"{settings.METADATA_SERVER_URL}/novels/{novel_id}",
+            headers=_get_headers(),
             timeout=120.0,
         )
         response.raise_for_status()
         data = response.json()
         cache.set(f"novel:{novel_id}", data)
+        logger.info("Successfully refreshed novel metadata", novel_id=novel_id)
         return data
 
 
@@ -120,18 +142,27 @@ async def get_chapters_from_metadata(
     cache_key = f"chapters:{novel_id}"
     cached = cache.get(cache_key)
     if cached:
+        logger.debug("Cache hit for chapters", novel_id=novel_id, count=len(cached))
         return cached
+
+    logger.info(
+        "Fetching chapters from metadata server", novel_id=novel_id, limit=limit
+    )
 
     async with httpx.AsyncClient() as client:
         response = await client.get(
             f"{settings.METADATA_SERVER_URL}/chapters/novel/{novel_id}",
             params={"limit": limit},
+            headers=_get_headers(),
             timeout=30.0,
         )
         response.raise_for_status()
         data: dict[str, Any] = response.json()
         chapters: list[dict[str, Any]] = data.get("data", [])
         cache.set(cache_key, chapters)
+        logger.info(
+            "Successfully fetched chapters", novel_id=novel_id, count=len(chapters)
+        )
         return chapters
 
 
@@ -145,6 +176,7 @@ async def get_author_metadata(author_id: int, include_novels: bool = False) -> d
         response = await client.get(
             f"{settings.METADATA_SERVER_URL}/authors/{author_id}",
             params={"include_novels": include_novels},
+            headers=_get_headers(),
             timeout=30.0,
         )
         response.raise_for_status()
@@ -179,6 +211,7 @@ async def list_novels_metadata(
         response = await client.get(
             f"{settings.METADATA_SERVER_URL}/novels/",
             params=params,
+            headers=_get_headers(),
             timeout=30.0,
         )
         response.raise_for_status()
@@ -188,11 +221,13 @@ async def list_novels_metadata(
 
 
 def invalidate_novel_cache(novel_id: int):
+    logger.debug("Invalidating novel cache", novel_id=novel_id)
     cache.invalidate(f"novel:{novel_id}")
     cache.invalidate(f"chapters:{novel_id}")
 
 
 def clear_cache():
+    logger.info("Clearing all metadata cache")
     cache.clear()
 
 
@@ -209,6 +244,7 @@ async def search_novel_by_url(url: str) -> dict:
         response = await client.get(
             f"{settings.METADATA_SERVER_URL}/novels/",
             params={"title": title, "limit": 5},
+            headers=_get_headers(),
             timeout=30.0,
         )
         response.raise_for_status()

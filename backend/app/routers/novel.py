@@ -41,7 +41,8 @@ def scrape_novel_background(
     try:
         logger.info(
             "Starting background scrape",
-            extra={"extra": {"novel_id": novel_id, "metadata_id": metadata_id}},
+            novel_id=novel_id,
+            metadata_id=metadata_id,
         )
 
         time.sleep(3)
@@ -92,13 +93,15 @@ def scrape_novel_background(
 
             logger.info(
                 "Background scrape completed",
-                extra={"extra": {"novel_id": novel_id, "metadata_id": metadata_id}},
+                novel_id=novel_id,
+                metadata_id=metadata_id,
             )
 
         except Exception as e:
             logger.error(
                 "Background scrape failed",
-                extra={"extra": {"novel_id": novel_id, "error": str(e)}},
+                novel_id=novel_id,
+                error=str(e),
             )
             novel_services.update_novel(
                 db, novel_id, {"scrape_status": "failed", "scrape_error": str(e)}
@@ -419,7 +422,8 @@ async def get_novels(
             except Exception as e:
                 logger.warning(
                     "Error fetching metadata for novel",
-                    extra={"extra": {"error": str(e), "novel_id": novel.id}},
+                    error=str(e),
+                    novel_id=novel.id,
                 )
 
     db.commit()
@@ -493,7 +497,8 @@ async def get_novel_by_id(
         except Exception as e:
             logger.warning(
                 "Error fetching metadata",
-                extra={"extra": {"error": str(e), "novel_id": novel_id}},
+                error=str(e),
+                novel_id=novel_id,
             )
 
     return novel
@@ -521,7 +526,7 @@ def delete_novel_by_id(
     if os.path.isdir(novel_path):
         shutil.rmtree(novel_path)
     else:
-        logger.debug("Directory does not exist", extra={"extra": {"path": novel_path}})
+        logger.debug("Directory does not exist", path=novel_path)
 
     novel_services.delete_novel(db, novel.id)
     return novel
