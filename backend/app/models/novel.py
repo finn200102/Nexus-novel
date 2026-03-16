@@ -38,7 +38,7 @@ class Novel(BaseModel):
     scrape_status = Column(String(20), default="pending")  # pending, completed, failed
     scrape_error = Column(String(500), nullable=True)
     author = Column(String(255))
-    author_site_id = Column(Integer)
+    author_site_id = Column(BigInteger)
     source_url = Column(String(500))
     story_id = Column(BigInteger)
     novel_site = Column(String(50))
