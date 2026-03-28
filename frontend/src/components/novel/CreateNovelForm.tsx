@@ -1,5 +1,6 @@
 import React, { FormEvent, useEffect, useState } from "react";
 import { novelService } from "../../services/novelService";
+import { useToast } from "../../context/ToastContext";
 import "../../styles/novel-form.css";
 
 interface CreateNovelProps {
@@ -21,9 +22,7 @@ const CreateNovelForm: React.FC<CreateNovelProps> = ({
   const [urlInput, setUrlInput] = useState("");
   const [batchInput, setBatchInput] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitStatus, setSubmitStatus] = useState<"success" | "error" | null>(
-    null
-  );
+  const { addToast } = useToast();
 
   useEffect(() => {
     const handleKeydown = (event: KeyboardEvent) => {
@@ -39,7 +38,6 @@ const CreateNovelForm: React.FC<CreateNovelProps> = ({
 
   useEffect(() => {
     if (!isOpen) {
-      setSubmitStatus(null);
       setUrlInput("");
       setBatchInput("");
       setMode("single");
@@ -53,7 +51,6 @@ const CreateNovelForm: React.FC<CreateNovelProps> = ({
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsSubmitting(true);
-    setSubmitStatus(null);
 
     try {
       if (mode === "single") {
@@ -69,7 +66,7 @@ const CreateNovelForm: React.FC<CreateNovelProps> = ({
         await novelService.addNovels(library_id, urls);
       }
 
-      setSubmitStatus("success");
+      addToast("Novels queued for download.", "success");
       onSuccess?.();
       if (mode === "single") {
         setUrlInput("");
@@ -78,7 +75,7 @@ const CreateNovelForm: React.FC<CreateNovelProps> = ({
       }
     } catch (error) {
       console.error("Failed to add novel", error);
-      setSubmitStatus("error");
+      addToast("Something went wrong. Please try again.", "error");
     } finally {
       setIsSubmitting(false);
     }
@@ -141,17 +138,6 @@ https://..."
                 disabled={isSubmitting}
               />
             </div>
-          )}
-
-          {submitStatus === "success" && (
-            <p className="novel-drawer__status is-success">
-              Novels queued for download.
-            </p>
-          )}
-          {submitStatus === "error" && (
-            <p className="novel-drawer__status is-error">
-              Something went wrong. Please try again.
-            </p>
           )}
 
           <button

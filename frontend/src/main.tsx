@@ -6,12 +6,15 @@ import "./styles/layout.css";
 import App from "./App.tsx";
 import { AuthProvider } from "./context/AuthContext";
 import { LibraryProvider } from "./context/LibraryContext";
+import { ToastProvider } from "./context/ToastContext";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <AuthProvider>
       <LibraryProvider>
-        <App />
+        <ToastProvider>
+          <App />
+        </ToastProvider>
       </LibraryProvider>
     </AuthProvider>
   </StrictMode>

@@ -1,7 +1,7 @@
 .novel-details-container {
   display: flex;
   flex-direction: column;
-  gap: 1.75rem;
+  gap: 2rem;
   color: inherit;
 }
 
@@ -14,7 +14,7 @@
 .novel-main-info {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 1.5rem;
 }
 
 .novel-meta-row {
@@ -28,115 +28,134 @@
   align-items: center;
   gap: 0.35rem;
   padding: 0.35rem 1rem;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  background: rgba(59, 130, 246, 0.15);
-  color: #60a5fa;
+  background: rgba(99, 102, 241, 0.15);
+  color: var(--accent-primary);
+  border: 1px solid rgba(99, 102, 241, 0.3);
 }
 
 .novel-status-badge {
   display: inline-flex;
   align-items: center;
-  padding: 0.35rem 1rem;
-  border-radius: 999px;
+  padding: 0.35rem 1.25rem;
+  border-radius: var(--radius-full);
   font-size: 0.75rem;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .novel-status-badge.status-complete {
-  background: rgba(16, 185, 129, 0.18);
-  color: #34d399;
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--status-success);
+  border: 1px solid rgba(16, 185, 129, 0.3);
 }
 
 .novel-status-badge.status-ongoing {
-  background: rgba(59, 130, 246, 0.18);
-  color: #60a5fa;
+  background: rgba(99, 102, 241, 0.15);
+  color: var(--accent-primary);
+  border: 1px solid rgba(99, 102, 241, 0.3);
 }
 
 .novel-status-badge.status-in-progress {
-  background: rgba(251, 191, 36, 0.18);
-  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--status-warning);
+  border: 1px solid rgba(245, 158, 11, 0.3);
 }
 
 .novel-status-badge.status-hiatus,
 .novel-status-badge.status-cancelled {
-  background: rgba(248, 113, 113, 0.18);
-  color: #f87171;
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--status-error);
+  border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
 .novel-info-rows {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 0.75rem;
+  gap: 1rem;
 }
 
 .novel-info-row {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
-  padding: 0.85rem 1rem;
-  border-radius: 16px;
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid rgba(148, 163, 184, 0.12);
+  padding: 1rem 1.25rem;
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  transition: var(--transition-fast);
+}
+
+.novel-info-row:hover {
+  border-color: var(--border-focus);
+  background: var(--bg-glass-hover);
 }
 
 .novel-info-row .label {
   font-size: 0.7rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: #94a3b8;
+  color: var(--text-muted);
 }
 
 .novel-info-row .value {
   font-weight: 600;
-  color: #f1f5f9;
+  color: var(--text-main);
+  font-size: 1rem;
 }
 
 .novel-rating {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 1rem;
+  padding: 1rem;
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
 }
 
 .novel-rating .label {
-  color: #cbd5f5;
+  color: var(--text-muted);
   font-size: 0.85rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  font-weight: 600;
 }
 
 .novel-rating .stars {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 3px;
 }
 
 .novel-rating .star {
-  font-size: 1.1rem;
+  font-size: 1.2rem;
 }
 
 .novel-rating .star.full,
 .novel-rating .star.half {
   color: #fbbf24;
+  text-shadow: 0 0 8px rgba(251, 191, 36, 0.5);
 }
 
 .novel-rating .star.half {
-  opacity: 0.5;
+  opacity: 0.6;
 }
 
 .novel-rating .star.empty {
-  color: rgba(148, 163, 184, 0.4);
+  color: rgba(255, 255, 255, 0.1);
 }
 
 .novel-rating .rating-value {
-  color: #e2e8f0;
-  font-size: 0.9rem;
-  margin-left: 4px;
-  font-weight: 500;
+  color: var(--text-main);
+  font-size: 1rem;
+  margin-left: 0.5rem;
+  font-weight: 600;
 }
 
 .novel-source {
@@ -144,95 +163,111 @@
 }
 
 .source-link {
-  color: #93c5fd;
+  color: var(--accent-primary);
   text-decoration: none;
-  font-size: 0.9rem;
-  font-weight: 500;
-  transition: opacity 0.2s;
+  font-size: 0.95rem;
+  font-weight: 600;
+  transition: var(--transition-fast);
+  display: inline-flex;
+  align-items: center;
 }
 
 .source-link:hover {
-  opacity: 0.8;
+  color: var(--accent-primary-hover);
+  text-shadow: 0 0 8px var(--accent-glow);
+  transform: translateX(4px);
 }
 
 .novel-stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 1rem;
+  gap: 1.25rem;
 }
 
 .stat-item {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
-  padding: 1rem;
-  border-radius: 16px;
-  background: rgba(15, 23, 42, 0.65);
-  border: 1px solid rgba(148, 163, 184, 0.2);
+  gap: 0.5rem;
+  padding: 1.25rem;
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
   text-align: left;
+  transition: var(--transition-normal);
+}
+
+.stat-item:hover {
+  transform: translateY(-4px);
+  border-color: var(--border-focus);
+  box-shadow: var(--shadow-glow);
 }
 
 .stat-icon {
-  font-size: 1.35rem;
+  font-size: 1.5rem;
+  margin-bottom: 0.25rem;
 }
 
 .stat-value {
-  font-size: 1.35rem;
+  font-size: 1.5rem;
+  font-family: var(--font-display);
   font-weight: 700;
-  color: #f8fafc;
+  color: var(--text-main);
 }
 
 .stat-label {
   font-size: 0.75rem;
-  color: #94a3b8;
+  color: var(--text-muted);
   letter-spacing: 0.05em;
   text-transform: uppercase;
+  font-weight: 600;
 }
 
 .novel-description-section {
-  margin-top: 2rem;
-  padding: 1.5rem;
-  border-radius: 20px;
-  background: rgba(15, 23, 42, 0.7);
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  box-shadow: inset 0 0 25px rgba(15, 23, 42, 0.35);
+  margin-top: 1rem;
+  padding: 2rem;
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
 }
 
 .novel-description-section h3 {
-  font-size: 1.05rem;
-  letter-spacing: 0.08em;
+  font-size: 1.1rem;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: #cbd5f5;
-  margin-bottom: 0.85rem;
+  color: var(--accent-primary);
+  margin-bottom: 1rem;
+  font-weight: 700;
 }
 
 .novel-description {
-  color: #f1f5f9;
-  line-height: 1.9;
-  font-size: 1rem;
+  color: var(--text-muted);
+  line-height: 1.8;
+  font-size: 1.05rem;
   margin: 0;
 }
 
 .novel-metadata-info {
-  margin-top: 1.75rem;
-  padding-top: 1rem;
-  border-top: 1px solid rgba(148, 163, 184, 0.2);
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border-subtle);
   display: flex;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 0.75rem;
-  font-size: 0.8rem;
-  color: #cbd5f5;
+  gap: 1rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
 }
 
 .metadata-id {
-  font-family: "SF Mono", Monaco, monospace;
-  background: rgba(15, 23, 42, 0.6);
-  padding: 0.35rem 0.75rem;
-  border-radius: 10px;
-  border: 1px solid rgba(148, 163, 184, 0.2);
+  font-family: monospace;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 0.4rem 0.85rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-main);
 }
 
 .parsed-at {
-  color: #94a3b8;
+  display: flex;
+  align-items: center;
 }

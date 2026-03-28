@@ -13,6 +13,8 @@ import LibraryPage from "./pages/Library";
 import NovelDetail from "./pages/NovelDetail";
 import Reader from "./pages/Reader";
 
+import { ToastContainer } from "./components/common/Toast";
+
 // Wrap individual components with Layout
 const WrappedHome = () => (
   <Layout>
@@ -35,6 +37,7 @@ const WrappedLogin = () => (
 const App: React.FC = () => {
   return (
     <Router>
+      <ToastContainer />
       <Routes>
         <Route path="/" element={<WrappedHome />} />
         <Route path="/signup" element={<WrappedSignup />} />

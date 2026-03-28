@@ -4,6 +4,8 @@ import { novelService } from "../services/novelService";
 import ChapterList from "../components/novel/ChapterList";
 import NovelDetails from "../components/novel/NovelDetails";
 import { Novel } from "../types/novel";
+import { NovelDetailHeroSkeleton } from "../components/common/Skeleton";
+import { useToast } from "../context/ToastContext";
 import "../styles/novel-detail.css";
 
 interface NovelDetailProps {
@@ -16,8 +18,7 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [updating, setUpdating] = useState<boolean>(false);
-  const [updateMessage, setUpdateMessage] = useState<string | null>(null);
-
+  const { addToast } = useToast();
   const fetchNovel = useCallback(async () => {
     try {
       setLoading(true);
@@ -44,7 +45,7 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
   const handleUpdateChapters = async () => {
     try {
       setUpdating(true);
-      setUpdateMessage("Updating chapters...");
+      addToast("Updating chapters...", "info");
 
       const updatedNovel = await novelService.updateNovelChapters(
         libraryId,
@@ -52,18 +53,10 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
       );
 
       setNovel(updatedNovel);
-      setUpdateMessage("Chapters updated successfully!");
-
-      setTimeout(() => {
-        setUpdateMessage(null);
-      }, 3000);
+      addToast("Chapters updated successfully!", "success");
     } catch (err) {
       console.error("Failed to update chapters:", err);
-      setUpdateMessage("Failed to update chapters");
-
-      setTimeout(() => {
-        setUpdateMessage(null);
-      }, 5000);
+      addToast("Failed to update chapters", "error");
     } finally {
       setUpdating(false);
     }
@@ -72,23 +65,15 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
   const handleRefreshMetadata = async () => {
     try {
       setUpdating(true);
-      setUpdateMessage("Refreshing metadata from server...");
+      addToast("Refreshing metadata from server...", "info");
 
       const updatedNovel = await novelService.refreshMetadata(libraryId, novelId);
 
       setNovel(updatedNovel);
-      setUpdateMessage("Metadata refreshed successfully!");
-
-      setTimeout(() => {
-        setUpdateMessage(null);
-      }, 3000);
+      addToast("Metadata refreshed successfully!", "success");
     } catch (err) {
       console.error("Failed to refresh metadata:", err);
-      setUpdateMessage("Failed to refresh metadata");
-
-      setTimeout(() => {
-        setUpdateMessage(null);
-      }, 5000);
+      addToast("Failed to refresh metadata", "error");
     } finally {
       setUpdating(false);
     }
@@ -97,30 +82,22 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
   const handleCheckStatus = async () => {
     try {
       setUpdating(true);
-      setUpdateMessage("Checking scrape status...");
+      addToast("Checking scrape status...", "info");
 
       const updatedNovel = await novelService.refreshMetadata(libraryId, novelId);
 
       setNovel(updatedNovel);
       
       if (updatedNovel.scrape_status === "completed") {
-        setUpdateMessage("Scrape completed! Metadata updated.");
+        addToast("Scrape completed! Metadata updated.", "success");
       } else if (updatedNovel.scrape_status === "failed") {
-        setUpdateMessage(`Scrape failed: ${updatedNovel.scrape_error || "Unknown error"}`);
+        addToast(`Scrape failed: ${updatedNovel.scrape_error || "Unknown error"}`, "error");
       } else {
-        setUpdateMessage("Still scraping... Try again in a few seconds.");
+        addToast("Still scraping... Try again in a few seconds.", "warning");
       }
-
-      setTimeout(() => {
-        setUpdateMessage(null);
-      }, 5000);
     } catch (err) {
       console.error("Failed to check status:", err);
-      setUpdateMessage("Failed to check status");
-
-      setTimeout(() => {
-        setUpdateMessage(null);
-      }, 5000);
+      addToast("Failed to check status", "error");
     } finally {
       setUpdating(false);
     }
@@ -154,13 +131,20 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
 
   return (
     <div>
-      {loading && <p>Loading...</p>}
+      {loading && (
+        <div className="novel-detail-wrapper">
+          <NovelDetailHeroSkeleton />
+        </div>
+      )}
       {error && <p className="error-message">{error}</p>}
       {!loading && !novel && !error && <p>Novel not found</p>}
 
       {novel && (
         <div className="novel-detail-wrapper">
-          <div className="novel-hero novel-hero--enhanced">
+          <div 
+            className="novel-hero novel-hero--enhanced" 
+            style={{ backgroundImage: `url(${coverImageSrc})` }}
+          >
             <div className="novel-hero__cover">
               <img
                 src={coverImageSrc}
@@ -217,11 +201,6 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
 
           <div className="novel-detail-grid">
             <div className="novel-detail-info">
-              {updateMessage && (
-                <div className="novel-status-banner">
-                  <span>{updateMessage}</span>
-                </div>
-              )}
               <NovelDetails novel={novel} />
             </div>
             <div className="novel-detail-chapters">

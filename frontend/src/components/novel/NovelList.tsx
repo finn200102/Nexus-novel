@@ -4,6 +4,7 @@ import { novelService } from "../../services/novelService";
 import NovelCard from "./NovelCard";
 import "../../styles/novel-list.css";
 import { Novel } from "../../types/novel";
+import { NovelCardSkeleton } from "../common/Skeleton";
 
 interface NovelListProps {
   library_id: number;
@@ -141,7 +142,13 @@ const NovelList: React.FC<NovelListProps> = ({
 
   return (
     <div className={`novel-list novel-list--${viewMode}`}>
-      {loading && <p className="novel-list__status">Loading novels…</p>}
+      {loading && (
+        <div className="novel-list__grid">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <NovelCardSkeleton key={`skeleton-${i}`} />
+          ))}
+        </div>
+      )}
       {error && <p className="novel-list__status novel-list__status--error">{error}</p>}
       {!loading && processedNovels.length === 0 && !error && (
         <p className="novel-list__status">No novels match your filters.</p>
