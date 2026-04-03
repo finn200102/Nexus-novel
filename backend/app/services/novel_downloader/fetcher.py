@@ -1,4 +1,7 @@
 import pybindings
+import asyncio
+from asyncio import TimeoutError as AsyncTimeoutError
+
 
 async def fetch_story_data_by_url(url: str, site_name: str):
     """
@@ -11,10 +14,16 @@ async def fetch_story_data_by_url(url: str, site_name: str):
     return py_story
 
 
-async def fetch_chapter(story_id: int, chapter_number: int, chapter_id: int, site_name: str):
-
+async def fetch_chapter(
+    story_id: int,
+    chapter_number: int,
+    chapter_id: int,
+    site_name: str,
+    timeout: float = 30.0,
+):
     site = pybindings.PySite(site_name)
-    py_chapter = await site.fetch_chapter(story_id, chapter_id, chapter_number)
+    py_chapter = await asyncio.wait_for(
+        site.fetch_chapter(story_id, chapter_id, chapter_number), timeout=timeout
+    )
 
     return py_chapter
-
