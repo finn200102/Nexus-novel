@@ -8,6 +8,7 @@ class ContentStatus(str, Enum):
     MISSING = "MISSING"
     PRESENT = "PRESENT"
     PROCESSING = "PROCESSING"
+    FAILED = "FAILED"
 
 
 class AudioStatus(str, Enum):
@@ -34,6 +35,10 @@ class Chapter(BaseModel):
     site_chapter_id: Optional[int] = None
     source_url: Optional[str] = None
     word_count: Optional[int] = None
+    download_started_at: Optional[datetime] = None
+    download_finished_at: Optional[datetime] = None
+    download_error: Optional[str] = None
+    retry_count: int = 0
     created_at: datetime
     updated_at: datetime
 

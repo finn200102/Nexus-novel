@@ -20,6 +20,7 @@ class ContentStatus(enum.Enum):
     MISSING = "MISSING"
     PRESENT = "PRESENT"
     PROCESSING = "PROCESSING"
+    FAILED = "FAILED"
 
 
 class AudioStatus(enum.Enum):
@@ -46,6 +47,10 @@ class Chapter(BaseModel):
     audio_status = Column(
         Enum(AudioStatus), default=AudioStatus.MISSING, nullable=False
     )
+    download_started_at = Column(DateTime, nullable=True)
+    download_finished_at = Column(DateTime, nullable=True)
+    download_error = Column(String(1000), nullable=True)
+    retry_count = Column(Integer, default=0, nullable=False)
 
     __table_args__ = (
         UniqueConstraint("novel_id", "chapter_number", name="uix_chapter_novel_number"),
