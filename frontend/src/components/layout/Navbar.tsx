@@ -42,6 +42,18 @@ const Navbar: React.FC<NavbarProps> = ({ onRequestCreateLibrary }) => {
           >
             Dashboard
           </Link>
+          <Link
+            to="/discover/royalroad"
+            className={location.pathname.startsWith("/discover") ? "is-active" : ""}
+          >
+            Discover
+          </Link>
+          <Link
+            to="/downloads"
+            className={location.pathname === "/downloads" ? "is-active" : ""}
+          >
+            Downloads
+          </Link>
           <button
             type="button"
             className="navbar__ghost-btn"

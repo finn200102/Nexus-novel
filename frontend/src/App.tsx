@@ -12,6 +12,9 @@ import Login from "./pages/Login";
 import LibraryPage from "./pages/Library";
 import NovelDetail from "./pages/NovelDetail";
 import Reader from "./pages/Reader";
+import Discover from "./pages/Discover";
+import DiscoverNovelDetail from "./pages/DiscoverNovelDetail";
+import Downloads from "./pages/Downloads";
 
 import { ToastContainer } from "./components/common/Toast";
 
@@ -42,6 +45,10 @@ const App: React.FC = () => {
         <Route path="/" element={<WrappedHome />} />
         <Route path="/signup" element={<WrappedSignup />} />
         <Route path="/login" element={<WrappedLogin />} />
+        <Route path="/discover" element={<WrappedDiscover />} />
+        <Route path="/discover/:site" element={<WrappedDiscover />} />
+        <Route path="/discover/:site/:novelId" element={<WrappedDiscoverDetail />} />
+        <Route path="/downloads" element={<WrappedDownloads />} />
         <Route path="/library/:libraryId" element={<LibraryWrapper />} />
         <Route
           path="/library/:libraryId/novels/:novelId"
@@ -110,5 +117,23 @@ const LibraryWrapper = () => {
     </Layout>
   );
 };
+
+const WrappedDiscover = () => (
+  <Layout>
+    <Discover />
+  </Layout>
+);
+
+const WrappedDiscoverDetail = () => (
+  <Layout>
+    <DiscoverNovelDetail />
+  </Layout>
+);
+
+const WrappedDownloads = () => (
+  <Layout>
+    <Downloads />
+  </Layout>
+);
 
 export default App;

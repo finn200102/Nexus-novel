@@ -126,6 +126,81 @@
   cursor: not-allowed;
 }
 
+/* Discover page styles */
+.discover-card-actions {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 10;
+}
+
+.discover-add-btn {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  border: none;
+  background: var(--accent-primary);
+  color: #fff;
+  font-size: 1.25rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition-fast);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.discover-add-btn:hover {
+  background: var(--accent-primary-hover);
+  transform: scale(1.1);
+  box-shadow: var(--shadow-glow);
+}
+
+.discover-pagination {
+  display: flex;
+  justify-content: center;
+  padding: 2rem 0;
+}
+
+.discover-load-more {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-main);
+  padding: 0.75rem 2rem;
+  border-radius: var(--radius-full);
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.discover-load-more:hover {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.discover-load-more:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.discover-error,
+.discover-empty {
+  text-align: center;
+  padding: 3rem;
+  color: var(--text-muted);
+}
+
+.discover-error button {
+  margin-top: 1rem;
+  background: var(--accent-primary);
+  border: none;
+  color: #fff;
+  padding: 0.5rem 1.5rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
 @media (max-width: 768px) {
   .novel-list__grid {
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));

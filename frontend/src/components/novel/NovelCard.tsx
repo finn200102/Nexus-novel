@@ -59,6 +59,14 @@ const NovelCard: React.FC<NovelCardProps> = ({
           ? novel.rating.toFixed(1)
           : "—",
     },
+    {
+      label: "Views",
+      value: formatWordCount(novel.views),
+    },
+    {
+      label: "Favorites",
+      value: formatWordCount(novel.favorites),
+    },
   ];
 
   return (
@@ -71,6 +79,7 @@ const NovelCard: React.FC<NovelCardProps> = ({
           src={coverImageSrc}
           alt={`Cover for ${novel.title}`}
           className="novel-card__image"
+          referrerPolicy="no-referrer"
           onError={(e) => {
             (e.target as HTMLImageElement).src = defaultCoverImage;
           }}

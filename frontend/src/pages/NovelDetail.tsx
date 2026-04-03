@@ -42,26 +42,6 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
     fetchNovel();
   }, [fetchNovel]);
 
-  const handleUpdateChapters = async () => {
-    try {
-      setUpdating(true);
-      addToast("Updating chapters...", "info");
-
-      const updatedNovel = await novelService.updateNovelChapters(
-        libraryId,
-        novelId
-      );
-
-      setNovel(updatedNovel);
-      addToast("Chapters updated successfully!", "success");
-    } catch (err) {
-      console.error("Failed to update chapters:", err);
-      addToast("Failed to update chapters", "error");
-    } finally {
-      setUpdating(false);
-    }
-  };
-
   const handleRefreshMetadata = async () => {
     try {
       setUpdating(true);
@@ -74,6 +54,23 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
     } catch (err) {
       console.error("Failed to refresh metadata:", err);
       addToast("Failed to refresh metadata", "error");
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleRescrape = async () => {
+    try {
+      setUpdating(true);
+      addToast("Re-scraping novel from source...", "info");
+
+      const updatedNovel = await novelService.rescrapeNovel(libraryId, novelId);
+
+      setNovel(updatedNovel);
+      addToast("Re-scrape started! Check status for progress.", "success");
+    } catch (err) {
+      console.error("Failed to rescrape novel:", err);
+      addToast("Failed to rescrape novel", "error");
     } finally {
       setUpdating(false);
     }
@@ -173,11 +170,11 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
               )}
               <div className="novel-hero__cta-row">
                 <button
-                  onClick={handleUpdateChapters}
+                  onClick={handleRescrape}
                   disabled={updating}
                   className="action-button action-button--primary"
                 >
-                  {updating ? "Updating..." : "Update Chapters"}
+                  {updating ? "Re-scraping..." : "Re-scrape Full"}
                 </button>
                 <button
                   onClick={handleRefreshMetadata}

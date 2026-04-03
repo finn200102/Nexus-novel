@@ -147,6 +147,9 @@ const NovelDetails: React.FC<NovelDetailsProps> = ({ novel }) => {
         {novel.metadata_id && (
           <span className="metadata-id">Metadata ID: {novel.metadata_id}</span>
         )}
+        {novel.story_id && (
+          <span className="story-id">Story ID: {novel.story_id}</span>
+        )}
         {novel.parsed_at && (
           <span className="parsed-at">Last synced: {formatDate(novel.parsed_at)}</span>
         )}
