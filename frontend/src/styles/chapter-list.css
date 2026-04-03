@@ -293,3 +293,170 @@ button {
   flex-wrap: wrap;
   align-items: center;
 }
+
+/* Download All Button */
+.download-all-button {
+  background-color: #1976d2;
+  color: #ffffff;
+  border: 1px solid #1976d2;
+}
+
+.download-all-button:hover {
+  background-color: #1565c0;
+  transform: translateY(-2px);
+}
+
+/* Download Single Button */
+.download-single-button {
+  background-color: #388e3c;
+  color: #ffffff;
+  border: 1px solid #388e3c;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  margin-left: 0.5rem;
+}
+
+.download-single-button:hover {
+  background-color: #2f6f2a;
+}
+
+.download-single-button--retry {
+  background-color: #f57c00;
+  border: 1px solid #f57c00;
+}
+
+.download-single-button--retry:hover {
+  background-color: #e65100;
+}
+
+/* Chapter Status Styles */
+.chapter-status--present {
+  color: #388e3c;
+}
+
+.chapter-status--processing {
+  color: #1976d2;
+  animation: pulse 1.5s infinite;
+}
+
+.chapter-status--failed {
+  color: #d32f2f;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Chapter Item Grid Update for Download Button */
+.chapter-item {
+  grid-template-columns: 100px 1fr auto;
+}
+
+/* Confirm Overlay */
+.confirm-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.confirm-dialog {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 8px;
+  max-width: 400px;
+  text-align: center;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.confirm-dialog p {
+  margin-bottom: 1rem;
+}
+
+.confirm-buttons {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+}
+
+.confirm-buttons button {
+  padding: 0.5rem 1.5rem;
+}
+
+.confirm-buttons .confirm-yes {
+  background-color: #1976d2;
+  color: white;
+  border: 1px solid #1976d2;
+}
+
+.confirm-buttons .confirm-yes:hover {
+  background-color: #1565c0;
+}
+
+/* Chapter Download Status */
+.chapter-download-status {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 0.75rem;
+  background: #f8f9fa;
+  border-radius: 6px;
+  border: 1px solid #dee2e6;
+}
+
+.chapter-download-progress {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.chapter-download-progress-bar {
+  flex: 1;
+  height: 6px;
+  background: #e9ecef;
+  border-radius: 3px;
+  overflow: hidden;
+  max-width: 200px;
+}
+
+.chapter-download-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #198754, #20c997);
+  transition: width 0.3s ease;
+}
+
+.chapter-download-progress-text {
+  font-size: 0.75rem;
+  color: #6c757d;
+  white-space: nowrap;
+}
+
+.chapter-download-badge {
+  padding: 0.125rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.7rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.chapter-download-badge--processing {
+  background: #0d6efd;
+  color: white;
+}
+
+.chapter-download-badge--failed {
+  background: #dc3545;
+  color: white;
+}

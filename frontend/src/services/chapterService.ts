@@ -93,6 +93,56 @@ export const chapterService = {
     }
   },
 
+  async resetChapterStatus(chapterId: number, status: string) {
+    try {
+      const response = await apiClient.patch(
+        `/chapter/${chapterId}/status?content_status=${status}`
+      );
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status !== 401) {
+        this.handleError(error, "Error resetting chapter status");
+      }
+      throw error;
+    }
+  },
+
+  async getDownloadStatus(novelId: number) {
+    try {
+      const response = await apiClient.get(`/chapter/novel/${novelId}/download-status`);
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status !== 401) {
+        this.handleError(error, "Error fetching download status");
+      }
+      throw error;
+    }
+  },
+
+  async cancelChapterDownload(chapterId: number) {
+    try {
+      const response = await apiClient.delete(`/chapter/${chapterId}/download`);
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status !== 401) {
+        this.handleError(error, "Error cancelling chapter download");
+      }
+      throw error;
+    }
+  },
+
+  async cancelAllDownloads(novelId: number) {
+    try {
+      const response = await apiClient.post(`/chapter/novel/${novelId}/cancel-all-downloads`);
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status !== 401) {
+        this.handleError(error, "Error cancelling all downloads");
+      }
+      throw error;
+    }
+  },
+
   handleError(error: unknown, message: string) {
     console.error(message + ":", error);
 

@@ -100,6 +100,19 @@ export const novelService = {
       throw error;
     }
   },
+  async rescrapeNovel(library_id: number, novel_id: number) {
+    try {
+      const response = await apiClient.put(
+        `/novel/${novel_id}?library_id=${library_id}`
+      );
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status != 401) {
+        this.handleError(error, "Error rescrapping novel");
+      }
+      throw error;
+    }
+  },
   async deleteNovel(library_id: number, novel_id: number) {
     try {
       const data = {
