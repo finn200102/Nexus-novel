@@ -1,21 +1,73 @@
-// src/services/libraryService.ts
 import apiClient from "./apiClient";
 import axios from "axios";
+import { DiscoveredNovel, PaginatedResponse, SiteInfo } from "../types/discovery";
 
 export const discoveryService = {
-  async gettrending(source: string) {
+  async getNovelsBySite(
+    site: string | null,
+    limit: number = 20,
+    cursor: number | null = null
+  ): Promise<PaginatedResponse<DiscoveredNovel>> {
     try {
-      const response = await apiClient.get("/discovery/trending", {
-        params: {
-          source: source,
-        },
-      });
+      const params: Record<string, string | number | null> = {
+        limit,
+      };
+      if (site && site !== "all") {
+        params.site = site;
+      }
+      if (cursor) {
+        params.cursor = cursor;
+      }
 
+      const response = await apiClient.get<PaginatedResponse<DiscoveredNovel>>(
+        "/discovery/novels/",
+        { params }
+      );
       return response.data;
     } catch (error) {
-      // Don't handle 401 errors here as they're already handled in the interceptor
       if (axios.isAxiosError(error) && error.response?.status !== 401) {
-        this.handleError(error, "Error fetching libraries");
+        this.handleError(error, "Error fetching novels");
+      }
+      throw error;
+    }
+  },
+
+  async getNovelById(novelId: number): Promise<DiscoveredNovel> {
+    try {
+      const response = await apiClient.get<DiscoveredNovel>(
+        `/discovery/novels/${novelId}`
+      );
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status !== 401) {
+        this.handleError(error, "Error fetching novel details");
+      }
+      throw error;
+    }
+  },
+
+  async getSupportedSites(): Promise<SiteInfo[]> {
+    try {
+      const response = await apiClient.get<{ sites: SiteInfo[] }>("/discovery/sites/");
+      return response.data.sites;
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status !== 401) {
+        this.handleError(error, "Error fetching sites");
+      }
+      throw error;
+    }
+  },
+
+  async addToLibrary(libraryId: number, sourceUrl: string): Promise<unknown> {
+    try {
+      const response = await apiClient.post(`/novel/`, {
+        url: sourceUrl,
+        library_id: libraryId,
+      });
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status !== 401) {
+        this.handleError(error, "Error adding novel to library");
       }
       throw error;
     }
