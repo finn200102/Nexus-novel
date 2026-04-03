@@ -6,7 +6,16 @@ import time
 from uuid import uuid4
 
 from config.database import engine, Base
-from app.routers import auth, novel, library, chapter
+from app.routers import auth, novel, library, chapter, discovery
+from app.models.author import Author
+from app.models.chapter import Chapter
+from app.models.genre import Genre
+from app.models.library import Library
+from app.models.novel import Novel
+from app.models.tag import Tag
+from app.models.user import User
+
+Base.metadata.create_all(bind=engine)
 from app.logging_config import (
     setup_logging,
     set_request_id,
@@ -36,6 +45,7 @@ app.include_router(auth.router)
 app.include_router(novel.router)
 app.include_router(library.router)
 app.include_router(chapter.router)
+app.include_router(discovery.router)
 
 
 @app.middleware("http")

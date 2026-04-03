@@ -346,10 +346,11 @@ async def refresh_novel_metadata(
     return updated_novel
 
 
-@router.get("/update/chapters/{novel_id:int}", response_model=NovelSchema)
-def update_novelchapters_by_id(
+@router.put("/{novel_id:int}", response_model=NovelSchema)
+async def rescrape_novel(
     novel_id: int,
     library_id: int,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -361,7 +362,103 @@ def update_novelchapters_by_id(
             detail=f"Novel with ID {novel_id} not found",
         )
 
-    return novel
+    metadata_id = novel.metadata_id
+
+    if not metadata_id:
+        if not novel.url:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Novel has no source URL",
+            )
+
+        site_name = get_site_name_from_url(novel.url)
+        if not site_name:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Could not determine site from URL",
+            )
+
+        scrape_result = await metadata_client.scrape_novel_by_url(novel.url, site_name)
+        if not scrape_result or not scrape_result.get("success"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to start scraping: {scrape_result.get('message', 'Unknown error') if scrape_result else 'No result'}",
+            )
+
+        metadata_id = scrape_result.get("novel_id")
+        if not metadata_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to get metadata ID from scrape",
+            )
+
+        novel_services.update_novel(
+            db,
+            novel_id,
+            {
+                "metadata_id": metadata_id,
+                "scrape_status": "pending",
+                "scrape_error": None,
+            },
+        )
+
+        from config.database import SessionLocal
+
+        background_tasks.add_task(
+            scrape_novel_background,
+            int(novel_id),
+            metadata_id,
+            SessionLocal,
+        )
+    else:
+        try:
+            metadata_id_int = int(metadata_id)
+            refreshed_data = await metadata_client.refresh_novel_metadata(
+                metadata_id_int
+            )
+
+            story_id = refreshed_data.get("story_id")
+
+            if not story_id:
+                metadata_client.invalidate_novel_cache(metadata_id_int)
+                chapters_data = await metadata_client.get_chapters_from_metadata(
+                    metadata_id_int
+                )
+                if chapters_data and len(chapters_data) > 0:
+                    story_id = chapters_data[0].get("story_id")
+
+            novel_data = {
+                "title": refreshed_data.get("title"),
+                "author": refreshed_data.get("author"),
+                "author_site_id": refreshed_data.get("author_id"),
+                "source_url": refreshed_data.get("source_url"),
+                "img_url": refreshed_data.get("img_url"),
+                "description": refreshed_data.get("description"),
+                "word_count": refreshed_data.get("word_count"),
+                "reviews": refreshed_data.get("reviews"),
+                "favorites": refreshed_data.get("favorites"),
+                "follows": refreshed_data.get("follows"),
+                "status": refreshed_data.get("status"),
+                "views": refreshed_data.get("views"),
+                "rating": refreshed_data.get("rating"),
+                "publish_date": refreshed_data.get("publish_date"),
+                "updated_date": refreshed_data.get("updated_date"),
+                "chapter_count": refreshed_data.get("chapter_count"),
+                "analyzed_at": refreshed_data.get("analyzed_at"),
+                "analysis_type": refreshed_data.get("analysis_type"),
+                "analyzed_chapter_count": refreshed_data.get("analyzed_chapter_count"),
+                "parsed_at": refreshed_data.get("parsed_at"),
+                "story_id": story_id,
+                "site_story_id": story_id,
+            }
+            novel_services.update_novel(db, novel_id, novel_data)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Failed to refresh metadata: {exc}",
+            ) from exc
+
+    return novel_services.get_novel_by_id(db, novel_id)
 
 
 @router.get("/", response_model=list[NovelSchema])
