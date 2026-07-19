@@ -22,6 +22,7 @@ services:
       DOWNLOAD_PATH: /data/downloads
       SECRET_KEY: ${NEXUS_NOVEL_SECRET_KEY:?Set NEXUS_NOVEL_SECRET_KEY in .env}
       METADATA_SERVER_URL: ${METADATA_SERVER_URL:-http://host.docker.internal:8004}
+      FLARESOLVERR_URL: ${FLARESOLVERR_URL:-http://host.docker.internal:8191/v1}
     volumes:
       - nexus_novel_downloads:/data/downloads
     depends_on:

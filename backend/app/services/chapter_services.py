@@ -73,8 +73,6 @@ def update_chapter(db: Session, chapter_id, chapter_data):
     Update the Chapter with Chapter_data which can be complete new data or just part of it
     """
     chapter = db.query(Chapter).filter(Chapter.id == chapter_id).first()
-    print("here in update", chapter)
-    print(chapter_data)
     if not chapter:
         return None
 
