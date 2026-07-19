@@ -18,7 +18,20 @@ router = APIRouter(
 )
 
 
-@router.post("/signup", response_model=UserSchema, status_code=status.HTTP_201_CREATED)
+def _login_response(user: User) -> dict:
+    access_token = create_access_token(
+        data={"sub": str(user.id)}, expires_delta=timedelta(minutes=30)
+    )
+    return {
+        "id": user.id,
+        "username": user.username,
+        "message": "Login successful",
+        "access_token": access_token,
+        "token_type": "bearer",
+    }
+
+
+@router.post("/signup", response_model=LoginResponse, status_code=status.HTTP_201_CREATED)
 def signup(user: UserCreate, db: Session = Depends(get_db)):
     if get_user_by_username(db, user.username).first():
         raise HTTPException(
@@ -29,20 +42,13 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
     # Hash the password
     hashed_password = bcrypt.hashpw(user.password.encode("utf-8"), bcrypt.gensalt())
 
-    # Debug information
-    print(f"Original password: {user.password}")
-    print(f"Hashed password type: {type(hashed_password)}")
-    print(f"Hashed password: {hashed_password}")
-
     # Convert bytes to string for storage
     hashed_password_str = hashed_password.decode("utf-8")
 
     result = create_user(
         db, user_data={"username": user.username, "password": hashed_password_str}
     )
-    print(result)
-
-    return result
+    return _login_response(result)
 
 
 @router.post("/login", response_model=LoginResponse, status_code=status.HTTP_200_OK)
@@ -62,20 +68,13 @@ def login(user_data: UserLogin, db: Session = Depends(get_db)):
         password_bytes = user_data.password.encode("utf-8")
         stored_password = user.password
 
-        # Debug information
-        print(f"Input password: {user_data.password}")
-        print(f"Stored password type: {type(stored_password)}")
-        print(f"Stored password: {stored_password}")
-
         # Check if the stored password is a hex string representation of bytes
         if stored_password.startswith("\\x"):
             # This is likely a hex representation from PostgreSQL
-            print("Detected hex string format, attempting to convert")
             try:
                 # Try to create a new user with the correct password format
                 raise ValueError("Password stored in incompatible format")
-            except Exception as e:
-                print(f"Error converting hex password: {str(e)}")
+            except Exception:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Invalid username or password",
@@ -91,29 +90,15 @@ def login(user_data: UserLogin, db: Session = Depends(get_db)):
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Invalid username or password",
                 )
-    except ValueError as e:
+    except ValueError:
         # If we get a ValueError (invalid salt), the password is definitely wrong
         # or stored in an incompatible format
-        print(f"ValueError during password check: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password",
         )
 
-    # Generate access token
-    access_token_expires = timedelta(minutes=30)  # Token valid for 30 minutes
-    access_token = create_access_token(
-        data={"sub": str(user.id)}, expires_delta=access_token_expires
-    )
-
-    # Return user data with token
-    return {
-        "id": user.id,
-        "username": user.username,
-        "message": "Login successful",
-        "access_token": access_token,
-        "token_type": "bearer",
-    }
+    return _login_response(user)
 
 
 @router.post("/test-user", status_code=status.HTTP_201_CREATED)

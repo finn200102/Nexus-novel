@@ -46,6 +46,21 @@ def test_add_library(client, db):
     assert db_library.name == "lib1"
 
 
+def test_library_names_are_scoped_to_the_owner(client, db):
+    first_user = create_test_user(db)
+    second_user = create_user(db, {"username": "user2", "password": "1234"})
+
+    first_response = client.post(
+        "/library/", json={"name": "Library"}, headers=get_auth_headers(first_user.id)
+    )
+    second_response = client.post(
+        "/library/", json={"name": "Library"}, headers=get_auth_headers(second_user.id)
+    )
+
+    assert first_response.status_code == status.HTTP_201_CREATED
+    assert second_response.status_code == status.HTTP_201_CREATED
+
+
 def test_get_librarys(client, db):
     response, headers, library_data = add_library_response(client, db)
 

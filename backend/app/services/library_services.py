@@ -18,14 +18,6 @@ def create_library(db: Session, library_data: dict):
     return library
 
 
-def get_library_by_name(db: Session, name):
-    """
-    Returns Librarys that match that name
-    """
-
-    librarys = db.query(Library).filter(Library.name == name)
-    return librarys
-
 def get_librarys(db: Session):
     """
     Returns all librarys
@@ -43,12 +35,15 @@ def get_library_by_id(db: Session, id):
     library = db.query(Library).filter(Library.id == id).first()
     return library
 
-def get_library_by_name(db: Session, name):
+def get_library_by_name(db: Session, name, user_id=None):
     """
     Returns library that matches that name
     """
 
-    library = db.query(Library).filter(Library.name == name).first()
+    query = db.query(Library).filter(Library.name == name)
+    if user_id is not None:
+        query = query.filter(Library.user_id == user_id)
+    library = query.first()
     return library
 
 

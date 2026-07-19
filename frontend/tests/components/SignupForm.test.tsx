@@ -4,13 +4,18 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import SignupForm from "../../src/components/auth/SignupForm";
 import apiClient from "../../src/services/apiClient";
+import { AuthProvider } from "../../src/context/AuthContext";
 
 vi.mock("../../src/services/apiClient");
 
 const mockedApiClient = apiClient as jest.Mocked<typeof apiClient>;
 
 const renderWithRouter = (ui: React.ReactElement) => {
-  return render(<MemoryRouter>{ui}</MemoryRouter>);
+  return render(
+    <MemoryRouter>
+      <AuthProvider>{ui}</AuthProvider>
+    </MemoryRouter>
+  );
 };
 
 describe("SignupForm", () => {

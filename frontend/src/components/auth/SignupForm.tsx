@@ -1,6 +1,6 @@
 import React, { FormEvent, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { authService } from "../../services/authService";
+import { useAuth } from "../../context/AuthContext";
 import "../../styles/auth-styles.css";
 
 interface FormData {
@@ -16,6 +16,7 @@ const SignupForm: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<"success" | "error" | null>(null);
   const navigate = useNavigate();
+  const { register } = useAuth();
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -23,7 +24,7 @@ const SignupForm: React.FC = () => {
     setSubmitStatus(null);
 
     try {
-      await authService.register(formData);
+      await register(formData.username, formData.password);
       setSubmitStatus("success");
       setFormData({ username: "", password: "" });
       navigate("/");

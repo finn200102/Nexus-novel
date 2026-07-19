@@ -39,7 +39,7 @@ def check_library(db, library_id, current_user):
 @router.post("/", response_model=LibrarySchema, status_code=status.HTTP_201_CREATED)
 def add_library(library: LibraryCreate, db: Session = Depends(get_db),
                 current_user: User = Depends(get_current_user)):
-    if library_services.get_library_by_name(db, library.name):
+    if library_services.get_library_by_name(db, library.name, current_user.id):
         raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Library already exists"

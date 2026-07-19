@@ -1,10 +1,10 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+import os
 from jose import JWTError, jwt
 from fastapi import HTTPException, status
 
-# Configuration - move these to environment variables in production
-SECRET_KEY = "your-secret-key-change-this-in-production"
+SECRET_KEY = os.environ.get("SECRET_KEY", "development-only-secret")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 

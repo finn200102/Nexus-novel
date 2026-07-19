@@ -18,6 +18,7 @@ def test_signup_success(client, db):
     assert response.status_code == status.HTTP_201_CREATED
     assert response.json()["username"] == "testuser"
     assert "id" in response.json()
+    assert response.json()["access_token"]
 
     # Verify user was created in the test database
     from app.services.user_services import get_user_by_username
@@ -50,6 +51,7 @@ def test_login_success(client, db):
     assert response.status_code == status.HTTP_201_CREATED
     assert response.json()["username"] == "testuser"
     assert "id" in response.json()
+    assert response.json()["access_token"]
 
     # Verify user was created in the test database
     from app.services.user_services import get_user_by_username
@@ -78,4 +80,3 @@ def test_login_success(client, db):
 
     # Verify the returned ID matches the created user
     assert response.json()["id"] == db_user.id
-
