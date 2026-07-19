@@ -1,5 +1,6 @@
 import apiClient from "./apiClient";
 import axios from "axios";
+import type { Novel } from "../types/novel";
 
 interface CreateNovelSchema {
   url: string;
@@ -11,10 +12,10 @@ interface GetNovelSchema {
 }
 
 export const novelService = {
-  async getAllNovels(library_id: number, query: string = "") {
+  async getAllNovels(library_id: number, query: string = ""): Promise<Novel[]> {
     try {
       const response = await apiClient.get(`/novel/?library_id=${library_id}&search=${query}`);
-      return response.data;
+      return response.data as Novel[];
     } catch (error) {
       if (axios.isAxiosError(error) && error.response?.status != 401) {
         this.handleError(error, "Error fetching libraries");

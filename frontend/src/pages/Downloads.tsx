@@ -5,7 +5,7 @@ import { chapterService } from "../services/chapterService";
 import { useLibraryContext } from "../context/LibraryContext";
 import { useToast } from "../context/ToastContext";
 import { Novel } from "../types/novel";
-import NovelCard from "../components/novel/NovelCard";
+import defaultCoverImage from "../assets/cover.png";
 import "../styles/library.css";
 import "../styles/novel-list.css";
 import "../styles/download-manager.css";
@@ -89,7 +89,7 @@ const Downloads: React.FC = () => {
     return () => clearInterval(interval);
   }, [fetchDownloadStatuses]);
 
-  const handleCancelChapter = async (novelId: number, chapterId: number) => {
+  const handleCancelChapter = async (chapterId: number) => {
     try {
       await chapterService.cancelChapterDownload(chapterId);
       fetchDownloadStatuses();
@@ -125,7 +125,7 @@ const Downloads: React.FC = () => {
     }
   };
 
-  const handleRetryAllFailed = async (novelId: number, failedChapters: FailedChapter[]) => {
+  const handleRetryAllFailed = async (failedChapters: FailedChapter[]) => {
     try {
       for (const chapter of failedChapters) {
         await chapterService.resetChapterStatus(chapter.id, "MISSING");
@@ -201,7 +201,7 @@ const Downloads: React.FC = () => {
             >
               <div className="downloads-novel-cover">
                 <img
-                  src={status.novel.img_url || status.novel.cover_image}
+                  src={status.novel.img_url || status.novel.cover_image || defaultCoverImage}
                   alt={status.novel.title}
                   onError={(e) => {
                     (e.target as HTMLImageElement).src = "";
@@ -276,7 +276,7 @@ const Downloads: React.FC = () => {
                             <button
                               className="downloads-btn downloads-btn--small"
                               onClick={() =>
-                                handleCancelChapter(status.novel.id, chapter.id)
+                                handleCancelChapter(chapter.id)
                               }
                               title="Cancel"
                             >
@@ -297,10 +297,7 @@ const Downloads: React.FC = () => {
                         className="downloads-btn downloads-btn--retry"
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleRetryAllFailed(
-                            status.novel.id,
-                            status.failed_chapters
-                          );
+                          handleRetryAllFailed(status.failed_chapters);
                         }}
                       >
                         Retry All Failed
@@ -349,7 +346,7 @@ const Downloads: React.FC = () => {
                             <button
                               className="downloads-btn downloads-btn--small"
                               onClick={() =>
-                                handleCancelChapter(status.novel.id, chapter.id)
+                                handleCancelChapter(chapter.id)
                               }
                               title="Cancel"
                             >

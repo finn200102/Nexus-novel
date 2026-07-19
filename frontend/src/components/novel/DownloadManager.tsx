@@ -39,7 +39,6 @@ const DownloadManager: React.FC<DownloadManagerProps> = ({ novelId, libraryId, o
   const [status, setStatus] = useState<DownloadStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
-  const [showErrors, setShowErrors] = useState(false);
 
   const fetchStatus = useCallback(async () => {
     try {

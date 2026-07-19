@@ -19,11 +19,6 @@ interface ChapterListProps {
 const DOWNLOAD_WAIT_MS = 500;
 const STUCK_PROCESSING_TIMEOUT_MS = 60000;
 
-interface ProcessingChapter {
-  id: number;
-  startedAt: number;
-}
-
 const ChapterList: React.FC<ChapterListProps> = ({ novel_id, library_id }) => {
   const [chapters, setChapters] = useState<ChapterSchema[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -33,7 +28,7 @@ const ChapterList: React.FC<ChapterListProps> = ({ novel_id, library_id }) => {
   const [selectedChapters, setSelectedChapters] = useState<number[]>([]);
   const [deletingLoading, setDeletingLoading] = useState<boolean>(false);
   const [downloadingChapters, setDownloadingChapters] = useState<Set<number>>(new Set());
-  const [processingChapters, setProcessingChapters] = useState<Map<number, number>>(new Map());
+  const processingChaptersRef = useRef<Map<number, number>>(new Map());
   const [showDownloadAllConfirm, setShowDownloadAllConfirm] = useState(false);
   const pollingIntervalRef = useRef<number | null>(null);
   const { libraryId } = useParams<{ libraryId: string }>();
@@ -46,6 +41,8 @@ const ChapterList: React.FC<ChapterListProps> = ({ novel_id, library_id }) => {
   const progressPercent = totalCount > 0 ? Math.round((presentCount / totalCount) * 100) : 0;
 
   const fetchChapters = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     try {
       const data = await chapterService.getChapters(novel_id);
 
@@ -55,8 +52,8 @@ const ChapterList: React.FC<ChapterListProps> = ({ novel_id, library_id }) => {
         );
         
         const now = Date.now();
-        setProcessingChapters((prev) => {
-          const updated = new Map(prev);
+        {
+          const updated = new Map(processingChaptersRef.current);
           
           sortedChapters.forEach((ch) => {
             if (ch.content_status === "PROCESSING") {
@@ -78,15 +75,17 @@ const ChapterList: React.FC<ChapterListProps> = ({ novel_id, library_id }) => {
           
           const stillDownloading = new Set<number>();
           updated.forEach((_, id) => stillDownloading.add(id));
+          processingChaptersRef.current = updated;
           setDownloadingChapters(stillDownloading);
-          
-          return updated;
-        });
+        }
         
         setChapters(sortedChapters);
       }
     } catch (err) {
       console.error("Failed to fetch chapters:", err);
+      setError("Unable to load chapters. Please try again.");
+    } finally {
+      setLoading(false);
     }
   }, [novel_id]);
 
