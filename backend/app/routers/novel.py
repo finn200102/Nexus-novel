@@ -35,8 +35,6 @@ def scrape_novel_background(
     db_session_factory,
 ):
     """Background task to scrape and update novel metadata."""
-    import time
-
     db = db_session_factory()
     try:
         logger.info(
@@ -45,10 +43,14 @@ def scrape_novel_background(
             metadata_id=metadata_id,
         )
 
-        time.sleep(3)
-
         try:
-            scraped_data = asyncio.run(metadata_client.get_novel_metadata(metadata_id))
+            scraped_data = asyncio.run(
+                metadata_client.wait_for_scrape_complete(metadata_id)
+            )
+            if scraped_data.get("status") == "error":
+                raise RuntimeError(
+                    scraped_data.get("description") or "Metadata scrape failed"
+                )
 
             story_id = scraped_data.get("story_id")
 

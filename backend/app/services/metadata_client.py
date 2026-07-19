@@ -1,3 +1,4 @@
+import asyncio
 import httpx
 import time
 from typing import Optional, Any
@@ -78,23 +79,29 @@ async def scrape_novel_by_url(url: str, site: str) -> dict:
 
 
 async def wait_for_scrape_complete(
-    metadata_id: int, wait_seconds: int = 3
-) -> dict | None:
+    metadata_id: int,
+    timeout_seconds: int = 300,
+    poll_interval_seconds: float = 2,
+) -> dict:
+    """Wait for the metadata worker to replace its temporary placeholder."""
     logger.info(
         "Waiting for scrape to complete",
         metadata_id=metadata_id,
-        wait_seconds=wait_seconds,
+        timeout_seconds=timeout_seconds,
     )
-    time.sleep(wait_seconds)
-    try:
-        return await get_novel_metadata(metadata_id)
-    except Exception as e:
-        logger.warning(
-            "Failed to get metadata after waiting",
-            metadata_id=metadata_id,
-            error=str(e),
-        )
-        return None
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        # Do not let the normal metadata cache keep returning the placeholder.
+        cache.invalidate(f"novel:{metadata_id}")
+        data = await get_novel_metadata(metadata_id)
+        if data.get("status") != "scraping" and data.get("title") != "Scraping...":
+            return data
+        await asyncio.sleep(poll_interval_seconds)
+
+    raise TimeoutError(
+        f"Metadata scrape for novel {metadata_id} did not finish within "
+        f"{timeout_seconds} seconds"
+    )
 
 
 async def get_novel_metadata(novel_id: int) -> dict:
