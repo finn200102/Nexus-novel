@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Search } from "lucide-react";
+import { Search, SlidersHorizontal, X } from "lucide-react";
 import { discoveryService } from "../services/discoveryService";
 import { useLibraryContext } from "../context/LibraryContext";
 import { useToast } from "../context/ToastContext";
-import { DiscoveredNovel } from "../types/discovery";
+import { DiscoveredNovel, DiscoveryFilters } from "../types/discovery";
 import { Novel } from "../types/novel";
 import NovelCard from "../components/novel/NovelCard";
 import { NovelCardSkeleton } from "../components/common/Skeleton";
@@ -23,6 +23,17 @@ const SITE_OPTIONS = [
 
 const ITEMS_PER_PAGE = 20;
 
+const EMPTY_FILTERS: DiscoveryFilters = {
+  tag: "",
+  genre: "",
+  status: "",
+  minWordCount: "",
+  minFavorites: "",
+  minFollows: "",
+  minReviews: "",
+  minChapterCount: "",
+};
+
 const Discover: React.FC = () => {
   const { site } = useParams<{ site?: string }>();
   const navigate = useNavigate();
@@ -36,6 +47,9 @@ const Discover: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [hasMore, setHasMore] = useState<boolean>(true);
   const [search, setSearch] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filters, setFilters] = useState<DiscoveryFilters>(EMPTY_FILTERS);
+  const [appliedFilters, setAppliedFilters] = useState<DiscoveryFilters>(EMPTY_FILTERS);
   const searchFromUrl = new URLSearchParams(window.location.search).get("q") || "";
 
   const currentSite = site || "royalroad";
@@ -45,10 +59,15 @@ const Discover: React.FC = () => {
     setCurrentPage(1);
     setHasMore(true);
     setSearch(searchFromUrl);
-    fetchNovels(currentSite, 1, searchFromUrl);
+    fetchNovels(currentSite, 1, searchFromUrl, appliedFilters);
   }, [currentSite, searchFromUrl]);
 
-  const fetchNovels = async (siteValue: string, page: number, title = search) => {
+  const fetchNovels = async (
+    siteValue: string,
+    page: number,
+    title = search,
+    activeFilters = appliedFilters
+  ) => {
     try {
       if (page === 1) {
         setLoading(true);
@@ -62,7 +81,8 @@ const Discover: React.FC = () => {
         siteValue === "all" ? null : siteValue,
         ITEMS_PER_PAGE,
         cursor,
-        title
+        title,
+        activeFilters
       );
 
       console.log("Fetched novels:", response.data.slice(0, 3).map(n => ({ id: n.id, title: n.title?.slice(0, 30), img_url: n.img_url })));
@@ -96,6 +116,27 @@ const Discover: React.FC = () => {
     event.preventDefault();
     navigate(`/discover/${currentSite}${search.trim() ? `?q=${encodeURIComponent(search.trim())}` : ""}`);
   };
+
+  const applyFilters = () => {
+    setAppliedFilters(filters);
+    setCurrentPage(1);
+    setHasMore(true);
+    fetchNovels(currentSite, 1, searchFromUrl, filters);
+  };
+
+  const clearFilters = () => {
+    setFilters(EMPTY_FILTERS);
+    setAppliedFilters(EMPTY_FILTERS);
+    setCurrentPage(1);
+    setHasMore(true);
+    fetchNovels(currentSite, 1, searchFromUrl, EMPTY_FILTERS);
+  };
+
+  const updateFilter = (key: keyof DiscoveryFilters, value: string) => {
+    setFilters((current) => ({ ...current, [key]: value }));
+  };
+
+  const hasActiveFilters = Object.values(appliedFilters).some(Boolean);
 
   const handleAddToLibrary = async (novel: DiscoveredNovel) => {
     if (!activeLibraryId) {
@@ -192,6 +233,74 @@ const Discover: React.FC = () => {
           <Search size={19} aria-hidden="true" />
           <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by title" />
         </form>
+        <div className="discover-filter-actions">
+          <button
+            type="button"
+            className={`discover-filter-toggle ${filtersOpen ? "is-active" : ""}`}
+            onClick={() => setFiltersOpen((open) => !open)}
+            title="Show filters"
+            aria-expanded={filtersOpen}
+            aria-controls="discover-filters"
+          >
+            <SlidersHorizontal size={16} aria-hidden="true" />
+            Filters{hasActiveFilters ? " active" : ""}
+          </button>
+          {hasActiveFilters && (
+            <button
+              type="button"
+              className="discover-clear-filters"
+              onClick={clearFilters}
+              title="Clear filters"
+            >
+              <X size={16} aria-hidden="true" />
+            </button>
+          )}
+        </div>
+        {filtersOpen && (
+          <section id="discover-filters" className="discover-filters" aria-label="Discover filters">
+            <label>
+              Tag
+              <input value={filters.tag} onChange={(event) => updateFilter("tag", event.target.value)} placeholder="e.g. time loop" />
+            </label>
+            <label>
+              Genre
+              <input value={filters.genre} onChange={(event) => updateFilter("genre", event.target.value)} placeholder="e.g. fantasy" />
+            </label>
+            <label>
+              Status
+              <select value={filters.status} onChange={(event) => updateFilter("status", event.target.value)}>
+                <option value="">Any status</option>
+                <option value="Complete">Complete</option>
+                <option value="In-Progress">In progress</option>
+                <option value="Ongoing">Ongoing</option>
+              </select>
+            </label>
+            <label>
+              Min words
+              <input type="number" min="0" value={filters.minWordCount} onChange={(event) => updateFilter("minWordCount", event.target.value)} placeholder="0" />
+            </label>
+            <label>
+              Min favorites
+              <input type="number" min="0" value={filters.minFavorites} onChange={(event) => updateFilter("minFavorites", event.target.value)} placeholder="0" />
+            </label>
+            <label>
+              Min follows
+              <input type="number" min="0" value={filters.minFollows} onChange={(event) => updateFilter("minFollows", event.target.value)} placeholder="0" />
+            </label>
+            <label>
+              Min reviews
+              <input type="number" min="0" value={filters.minReviews} onChange={(event) => updateFilter("minReviews", event.target.value)} placeholder="0" />
+            </label>
+            <label>
+              Min chapters
+              <input type="number" min="0" value={filters.minChapterCount} onChange={(event) => updateFilter("minChapterCount", event.target.value)} placeholder="0" />
+            </label>
+            <div className="discover-filters__commands">
+              <button type="button" className="discover-filter-reset" onClick={() => setFilters(EMPTY_FILTERS)}>Reset</button>
+              <button type="button" className="discover-filter-apply" onClick={applyFilters}>Apply filters</button>
+            </div>
+          </section>
+        )}
         <div className="discover-source-tabs" role="tablist" aria-label="Novel source">
           {SITE_OPTIONS.map((option) => (
             <button key={option.value} type="button" role="tab" aria-selected={option.value === currentSite}

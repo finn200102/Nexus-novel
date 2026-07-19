@@ -1,13 +1,19 @@
 import apiClient from "./apiClient";
 import axios from "axios";
-import { DiscoveredNovel, PaginatedResponse, SiteInfo } from "../types/discovery";
+import {
+  DiscoveredNovel,
+  DiscoveryFilters,
+  PaginatedResponse,
+  SiteInfo,
+} from "../types/discovery";
 
 export const discoveryService = {
   async getNovelsBySite(
     site: string | null,
     limit: number = 20,
     cursor: number | null = null,
-    title: string | null = null
+    title: string | null = null,
+    filters?: Partial<DiscoveryFilters>
   ): Promise<PaginatedResponse<DiscoveredNovel>> {
     try {
       const params: Record<string, string | number | null> = {
@@ -22,6 +28,22 @@ export const discoveryService = {
       if (title?.trim()) {
         params.title = title.trim();
       }
+      const filterParams: Record<keyof DiscoveryFilters, string> = {
+        tag: "tag",
+        genre: "genre",
+        status: "status",
+        minWordCount: "min_word_count",
+        minFavorites: "min_favorites",
+        minFollows: "min_follows",
+        minReviews: "min_reviews",
+        minChapterCount: "min_chapter_count",
+      };
+      Object.entries(filterParams).forEach(([key, parameter]) => {
+        const value = filters?.[key as keyof DiscoveryFilters]?.trim();
+        if (value) {
+          params[parameter] = value;
+        }
+      });
 
       const response = await apiClient.get<PaginatedResponse<DiscoveredNovel>>(
         "/discovery/novels/",

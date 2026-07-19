@@ -196,6 +196,14 @@ async def list_novels_metadata(
     site: Optional[str] = None,
     author: Optional[str] = None,
     title: Optional[str] = None,
+    tag: Optional[str] = None,
+    genre: Optional[str] = None,
+    status: Optional[str] = None,
+    min_word_count: Optional[int] = None,
+    min_favorites: Optional[int] = None,
+    min_follows: Optional[int] = None,
+    min_reviews: Optional[int] = None,
+    min_chapter_count: Optional[int] = None,
     limit: int = 100,
     cursor: Optional[int] = None,
 ) -> dict:
@@ -206,6 +214,18 @@ async def list_novels_metadata(
         params["author"] = author
     if title:
         params["title"] = title
+    for name, value in {
+        "tag": tag,
+        "genre": genre,
+        "status": status,
+        "min_word_count": min_word_count,
+        "min_favorites": min_favorites,
+        "min_follows": min_follows,
+        "min_reviews": min_reviews,
+        "min_chapter_count": min_chapter_count,
+    }.items():
+        if value is not None and value != "":
+            params[name] = value
     if cursor:
         params["cursor"] = cursor
 

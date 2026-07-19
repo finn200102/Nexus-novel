@@ -25,6 +25,17 @@ export interface PaginatedResponse<T> {
   has_more: boolean;
 }
 
+export interface DiscoveryFilters {
+  tag: string;
+  genre: string;
+  status: string;
+  minWordCount: string;
+  minFavorites: string;
+  minFollows: string;
+  minReviews: string;
+  minChapterCount: string;
+}
+
 export interface SiteInfo {
   id: string;
   name: string;
