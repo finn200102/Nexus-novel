@@ -30,9 +30,6 @@ from app.services.novel_downloader.parser import (
 import asyncio
 from datetime import datetime
 
-import textwrap
-import nltk
-import random
 
 # Load environment variables
 load_dotenv()
@@ -595,45 +592,15 @@ def get_chapter_content(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Chapter {chapter_number} not found in novel {novel_id}",
         )
-    # foramt text for chapter
-
-    MIN_SENTENCES_PER_PARAGRAPH = 3
-    MAX_SENTENCES_PER_PARAGRAPH = 5
-    WRAP_WIDTH = 90
-
-    sentences = nltk.sent_tokenize(chapter.content)
-    paragraphs = []
-    current_paragraph_sentences = []
-    # Loop through the sentences and group them into paragraphs
-    while sentences:
-        # Decide how many sentences this paragraph will have
-        num_sentences = random.randint(
-            MIN_SENTENCES_PER_PARAGRAPH, MAX_SENTENCES_PER_PARAGRAPH
-        )
-
-        # Grab that many sentences, but not more than are left
-        sentences_for_this_paragraph = sentences[:num_sentences]
-        del sentences[:num_sentences]  # Remove them from the main list
-
-        # Join them into a single string for this paragraph
-        paragraph_text = " ".join(sentences_for_this_paragraph)
-        paragraphs.append(paragraph_text)
-
-    # 2. Now, format each paragraph with textwrap
-    formatted_paragraphs = []
-    for p_text in paragraphs:
-        wrapped_text = textwrap.fill(p_text, width=WRAP_WIDTH)
-        formatted_paragraphs.append(wrapped_text)
-
-    # 3. Join the formatted paragraphs with two newlines to separate them
-    final_story_text = "\n\n".join(formatted_paragraphs)
+    if not chapter.content:
+        raise HTTPException(status_code=409, detail="Chapter content is not downloaded")
 
     return ChapterContent(
         id=chapter.id,
         novel_id=chapter.novel_id,
         chapter_number=chapter.chapter_number,
         title=chapter.title,
-        content=final_story_text,  # chapter.content
+        content=chapter.content,
     )
 
 

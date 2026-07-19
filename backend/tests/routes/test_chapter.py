@@ -142,5 +142,21 @@ def test_update_chapter(client, db):
     assert chapter.content_status.value == "PRESENT"
 
 
+def test_get_downloaded_chapter_content(client, db):
+    novel, headers, _, _, library = create_test_novel(db)
+    response = add_chapter(client, novel.id, headers)
+    chapter = get_chapter_by_id(db, response.json()["id"])
+    chapter.content = "First paragraph.\n\nSecond paragraph."
+    chapter.content_status = "PRESENT"
+    db.commit()
+
+    response = client.get(
+        f"/chapter/content/library/{library.id}/{novel.id}/1", headers=headers
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["content"] == "First paragraph.\n\nSecond paragraph."
+
+
 def test_download_chapter(client, db):
     pytest.skip("Download functionality requires pybindings and metadata server")
