@@ -35,7 +35,7 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
     ports:
-      - "${NEXUS_NOVEL_PORT:-5173}:80"
+      - "${NEXUS_NOVEL_PORT:-8180}:80"
     depends_on:
       - backend
 
