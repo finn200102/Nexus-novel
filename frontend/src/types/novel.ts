@@ -31,6 +31,8 @@ export interface Novel {
   updated_at: string;
   scrape_status?: "pending" | "completed" | "failed";
   scrape_error?: string | null;
+  follow_state: "following" | "muted" | "unfollowed";
+  followed_at: string | null;
 }
 
 export interface NovelCreate {

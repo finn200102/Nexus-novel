@@ -14,8 +14,10 @@ from app.models.library import Library
 from app.models.novel import Novel
 from app.models.tag import Tag
 from app.models.user import User
+from app.database_migrations import ensure_runtime_schema
 
 Base.metadata.create_all(bind=engine)
+ensure_runtime_schema(engine)
 from app.logging_config import (
     setup_logging,
     set_request_id,

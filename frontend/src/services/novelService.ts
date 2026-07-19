@@ -133,6 +133,19 @@ export const novelService = {
       throw error;
     }
   },
+  async updateFollowState(
+    libraryId: number,
+    novelId: number,
+    followState: "following" | "muted" | "unfollowed"
+  ): Promise<Novel> {
+    const response = await apiClient.patch(
+      `/novel/${novelId}/follow?library_id=${libraryId}`,
+      {
+        follow_state: followState,
+      }
+    );
+    return response.data as Novel;
+  },
   async deleteNovelsByIds(libraryId: number, novelIds: number[]) {
     try {
       const deletePromises = novelIds.map((novelId) =>

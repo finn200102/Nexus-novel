@@ -201,6 +201,8 @@ const Discover: React.FC = () => {
       updated_at: discovered.updated_at,
       scrape_status: "completed",
       scrape_error: null,
+      follow_state: "unfollowed",
+      followed_at: null,
     };
   };
 

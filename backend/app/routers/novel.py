@@ -3,7 +3,7 @@ import httpx
 from sqlalchemy.orm import Session
 from config.database import get_db
 from ..schemas.novel import Novel as NovelSchema
-from ..schemas.novel import NovelCreate, NovelUpdate
+from ..schemas.novel import NovelCreate, NovelFollowUpdate, NovelUpdate
 from app.models.chapter import ContentStatus
 from app.models.user import User
 from app.models.novel import Novel
@@ -27,6 +27,7 @@ import shutil
 logger = get_logger(__name__)
 
 import asyncio
+from datetime import datetime
 
 
 def scrape_novel_background(
@@ -461,6 +462,28 @@ async def rescrape_novel(
             ) from exc
 
     return novel_services.get_novel_by_id(db, novel_id)
+
+
+@router.patch("/{novel_id:int}/follow", response_model=NovelSchema)
+def update_follow_state(
+    novel_id: int,
+    update: NovelFollowUpdate,
+    library_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    check_library(db, library_id, current_user)
+    novel = novel_services.get_novel_by_id(db, novel_id)
+    if not novel or novel.library_id != library_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Novel not found")
+
+    novel_data = {"follow_state": update.follow_state}
+    if update.follow_state == "following" and novel.follow_state != "following":
+        novel_data["followed_at"] = datetime.utcnow()
+    elif update.follow_state == "unfollowed":
+        novel_data["followed_at"] = None
+
+    return novel_services.update_novel(db, novel_id, novel_data)
 
 
 @router.get("/", response_model=list[NovelSchema])

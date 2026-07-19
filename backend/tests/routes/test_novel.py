@@ -188,3 +188,19 @@ def test_update_novel(client_with_auth, db):
     db_novel = get_novel_by_url(db, url).first()
     assert db_novel is not None
     assert db_novel.title == "newtitle"
+
+
+def test_update_follow_state(client_with_auth, db):
+    response, headers, _, url, library = add_novel_resources(client_with_auth, db)
+    assert response.status_code == status.HTTP_201_CREATED
+    novel = get_novel_by_url(db, url).first()
+    assert novel is not None
+
+    response = client_with_auth.patch(
+        f"/novel/{novel.id}/follow?library_id={library.id}",
+        json={"follow_state": "muted"},
+        headers=headers,
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["follow_state"] == "muted"

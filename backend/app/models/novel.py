@@ -57,6 +57,8 @@ class Novel(BaseModel):
     analysis_type = Column(String(50))
     analyzed_chapter_count = Column(Integer)
     parsed_at = Column(DateTime)
+    follow_state = Column(String(20), nullable=False, default="following", server_default="following")
+    followed_at = Column(DateTime, nullable=True)
 
     # Relationships
     author_obj = relationship("Author", back_populates="novels")

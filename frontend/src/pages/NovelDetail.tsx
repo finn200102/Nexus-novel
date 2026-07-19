@@ -6,6 +6,7 @@ import NovelDetails from "../components/novel/NovelDetails";
 import { Novel } from "../types/novel";
 import { NovelDetailHeroSkeleton } from "../components/common/Skeleton";
 import { useToast } from "../context/ToastContext";
+import { Bell } from "lucide-react";
 import "../styles/novel-detail.css";
 
 interface NovelDetailProps {
@@ -18,6 +19,7 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [updating, setUpdating] = useState<boolean>(false);
+  const [updatingFollow, setUpdatingFollow] = useState(false);
   const { addToast } = useToast();
   const fetchNovel = useCallback(async () => {
     try {
@@ -100,6 +102,23 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
     }
   };
 
+  const updateFollowState = async (followState: "following" | "muted" | "unfollowed") => {
+    try {
+      setUpdatingFollow(true);
+      const updatedNovel = await novelService.updateFollowState(libraryId, novelId, followState);
+      setNovel(updatedNovel);
+      addToast(
+        followState === "following" ? "Following source updates" : followState === "muted" ? "Following is muted" : "No longer following this story",
+        "success"
+      );
+    } catch (err) {
+      console.error("Failed to update follow state:", err);
+      addToast("Failed to update follow state", "error");
+    } finally {
+      setUpdatingFollow(false);
+    }
+  };
+
   const getScrapeStatusIndicator = () => {
     if (!novel?.scrape_status || novel.scrape_status === "completed") {
       return null;
@@ -169,6 +188,19 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
                 <p className="novel-hero__description">{novel.description}</p>
               )}
               <div className="novel-hero__cta-row">
+                <label className="follow-state-control">
+                  <Bell size={17} aria-hidden="true" />
+                  <select
+                    value={novel.follow_state}
+                    disabled={updatingFollow}
+                    onChange={(event) => updateFollowState(event.target.value as "following" | "muted" | "unfollowed")}
+                    aria-label="Follow state"
+                  >
+                    <option value="following">Following updates</option>
+                    <option value="muted">Muted</option>
+                    <option value="unfollowed">Not following</option>
+                  </select>
+                </label>
                 <button
                   onClick={handleRescrape}
                   disabled={updating}

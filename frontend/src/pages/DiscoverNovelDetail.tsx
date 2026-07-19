@@ -125,6 +125,8 @@ const DiscoverNovelDetail: React.FC = () => {
     scrape_status: "completed" as const,
     scrape_error: null,
     cover_image: novel.img_url,
+    follow_state: "unfollowed" as const,
+    followed_at: null,
   };
 
   return (
