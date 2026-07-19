@@ -68,18 +68,15 @@ def download_chapter_background(
             )
             return
 
-        current_retry_count = chapter.retry_count or 0
-        chapter_services.update_chapter(
-            db,
-            chapter_id,
-            {
-                "content_status": ContentStatus.PROCESSING,
-                "download_started_at": datetime.utcnow(),
-                "download_finished_at": None,
-                "download_error": None,
-                "retry_count": current_retry_count + 1,
-            },
-        )
+        # A cancellation/reset can happen while the background task waits for a
+        # database connection. Do not resurrect a chapter the user cancelled.
+        if chapter.content_status != ContentStatus.PROCESSING:
+            logger.info(
+                "Skipping chapter download because it is no longer processing",
+                chapter_id=chapter_id,
+                content_status=chapter.content_status.value,
+            )
+            return
 
         novel = novel_services.get_novel_by_id(db, novel_id)
         if not novel:
@@ -471,10 +468,26 @@ def download_chapter(
     from config.database import SessionLocal as SessionFactory
 
     chapter = check_chapter(db, novel_id, chapter_number, current_user)
+    if chapter.content_status == ContentStatus.PRESENT:
+        return chapter
+    if chapter.content_status == ContentStatus.PROCESSING:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Chapter download is already in progress",
+        )
 
     chapter_services.update_chapter(
-        db, chapter.id, {"content_status": ContentStatus.PROCESSING}
+        db,
+        chapter.id,
+        {
+            "content_status": ContentStatus.PROCESSING,
+            "download_started_at": datetime.utcnow(),
+            "download_finished_at": None,
+            "download_error": None,
+            "retry_count": (chapter.retry_count or 0) + 1,
+        },
     )
+    db.refresh(chapter)
 
     background_tasks.add_task(
         download_chapter_background,

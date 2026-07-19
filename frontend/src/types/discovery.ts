@@ -34,6 +34,8 @@ export interface DiscoveryFilters {
   minFollows: string;
   minReviews: string;
   minChapterCount: string;
+  sortBy: string;
+  sortOrder: string;
 }
 
 export interface SiteInfo {

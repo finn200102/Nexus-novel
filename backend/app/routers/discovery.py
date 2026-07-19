@@ -27,6 +27,8 @@ async def get_novels(
     min_follows: Optional[int] = Query(None, ge=0),
     min_reviews: Optional[int] = Query(None, ge=0),
     min_chapter_count: Optional[int] = Query(None, ge=0),
+    sort_by: str = Query("updated"),
+    sort_order: str = Query("desc", pattern="^(asc|desc)$"),
     limit: int = Query(20, ge=1, le=100, description="Max items to return"),
     cursor: Optional[int] = Query(None, description="Pagination cursor"),
     current_user: User = Depends(get_current_user),
@@ -44,6 +46,8 @@ async def get_novels(
         min_follows=min_follows,
         min_reviews=min_reviews,
         min_chapter_count=min_chapter_count,
+        sort_by=sort_by,
+        sort_order=sort_order,
         limit=limit,
         cursor=cursor,
     )

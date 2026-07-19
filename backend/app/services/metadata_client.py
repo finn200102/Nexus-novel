@@ -204,6 +204,8 @@ async def list_novels_metadata(
     min_follows: Optional[int] = None,
     min_reviews: Optional[int] = None,
     min_chapter_count: Optional[int] = None,
+    sort_by: str = "updated",
+    sort_order: str = "desc",
     limit: int = 100,
     cursor: Optional[int] = None,
 ) -> dict:
@@ -223,6 +225,8 @@ async def list_novels_metadata(
         "min_follows": min_follows,
         "min_reviews": min_reviews,
         "min_chapter_count": min_chapter_count,
+        "sort_by": sort_by,
+        "sort_order": sort_order,
     }.items():
         if value is not None and value != "":
             params[name] = value

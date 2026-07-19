@@ -32,6 +32,8 @@ const EMPTY_FILTERS: DiscoveryFilters = {
   minFollows: "",
   minReviews: "",
   minChapterCount: "",
+  sortBy: "updated",
+  sortOrder: "desc",
 };
 
 const Discover: React.FC = () => {
@@ -44,7 +46,7 @@ const Discover: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [nextCursor, setNextCursor] = useState<number | null>(null);
   const [hasMore, setHasMore] = useState<boolean>(true);
   const [search, setSearch] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -56,7 +58,7 @@ const Discover: React.FC = () => {
 
   useEffect(() => {
     setNovels([]);
-    setCurrentPage(1);
+    setNextCursor(null);
     setHasMore(true);
     setSearch(searchFromUrl);
     fetchNovels(currentSite, 1, searchFromUrl, appliedFilters);
@@ -76,7 +78,7 @@ const Discover: React.FC = () => {
       }
       setError(null);
 
-      const cursor = page > 1 ? (page - 1) * ITEMS_PER_PAGE : null;
+      const cursor = page > 1 ? nextCursor : null;
       const response = await discoveryService.getNovelsBySite(
         siteValue === "all" ? null : siteValue,
         ITEMS_PER_PAGE,
@@ -93,6 +95,7 @@ const Discover: React.FC = () => {
         setNovels((prev) => [...prev, ...response.data]);
       }
       setHasMore(response.has_more);
+      setNextCursor(response.next_cursor);
     } catch (err) {
       console.error("Failed to fetch novels:", err);
       setError("Failed to load novels. Please try again.");
@@ -107,9 +110,9 @@ const Discover: React.FC = () => {
   };
 
   const handleLoadMore = () => {
-    const nextPage = currentPage + 1;
-    setCurrentPage(nextPage);
-    fetchNovels(currentSite, nextPage);
+    if (nextCursor !== null) {
+      fetchNovels(currentSite, 2);
+    }
   };
 
   const submitSearch = (event: React.FormEvent) => {
@@ -119,7 +122,7 @@ const Discover: React.FC = () => {
 
   const applyFilters = () => {
     setAppliedFilters(filters);
-    setCurrentPage(1);
+    setNextCursor(null);
     setHasMore(true);
     fetchNovels(currentSite, 1, searchFromUrl, filters);
   };
@@ -127,7 +130,7 @@ const Discover: React.FC = () => {
   const clearFilters = () => {
     setFilters(EMPTY_FILTERS);
     setAppliedFilters(EMPTY_FILTERS);
-    setCurrentPage(1);
+    setNextCursor(null);
     setHasMore(true);
     fetchNovels(currentSite, 1, searchFromUrl, EMPTY_FILTERS);
   };
@@ -136,7 +139,9 @@ const Discover: React.FC = () => {
     setFilters((current) => ({ ...current, [key]: value }));
   };
 
-  const hasActiveFilters = Object.values(appliedFilters).some(Boolean);
+  const hasActiveFilters = Object.entries(appliedFilters).some(
+    ([key, value]) => !["sortBy", "sortOrder"].includes(key) && Boolean(value)
+  );
 
   const handleAddToLibrary = async (novel: DiscoveredNovel) => {
     if (!activeLibraryId) {
@@ -210,7 +215,7 @@ const Discover: React.FC = () => {
           onClick={handleLoadMore}
           disabled={loadingMore}
         >
-          {loadingMore ? "Loading..." : `Load More (Page ${currentPage + 1})`}
+          {loadingMore ? "Loading..." : "Load More"}
         </button>
       </div>
     );
@@ -294,6 +299,26 @@ const Discover: React.FC = () => {
             <label>
               Min chapters
               <input type="number" min="0" value={filters.minChapterCount} onChange={(event) => updateFilter("minChapterCount", event.target.value)} placeholder="0" />
+            </label>
+            <label>
+              Sort by
+              <select value={filters.sortBy} onChange={(event) => updateFilter("sortBy", event.target.value)}>
+                <option value="updated">Last updated</option>
+                <option value="favorites">Favorites</option>
+                <option value="follows">Follows</option>
+                <option value="views">Views</option>
+                <option value="reviews">Reviews</option>
+                <option value="word_count">Word count</option>
+                <option value="chapter_count">Chapters</option>
+                <option value="title">Title</option>
+              </select>
+            </label>
+            <label>
+              Direction
+              <select value={filters.sortOrder} onChange={(event) => updateFilter("sortOrder", event.target.value)}>
+                <option value="desc">Highest first</option>
+                <option value="asc">Lowest first</option>
+              </select>
             </label>
             <div className="discover-filters__commands">
               <button type="button" className="discover-filter-reset" onClick={() => setFilters(EMPTY_FILTERS)}>Reset</button>

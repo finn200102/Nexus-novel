@@ -37,6 +37,8 @@ export const discoveryService = {
         minFollows: "min_follows",
         minReviews: "min_reviews",
         minChapterCount: "min_chapter_count",
+        sortBy: "sort_by",
+        sortOrder: "sort_order",
       };
       Object.entries(filterParams).forEach(([key, parameter]) => {
         const value = filters?.[key as keyof DiscoveryFilters]?.trim();
