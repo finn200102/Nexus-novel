@@ -1,228 +1,144 @@
-import React, { CSSProperties, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  ArrowUpRight,
+  BookMarked,
+  Database,
+  Download,
+  Library,
+  Play,
+  Sparkles,
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useLibraryContext } from "../context/LibraryContext";
 import { novelService } from "../services/novelService";
 import { Novel } from "../types/novel";
+import defaultCoverImage from "../assets/cover.png";
 import "../styles/home.css";
+
+const formatCompact = (value: number) =>
+  new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(value);
 
 const Home: React.FC = () => {
   const navigate = useNavigate();
-  const {
-    activeLibrary,
-    libraries,
-    isLoading: librariesLoading,
-    selectLibrary,
-  } = useLibraryContext();
-  const [recentNovels, setRecentNovels] = useState<Novel[]>([]);
-  const [novelLoading, setNovelLoading] = useState(false);
-  const [novelError, setNovelError] = useState<string | null>(null);
+  const { activeLibrary, libraries, isLoading: librariesLoading, selectLibrary } = useLibraryContext();
+  const [novels, setNovels] = useState<Novel[]>([]);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    let isCancelled = false;
-
-    const fetchNovels = async () => {
+    let cancelled = false;
+    const load = async () => {
       if (!activeLibrary) {
-        setRecentNovels([]);
+        setNovels([]);
         return;
       }
-      setNovelLoading(true);
-      setNovelError(null);
+      setLoading(true);
       try {
         const data = await novelService.getAllNovels(activeLibrary.id, "");
-        if (isCancelled) return;
-        if (Array.isArray(data)) {
-          setRecentNovels(data.slice(0, 6));
-        } else {
-          setRecentNovels([]);
-        }
-      } catch (err) {
-        if (!isCancelled) {
-          console.error("Failed to load novels", err);
-          setNovelError("Unable to load recent activity");
-        }
+        if (!cancelled) setNovels(Array.isArray(data) ? data : []);
+      } catch (error) {
+        console.error("Failed to load dashboard novels", error);
+        if (!cancelled) setNovels([]);
       } finally {
-        if (!isCancelled) {
-          setNovelLoading(false);
-        }
+        if (!cancelled) setLoading(false);
       }
     };
-
-    fetchNovels();
-    return () => {
-      isCancelled = true;
-    };
+    load();
+    return () => { cancelled = true; };
   }, [activeLibrary?.id]);
 
-  const heroCover = useMemo(() => {
-    const coverCandidate = recentNovels.find((novel) => novel.img_url || novel.cover_image);
-    return coverCandidate?.img_url || coverCandidate?.cover_image || null;
-  }, [recentNovels]);
+  const recent = useMemo(
+    () => [...novels].sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at)).slice(0, 6),
+    [novels]
+  );
+  const totalWords = useMemo(() => novels.reduce((total, novel) => total + (novel.word_count || 0), 0), [novels]);
+  const totalChapters = useMemo(() => novels.reduce((total, novel) => total + (novel.chapter_count || 0), 0), [novels]);
+  const completed = useMemo(() => novels.filter((novel) => novel.status?.toLowerCase() === "complete").length, [novels]);
 
-  const handleQuickAction = (action: "library" | "add" | "manage") => {
-    if (action === "library" && activeLibrary) {
-      navigate(`/library/${activeLibrary.id}`);
-      return;
-    }
-    if (action === "add" && activeLibrary) {
-      window.dispatchEvent(
-        new CustomEvent("nexus:add-novel", {
-          detail: { libraryId: activeLibrary.id },
-        })
-      );
-      navigate(`/library/${activeLibrary.id}`);
-      return;
-    }
-    if (action === "manage") {
-      const section = document.getElementById("home-libraries");
-      section?.scrollIntoView({ behavior: "smooth" });
-    }
+  const goToLibrary = () => activeLibrary && navigate(`/library/${activeLibrary.id}`);
+  const addNovel = () => {
+    if (!activeLibrary) return;
+    window.dispatchEvent(new CustomEvent("nexus:add-novel", { detail: { libraryId: activeLibrary.id } }));
+    goToLibrary();
   };
 
-  const formatDate = (dateString: string) => {
-    try {
-      const date = new Date(dateString);
-      return new Intl.DateTimeFormat("en", {
-        month: "short",
-        day: "numeric",
-      }).format(date);
-    } catch {
-      return "";
-    }
-  };
-
-  const heroImageStyle: CSSProperties | undefined = heroCover
-    ? ({
-        ["--hero-cover" as const]: `url(${heroCover})`,
-      } as CSSProperties)
-    : undefined;
+  const metricCards = [
+    { label: "Total stories", value: formatCompact(novels.length), detail: activeLibrary ? activeLibrary.name : "No library selected", icon: Library, tone: "violet" },
+    { label: "Tracked chapters", value: formatCompact(totalChapters), detail: "Across your collection", icon: BookMarked, tone: "blue" },
+    { label: "Library words", value: formatCompact(totalWords), detail: "Across story metadata", icon: Download, tone: "amber" },
+    { label: "Completed", value: formatCompact(completed), detail: "Stories marked complete", icon: Sparkles, tone: "green" },
+  ];
 
   return (
-    <div className="home-grid">
-      <section className="home-hero" style={heroImageStyle}>
-        <div className="home-hero__content">
-          <p className="home-hero__eyebrow">
-            {activeLibrary ? "Active Library" : "Let's build your library"}
-          </p>
-          <h1>
-            {activeLibrary
-              ? activeLibrary.name
-              : "Collect every story in one space"}
-          </h1>
-          <p className="home-hero__summary">
-            Keep track of your novels, sync metadata, and continue where you left off.
-          </p>
-          <div className="home-hero__buttons">
-            <button
-              type="button"
-              className="home-hero__btn"
-              onClick={() => handleQuickAction("library")}
-              disabled={!activeLibrary}
-            >
-              Enter Library
-            </button>
-            <button
-              type="button"
-              className="home-hero__btn home-hero__btn--secondary"
-              onClick={() => handleQuickAction("add")}
-              disabled={!activeLibrary}
-            >
-              Add Novel
-            </button>
-          </div>
+    <div className="dashboard" aria-live="polite">
+      <header className="dashboard__header">
+        <div>
+          <p className="dashboard__eyebrow">Overview</p>
+          <h1>{activeLibrary ? activeLibrary.name : "Your story dashboard"}</h1>
+          <p>{activeLibrary ? "Your library at a glance." : "Select or create a library to begin collecting stories."}</p>
         </div>
+        <button type="button" className="dashboard__action" onClick={addNovel} disabled={!activeLibrary}>
+          <Download size={16} aria-hidden="true" /> Import story
+        </button>
+      </header>
+
+      <section className="dashboard__metrics" aria-label="Library statistics">
+        {metricCards.map(({ label, value, detail, icon: Icon, tone }) => (
+          <article className={`metric-card metric-card--${tone}`} key={label}>
+            <span className="metric-card__icon"><Icon size={20} aria-hidden="true" /></span>
+            <div>
+              <p>{label}</p>
+              <strong>{value}</strong>
+              <small>{detail}</small>
+            </div>
+          </article>
+        ))}
       </section>
 
-      <section className="home-actions">
-        <article className="home-action-card" onClick={() => handleQuickAction("library")}>
-          <h3>Jump back in</h3>
-          <p>Open the current library workspace.</p>
-        </article>
-        <article className="home-action-card" onClick={() => handleQuickAction("add")}>
-          <h3>Import a novel</h3>
-          <p>Paste a URL and start syncing chapters.</p>
-        </article>
-        <article className="home-action-card" onClick={() => handleQuickAction("manage")}>
-          <h3>Manage libraries</h3>
-          <p>Switch libraries or create a new collection.</p>
-        </article>
-      </section>
-
-      <section className="home-panel" aria-live="polite">
-        <header className="home-panel__header">
-          <div>
-            <p className="home-panel__eyebrow">Recent Activity</p>
-            <h2>Latest novels</h2>
-          </div>
-          {activeLibrary && (
-            <button
-              type="button"
-              className="home-panel__link"
-              onClick={() => navigate(`/library/${activeLibrary.id}`)}
-            >
-              View all
-            </button>
+      <section className="dashboard-grid">
+        <section className="dashboard-panel dashboard-panel--continue">
+          <header className="dashboard-panel__header">
+            <div><p>Continue reading</p><h2>Recently updated</h2></div>
+            {activeLibrary && <button type="button" onClick={goToLibrary}>View library <ArrowUpRight size={14} /></button>}
+          </header>
+          {loading && <p className="dashboard-panel__status">Refreshing library...</p>}
+          {!loading && recent.length === 0 && (
+            <div className="dashboard-empty"><BookMarked size={22} /><p>Your next story will appear here.</p><button type="button" onClick={addNovel} disabled={!activeLibrary}>Import a story</button></div>
           )}
-        </header>
-        <div className="home-panel__body">
-          {novelLoading && <p className="home-panel__status">Loading novels…</p>}
-          {novelError && <p className="home-panel__status is-error">{novelError}</p>}
-          {!novelLoading && !novelError && recentNovels.length === 0 && (
-            <p className="home-panel__status">Add a novel to see activity.</p>
-          )}
-          <ul className="home-activity-list">
-            {recentNovels.map((novel) => (
-              <li key={novel.id}>
-                <button
-                  type="button"
-                  className="home-activity-card"
-                  onClick={() =>
-                    navigate(`/library/${novel.library_id}/novels/${novel.id}`)
-                  }
-                >
-                  <div>
-                    <h3>{novel.title}</h3>
-                    <p>{novel.author || novel.novel_site || "Unknown author"}</p>
-                  </div>
-                  <span>{formatDate(novel.updated_at)}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </section>
-
-      <section className="home-panel" id="home-libraries">
-        <header className="home-panel__header">
-          <div>
-            <p className="home-panel__eyebrow">Libraries</p>
-            <h2>Your collections</h2>
-          </div>
-        </header>
-        <div className="home-panel__body">
-          {librariesLoading && <p className="home-panel__status">Loading libraries…</p>}
-          {!librariesLoading && libraries.length === 0 && (
-            <p className="home-panel__status">Create your first library to get started.</p>
-          )}
-          <div className="home-library-grid">
-            {libraries.map((library) => (
-              <button
-                key={library.id}
-                type="button"
-                className={`home-library-card ${
-                  activeLibrary?.id === library.id ? "is-active" : ""
-                }`}
-                onClick={() => selectLibrary(library.id)}
-              >
-                <div>
-                  <p className="home-library-card__eyebrow">Library</p>
-                  <h3>{library.name}</h3>
-                </div>
-                <p className="home-library-card__status">
-                  {activeLibrary?.id === library.id ? "Currently active" : "Set active"}
-                </p>
+          <div className="continue-grid">
+            {recent.map((novel) => (
+              <button key={novel.id} type="button" className="continue-card" onClick={() => navigate(`/library/${novel.library_id}/novels/${novel.id}`)}>
+                <img src={novel.img_url || novel.cover_image || defaultCoverImage} alt="" referrerPolicy="no-referrer" onError={(event) => { event.currentTarget.src = defaultCoverImage; }} />
+                <span className="continue-card__body">
+                  <span className="continue-card__source">{novel.novel_site || "Source"}</span>
+                  <strong>{novel.title}</strong>
+                  <small>{novel.author || "Unknown author"}</small>
+                  <span className="continue-card__progress"><i /><em>{novel.chapter_count || 0} chapters</em></span>
+                </span>
               </button>
             ))}
           </div>
+        </section>
+
+        <section className="dashboard-panel dashboard-panel--activity">
+          <header className="dashboard-panel__header"><div><p>Activity</p><h2>Library pulse</h2></div></header>
+          <div className="activity-list">
+            <div><span className="activity-list__icon"><Database size={16} /></span><p><strong>Metadata server</strong><small>Catalog search and source data are available.</small></p><b>Online</b></div>
+            <div><span className="activity-list__icon"><Download size={16} /></span><p><strong>Downloads</strong><small>Manage chapter transfers from one place.</small></p><button type="button" onClick={() => navigate("/downloads")}>Open</button></div>
+            <div><span className="activity-list__icon"><Play size={16} /></span><p><strong>Reading queue</strong><small>{recent.length ? `${recent.length} recent stories ready to open.` : "Add a story to start reading."}</small></p><button type="button" onClick={goToLibrary} disabled={!activeLibrary}>Open</button></div>
+          </div>
+        </section>
+      </section>
+
+      <section className="dashboard-panel dashboard-panel--libraries">
+        <header className="dashboard-panel__header"><div><p>Collections</p><h2>Libraries</h2></div></header>
+        {librariesLoading && <p className="dashboard-panel__status">Loading libraries...</p>}
+        <div className="library-strip">
+          {libraries.map((library) => (
+            <button key={library.id} type="button" className={activeLibrary?.id === library.id ? "library-strip__item is-active" : "library-strip__item"} onClick={() => selectLibrary(library.id)}>
+              <span>{library.name.slice(0, 1).toUpperCase()}</span><strong>{library.name}</strong><small>{activeLibrary?.id === library.id ? "Active library" : "Select library"}</small>
+            </button>
+          ))}
+          {!librariesLoading && libraries.length === 0 && <p className="dashboard-panel__status">No libraries yet.</p>}
         </div>
       </section>
     </div>

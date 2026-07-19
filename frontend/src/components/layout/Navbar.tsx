@@ -6,8 +6,10 @@ import {
   Download,
   Grid2X2,
   Library,
+  Menu,
   Plus,
   Search,
+  X,
 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import LibrarySwitcher from "./LibrarySwitcher";
@@ -30,6 +32,7 @@ const Navbar: React.FC<NavbarProps> = ({ onRequestCreateLibrary }) => {
   const { activeLibrary } = useLibraryContext();
   const { isAuthenticated, user, logout } = useAuth();
   const [query, setQuery] = useState("");
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const submitSearch = (event: React.FormEvent) => {
     event.preventDefault();
@@ -47,61 +50,82 @@ const Navbar: React.FC<NavbarProps> = ({ onRequestCreateLibrary }) => {
   };
 
   return (
-    <aside className="sidebar">
-      <Link to="/" className="sidebar__brand" aria-label="Nexus Novel dashboard">
-        <span className="sidebar__mark"><BookOpen size={20} strokeWidth={2.4} /></span>
-        <span>Nexus Novel</span>
-      </Link>
+    <>
+      <aside className="sidebar">
+        <Link to="/" className="sidebar__brand" aria-label="Nexus Novel dashboard">
+          <span className="sidebar__mark"><BookOpen size={20} strokeWidth={2.4} /></span>
+          <span>Nexus Novel</span>
+        </Link>
 
-      <form className="sidebar__search" onSubmit={submitSearch}>
-        <Search size={17} aria-hidden="true" />
-        <input
-          type="search"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search the metadata server"
-          aria-label="Search novels"
-        />
-      </form>
-
-      <nav className="sidebar__nav" aria-label="Primary navigation">
-        {navItems.map(({ label, to, icon: Icon, exact }) => (
-          <Link key={to} to={to} className={isActive(to, exact) ? "is-active" : ""}>
-            <Icon size={18} aria-hidden="true" />
-            {label}
-          </Link>
-        ))}
         <button
           type="button"
-          className={location.pathname.startsWith("/library") ? "is-active" : ""}
-          onClick={() => activeLibrary && navigate(`/library/${activeLibrary.id}`)}
-          disabled={!activeLibrary}
+          className="sidebar__mobile-toggle"
+          aria-label={mobileNavOpen ? "Close navigation" : "Open navigation"}
+          aria-expanded={mobileNavOpen}
+          onClick={() => setMobileNavOpen((open) => !open)}
         >
-          <Library size={18} aria-hidden="true" />
-          My library
+          {mobileNavOpen ? <X size={19} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
         </button>
-      </nav>
 
-      <div className="sidebar__library">
-        <p>ACTIVE LIBRARY</p>
-        <LibrarySwitcher onCreateLibrary={onRequestCreateLibrary} />
-      </div>
+        <nav className={mobileNavOpen ? "sidebar__nav is-mobile-open" : "sidebar__nav"} aria-label="Primary navigation" onClick={() => setMobileNavOpen(false)}>
+          {navItems.map(({ label, to, icon: Icon, exact }) => (
+            <Link key={to} to={to} className={isActive(to, exact) ? "is-active" : ""}>
+              <Icon size={18} aria-hidden="true" />
+              {label}
+            </Link>
+          ))}
+          <button
+            type="button"
+            className={location.pathname.startsWith("/library") ? "is-active" : ""}
+            onClick={() => activeLibrary && navigate(`/library/${activeLibrary.id}`)}
+            disabled={!activeLibrary}
+          >
+            <Library size={18} aria-hidden="true" />
+            My library
+          </button>
+        </nav>
 
-      <div className="sidebar__bottom">
-        <button type="button" className="sidebar__import" onClick={triggerAddNovel} disabled={!activeLibrary}>
-          <Plus size={18} aria-hidden="true" />
-          Add novel
-        </button>
-        <div className="sidebar__account">
-          <span className="sidebar__avatar">{(user?.username || "R").slice(0, 1).toUpperCase()}</span>
-          <div>
-            <strong>{isAuthenticated ? user?.username || "Reader" : "Local reader"}</strong>
-            {isAuthenticated && <button type="button" onClick={logout}>Sign out</button>}
-          </div>
-          <Bell size={17} aria-label="Notifications" />
+        <div className="sidebar__library">
+          <p>ACTIVE LIBRARY</p>
+          <LibrarySwitcher onCreateLibrary={onRequestCreateLibrary} />
         </div>
-      </div>
-    </aside>
+
+        <div className="sidebar__bottom">
+          <div className="sidebar__account">
+            <span className="sidebar__avatar">{(user?.username || "R").slice(0, 1).toUpperCase()}</span>
+            <div>
+              <strong>{isAuthenticated ? user?.username || "Reader" : "Local reader"}</strong>
+              {isAuthenticated && <button type="button" onClick={logout}>Sign out</button>}
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <header className="app-topbar">
+        <form className="app-topbar__search" onSubmit={submitSearch}>
+          <Search size={18} aria-hidden="true" />
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search stories, authors, tags, sources..."
+            aria-label="Search novels"
+          />
+          <kbd>⌘ K</kbd>
+        </form>
+        <div className="app-topbar__actions">
+          <button type="button" className="app-topbar__health">
+            <span /> Metadata server online
+          </button>
+          <button type="button" className="app-topbar__bell" title="Notifications" aria-label="Notifications">
+            <Bell size={18} aria-hidden="true" />
+          </button>
+          <button type="button" className="app-topbar__add" onClick={triggerAddNovel} disabled={!activeLibrary}>
+            <Plus size={17} aria-hidden="true" /> Add story
+          </button>
+        </div>
+      </header>
+    </>
   );
 };
 

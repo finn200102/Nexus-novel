@@ -1,31 +1,30 @@
 .layout-shell {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 240px minmax(0, 1fr);
+  grid-template-columns: 216px minmax(0, 1fr);
+  grid-template-rows: 68px minmax(0, 1fr);
   background: #0b0f16;
 }
 
-.layout-main { min-width: 0; padding: 28px 32px 48px; }
-.app-container { width: 100%; max-width: 1560px; margin: 0 auto; }
+.layout-main { min-width: 0; grid-column: 2; padding: 26px 30px 48px; }
+.app-container { width: 100%; max-width: 1680px; margin: 0 auto; }
 .app-content { min-width: 0; }
 
 .sidebar {
+  grid-row: 1 / -1;
   position: sticky;
   top: 0;
   height: 100vh;
   display: flex;
   flex-direction: column;
-  padding: 22px 14px 16px;
+  padding: 19px 12px 14px;
   background: #0e131c;
   border-right: 1px solid #202735;
 }
-.sidebar__brand { display: flex; align-items: center; gap: 10px; padding: 0 10px 24px; color: #f7f8fb; font-size: 18px; font-weight: 750; }
+.sidebar__brand { display: flex; align-items: center; gap: 10px; padding: 0 10px 31px; color: #f7f8fb; font-size: 18px; font-weight: 750; }
 .sidebar__mark { display: grid; place-items: center; width: 30px; height: 30px; background: #6d4aff; color: #fff; border-radius: 6px; }
-.sidebar__search { display: flex; align-items: center; gap: 8px; padding: 0 10px; height: 38px; border: 1px solid #2a3343; border-radius: 6px; color: #8d98aa; background: #111822; }
-.sidebar__search:focus-within { border-color: #7d63ff; box-shadow: 0 0 0 3px rgba(109, 74, 255, .16); }
-.sidebar__search input { min-width: 0; width: 100%; border: 0; outline: 0; color: #eef1f7; background: transparent; font-size: 12px; }
-.sidebar__search input::placeholder { color: #7d8797; }
-.sidebar__nav { display: grid; gap: 4px; margin-top: 26px; }
+.sidebar__mobile-toggle { display: none; }
+.sidebar__nav { display: grid; gap: 3px; }
 .sidebar__nav a, .sidebar__nav button { display: flex; align-items: center; width: 100%; gap: 11px; min-height: 39px; padding: 0 11px; color: #aeb7c5; text-align: left; border-radius: 5px; font-size: 13px; font-weight: 600; }
 .sidebar__nav a:hover, .sidebar__nav button:hover { color: #f7f8fb; background: #181f2b; }
 .sidebar__nav .is-active { color: #f7f8fb; background: #29234f; box-shadow: inset 0 0 0 1px #413781; }
@@ -35,28 +34,47 @@
 .sidebar .library-switcher__trigger { padding: 9px 10px; border-radius: 5px; background: #151c26; }
 .sidebar .library-switcher__subtitle { display: none; }
 .sidebar__bottom { margin-top: auto; display: grid; gap: 14px; }
-.sidebar__import { display: flex; align-items: center; justify-content: center; gap: 8px; height: 40px; border-radius: 5px; color: #fff; background: #6847ed; font-size: 13px; font-weight: 700; }
-.sidebar__import:hover { background: #795cff; }
-.sidebar__import:disabled { opacity: .45; cursor: not-allowed; }
+.sidebar__settings { display: grid; place-items: center; width: 36px; height: 36px; color: #aeb7c5; border: 1px solid #252f3d; border-radius: 5px; }
+.sidebar__settings:hover { color: #fff; background: #171f2a; }
 .sidebar__account { display: flex; align-items: center; gap: 9px; min-height: 43px; padding-top: 13px; border-top: 1px solid #222a37; color: #aab3c0; }
 .sidebar__avatar { display: grid; flex: 0 0 auto; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: #253149; color: #dfe5ef; font-size: 12px; font-weight: 800; }
 .sidebar__account > div { display: grid; min-width: 0; flex: 1; }
 .sidebar__account strong { overflow: hidden; color: #eef1f6; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar__account button { width: fit-content; color: #7e8999; font-size: 11px; }
 
+.app-topbar { grid-column: 2; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 0 30px; border-bottom: 1px solid #202735; background: #0d121a; }
+.app-topbar__search { display: flex; align-items: center; gap: 10px; width: min(475px, 48vw); height: 38px; padding: 0 10px 0 12px; color: #8490a2; background: #111822; border: 1px solid #293343; border-radius: 5px; }
+.app-topbar__search:focus-within { border-color: #7560df; box-shadow: 0 0 0 3px rgba(117, 96, 223, .12); }
+.app-topbar__search input { min-width: 0; flex: 1; border: 0; outline: 0; color: #eef1f6; background: transparent; font-size: 12px; }
+.app-topbar__search input::placeholder { color: #7c8796; }
+.app-topbar__search kbd { padding: 2px 5px; color: #94a0b1; background: #202937; border: 1px solid #344052; border-radius: 3px; font-family: inherit; font-size: 10px; }
+.app-topbar__actions { display: flex; align-items: center; gap: 12px; }
+.app-topbar__health { display: flex; align-items: center; gap: 7px; color: #a9b6c7; font-size: 11px; }
+.app-topbar__health span { width: 7px; height: 7px; border-radius: 50%; background: #41c781; box-shadow: 0 0 0 3px rgba(65,199,129,.1); }
+.app-topbar__bell { display: grid; place-items: center; width: 34px; height: 34px; color: #aeb8c5; border: 1px solid #293343; border-radius: 50%; }
+.app-topbar__bell:hover { color: #fff; border-color: #48576d; }
+.app-topbar__add { display: inline-flex; align-items: center; gap: 7px; height: 38px; padding: 0 13px; color: #fff; background: #6546db; border: 1px solid #7557ea; border-radius: 5px; font-size: 12px; font-weight: 700; }
+.app-topbar__add:hover { background: #7657ea; }
+.app-topbar__add:disabled { cursor: not-allowed; opacity: .45; }
+
 @media (max-width: 900px) {
   .layout-shell { display: block; }
-  .sidebar { position: static; height: auto; display: grid; grid-template-columns: auto minmax(150px, 1fr) auto; align-items: center; gap: 14px; padding: 12px 16px; border-right: 0; border-bottom: 1px solid #202735; }
+  .sidebar { position: relative; height: auto; display: grid; grid-template-columns: auto minmax(150px, 1fr) auto; align-items: center; gap: 14px; padding: 12px 16px; border-right: 0; border-bottom: 1px solid #202735; }
   .sidebar__brand { padding: 0; }
+  .sidebar__mobile-toggle { display: grid; grid-column: 3; place-items: center; width: 35px; height: 35px; color: #bcc6d3; border: 1px solid #293343; border-radius: 5px; }
   .sidebar__nav, .sidebar__library, .sidebar__account { display: none; }
-  .sidebar__search { width: 100%; }
+  .sidebar__nav.is-mobile-open { position: absolute; top: 100%; right: 0; left: 0; z-index: 20; display: grid; gap: 4px; padding: 10px 16px 14px; background: #0e131c; border-bottom: 1px solid #283342; box-shadow: 0 12px 22px rgba(0,0,0,.25); }
   .sidebar__bottom { margin: 0; }
+  .app-topbar { padding: 12px 16px; }
   .layout-main { padding: 20px 16px 36px; }
 }
 @media (max-width: 560px) {
   .sidebar { display: flex; flex-wrap: wrap; gap: 12px; padding: 14px 16px; }
   .sidebar__brand { flex: 1 1 auto; min-width: 0; font-size: 17px; }
   .sidebar__brand span:last-child { white-space: nowrap; }
+  .sidebar__mobile-toggle { flex: 0 0 auto; }
   .sidebar__bottom { display: none; }
-  .sidebar__search { flex: 1 0 100%; order: 2; }
+  .app-topbar { gap: 10px; }
+  .app-topbar__health, .app-topbar__bell, .app-topbar__search kbd { display: none; }
+  .app-topbar__search { width: auto; flex: 1; }
 }
