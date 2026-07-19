@@ -1,17 +1,16 @@
 /* src/index.css */
 :root {
-  /* Color Palette - Cyberpunk / Dark Glassmorphism */
-  --bg-base: #0a0a0f;
-  --bg-surface: #12121a;
-  --bg-glass: rgba(18, 18, 26, 0.65);
-  --bg-glass-hover: rgba(25, 25, 35, 0.8);
+  --bg-base: #0b0f16;
+  --bg-surface: #131923;
+  --bg-glass: #131923;
+  --bg-glass-hover: #191f2a;
   
   --text-main: #f3f3f8;
   --text-muted: #8b8b9c;
   
-  --accent-primary: #6366f1;
-  --accent-primary-hover: #4f46e5;
-  --accent-glow: rgba(99, 102, 241, 0.4);
+  --accent-primary: #7657f5;
+  --accent-primary-hover: #896eff;
+  --accent-glow: rgba(118, 87, 245, 0.24);
   
   --border-subtle: rgba(255, 255, 255, 0.08);
   --border-focus: rgba(99, 102, 241, 0.5);
@@ -29,8 +28,8 @@
   --shadow-glow: 0 0 20px var(--accent-glow);
   --blur-glass: blur(12px);
   --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 20px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
   --radius-full: 9999px;
   
   --transition-fast: 0.15s ease;
@@ -60,7 +59,7 @@ h1, h2, h3, h4, h5, h6 {
   font-weight: 700;
   line-height: 1.2;
   color: #ffffff;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
 }
 
 a {

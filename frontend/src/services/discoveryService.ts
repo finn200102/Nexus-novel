@@ -6,7 +6,8 @@ export const discoveryService = {
   async getNovelsBySite(
     site: string | null,
     limit: number = 20,
-    cursor: number | null = null
+    cursor: number | null = null,
+    title: string | null = null
   ): Promise<PaginatedResponse<DiscoveredNovel>> {
     try {
       const params: Record<string, string | number | null> = {
@@ -17,6 +18,9 @@ export const discoveryService = {
       }
       if (cursor) {
         params.cursor = cursor;
+      }
+      if (title?.trim()) {
+        params.title = title.trim();
       }
 
       const response = await apiClient.get<PaginatedResponse<DiscoveredNovel>>(

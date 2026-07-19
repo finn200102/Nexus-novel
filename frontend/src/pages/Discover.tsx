@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { Search } from "lucide-react";
 import { discoveryService } from "../services/discoveryService";
 import { useLibraryContext } from "../context/LibraryContext";
 import { useToast } from "../context/ToastContext";
@@ -34,6 +35,8 @@ const Discover: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [hasMore, setHasMore] = useState<boolean>(true);
+  const [search, setSearch] = useState("");
+  const searchFromUrl = new URLSearchParams(window.location.search).get("q") || "";
 
   const currentSite = site || "royalroad";
 
@@ -41,10 +44,11 @@ const Discover: React.FC = () => {
     setNovels([]);
     setCurrentPage(1);
     setHasMore(true);
-    fetchNovels(currentSite, 1);
-  }, [currentSite]);
+    setSearch(searchFromUrl);
+    fetchNovels(currentSite, 1, searchFromUrl);
+  }, [currentSite, searchFromUrl]);
 
-  const fetchNovels = async (siteValue: string, page: number) => {
+  const fetchNovels = async (siteValue: string, page: number, title = search) => {
     try {
       if (page === 1) {
         setLoading(true);
@@ -57,7 +61,8 @@ const Discover: React.FC = () => {
       const response = await discoveryService.getNovelsBySite(
         siteValue === "all" ? null : siteValue,
         ITEMS_PER_PAGE,
-        cursor
+        cursor,
+        title
       );
 
       console.log("Fetched novels:", response.data.slice(0, 3).map(n => ({ id: n.id, title: n.title?.slice(0, 30), img_url: n.img_url })));
@@ -85,6 +90,11 @@ const Discover: React.FC = () => {
     const nextPage = currentPage + 1;
     setCurrentPage(nextPage);
     fetchNovels(currentSite, nextPage);
+  };
+
+  const submitSearch = (event: React.FormEvent) => {
+    event.preventDefault();
+    navigate(`/discover/${currentSite}${search.trim() ? `?q=${encodeURIComponent(search.trim())}` : ""}`);
   };
 
   const handleAddToLibrary = async (novel: DiscoveredNovel) => {
@@ -167,33 +177,32 @@ const Discover: React.FC = () => {
 
   return (
     <div className="library-workspace">
-      <header className="library-workspace__header">
+      <header className="discover-hero">
         <div>
-          <p className="library-workspace__eyebrow">Discover</p>
-          <h1>Browse Novels</h1>
-          <p className="library-workspace__summary">
-            Explore novels from various sources and add them to your library.
+          <p className="discover-hero__eyebrow">Metadata catalog</p>
+          <h1>Find your next story</h1>
+          <p>
+            Search the Nexus metadata server, compare sources, and bring the stories you want into your library.
           </p>
         </div>
       </header>
 
-      <div className="library-controls">
-        <div className="library-select-group">
-          <label>
-            Source
-            <select
-              value={currentSite}
-              onChange={(e) => handleSiteChange(e.target.value)}
-            >
-              {SITE_OPTIONS.map((option) => (
-                <option value={option.value} key={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
+      <div className="discover-toolbar">
+        <form className="discover-toolbar__search" onSubmit={submitSearch}>
+          <Search size={19} aria-hidden="true" />
+          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by title" />
+        </form>
+        <div className="discover-source-tabs" role="tablist" aria-label="Novel source">
+          {SITE_OPTIONS.map((option) => (
+            <button key={option.value} type="button" role="tab" aria-selected={option.value === currentSite}
+              className={option.value === currentSite ? "is-active" : ""} onClick={() => handleSiteChange(option.value)}>
+              {option.label}
+            </button>
+          ))}
         </div>
       </div>
+
+      {!loading && !error && <p className="discover-result-count">{novels.length}{hasMore ? "+" : ""} results from {getSiteDisplayName(currentSite)}</p>}
 
       {error && (
         <div className="discover-error">
