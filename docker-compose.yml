@@ -1,0 +1,44 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: nexus_novel
+      POSTGRES_USER: nexus
+      POSTGRES_PASSWORD: ${NEXUS_NOVEL_DB_PASSWORD:-nexus}
+    volumes:
+      - nexus_novel_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nexus -d nexus_novel"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://nexus:${NEXUS_NOVEL_DB_PASSWORD:-nexus}@postgres:5432/nexus_novel
+      DOWNLOAD_PATH: /data/downloads
+      SECRET_KEY: ${NEXUS_NOVEL_SECRET_KEY:?Set NEXUS_NOVEL_SECRET_KEY in .env}
+      METADATA_SERVER_URL: ${METADATA_SERVER_URL:-http://host.docker.internal:8004}
+    volumes:
+      - nexus_novel_downloads:/data/downloads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "${NEXUS_NOVEL_PORT:-5173}:80"
+    depends_on:
+      - backend
+
+volumes:
+  nexus_novel_postgres:
+  nexus_novel_downloads:
