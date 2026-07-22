@@ -58,6 +58,17 @@ class NovelUpdate(BaseModel):
 
 class NovelFollowUpdate(BaseModel):
     follow_state: Literal["plan_to_read", "reading", "on_hold", "completed", "dropped", "ignored"]
+    download_policy: Literal["none", "next_chapter", "next_n"] = "none"
+    download_count: int = Field(default=0, ge=0, le=100)
+    notification_policy: Literal["immediate", "daily_digest", "weekly_digest", "after_n"] = "immediate"
+
+
+class NovelFollowSettings(BaseModel):
+    novel_id: int
+    follow_state: Literal["plan_to_read", "reading", "on_hold", "completed", "dropped", "ignored"]
+    download_policy: Literal["none", "next_chapter", "next_n"]
+    download_count: int
+    notification_policy: Literal["immediate", "daily_digest", "weekly_digest", "after_n"]
 
 
 class NovelUpdateEvent(BaseModel):

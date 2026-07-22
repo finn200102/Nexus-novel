@@ -198,12 +198,26 @@ def test_update_follow_state(client_with_auth, db):
 
     response = client_with_auth.patch(
         f"/novel/{novel.id}/follow?library_id={library.id}",
-        json={"follow_state": "on_hold"},
+        json={
+            "follow_state": "reading",
+            "download_policy": "next_n",
+            "download_count": 5,
+            "notification_policy": "daily_digest",
+        },
         headers=headers,
     )
 
     assert response.status_code == status.HTTP_200_OK
-    assert response.json()["follow_state"] == "on_hold"
+    assert response.json()["follow_state"] == "reading"
+
+    response = client_with_auth.get(
+        f"/novel/{novel.id}/follow?library_id={library.id}",
+        headers=headers,
+    )
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["download_policy"] == "next_n"
+    assert response.json()["download_count"] == 5
+    assert response.json()["notification_policy"] == "daily_digest"
 
 
 def test_update_events_are_user_scoped_and_markable(client_with_auth, db):

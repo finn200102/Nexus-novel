@@ -4,7 +4,13 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 from config.database import get_db
 from ..schemas.novel import Novel as NovelSchema
-from ..schemas.novel import NovelCreate, NovelFollowUpdate, NovelUpdate, NovelUpdateEvent as NovelUpdateEventSchema
+from ..schemas.novel import (
+    NovelCreate,
+    NovelFollowSettings,
+    NovelFollowUpdate,
+    NovelUpdate,
+    NovelUpdateEvent as NovelUpdateEventSchema,
+)
 from app.models.chapter import ContentStatus
 from app.models.user import User
 from app.models.novel import Novel
@@ -49,8 +55,8 @@ def get_or_create_follow(db: Session, user_id: int, novel: Novel) -> UserNovelFo
     follow = UserNovelFollow(
         user_id=user_id,
         novel_id=novel.id,
-        state=legacy_state,
-        followed_at=novel.followed_at,
+            state=legacy_state,
+            followed_at=novel.followed_at,
     )
     db.add(follow)
     db.flush()
@@ -67,6 +73,12 @@ def create_update_event(
 ) -> None:
     if not novel.library or not novel.library.user_id or not chapter_numbers:
         return
+    follow = get_or_create_follow(db, novel.library.user_id, novel)
+    download_plan = 0
+    if follow.download_policy == "next_chapter":
+        download_plan = min(1, len(chapter_numbers))
+    elif follow.download_policy == "next_n":
+        download_plan = min(follow.download_count, len(chapter_numbers))
     db.add(
         NovelUpdateEvent(
             user_id=novel.library.user_id,
@@ -76,7 +88,11 @@ def create_update_event(
             first_chapter_number=min(chapter_numbers),
             last_chapter_number=max(chapter_numbers),
             message=message,
-            details={"chapter_numbers": sorted(chapter_numbers)},
+            details={
+                "chapter_numbers": sorted(chapter_numbers),
+                "download_plan_count": download_plan,
+                "download_policy": follow.download_policy,
+            },
         )
     )
 
@@ -542,11 +558,36 @@ def update_follow_state(
     follow = get_or_create_follow(db, current_user.id, novel)
     follow.state = update.follow_state
     follow.followed_at = follow.followed_at or datetime.now(UTC)
+    follow.download_policy = update.download_policy
+    follow.download_count = update.download_count
+    follow.notification_policy = update.notification_policy
     novel.follow_state = update.follow_state
     novel.followed_at = follow.followed_at
     db.commit()
     db.refresh(novel)
     return novel
+
+
+@router.get("/{novel_id:int}/follow", response_model=NovelFollowSettings)
+def get_follow_settings(
+    novel_id: int,
+    library_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    check_library(db, library_id, current_user)
+    novel = novel_services.get_novel_by_id(db, novel_id)
+    if not novel or novel.library_id != library_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Novel not found")
+    follow = get_or_create_follow(db, current_user.id, novel)
+    db.commit()
+    return NovelFollowSettings(
+        novel_id=novel.id,
+        follow_state=follow.state,
+        download_policy=follow.download_policy,
+        download_count=follow.download_count,
+        notification_policy=follow.notification_policy,
+    )
 
 
 @router.get("/updates", response_model=list[NovelUpdateEventSchema])

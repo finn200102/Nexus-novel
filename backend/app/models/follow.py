@@ -16,6 +16,9 @@ class UserNovelFollow(BaseModel):
     novel_id = Column(Integer, ForeignKey("novels.id", ondelete="CASCADE"), nullable=False)
     state = Column(String(20), nullable=False, default="plan_to_read", server_default="plan_to_read")
     followed_at = Column(DateTime, nullable=True)
+    download_policy = Column(String(20), nullable=False, default="none", server_default="none")
+    download_count = Column(Integer, nullable=False, default=0, server_default="0")
+    notification_policy = Column(String(20), nullable=False, default="immediate", server_default="immediate")
 
     user = relationship("User")
     novel = relationship("Novel")

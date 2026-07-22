@@ -42,9 +42,21 @@ def ensure_runtime_schema(engine) -> None:
                 novel_id INTEGER NOT NULL REFERENCES novels(id) ON DELETE CASCADE,
                 state VARCHAR(20) NOT NULL DEFAULT 'plan_to_read',
                 followed_at TIMESTAMP NULL,
+                download_policy VARCHAR(20) NOT NULL DEFAULT 'none',
+                download_count INTEGER NOT NULL DEFAULT 0,
+                notification_policy VARCHAR(20) NOT NULL DEFAULT 'immediate',
                 CONSTRAINT uq_user_novel_follow UNIQUE (user_id, novel_id)
             )
         """))
+        follow_columns = {column["name"] for column in inspect(engine).get_columns("user_novel_follows")}
+        follow_additions = {
+            "download_policy": "VARCHAR(20) NOT NULL DEFAULT 'none'",
+            "download_count": "INTEGER NOT NULL DEFAULT 0",
+            "notification_policy": "VARCHAR(20) NOT NULL DEFAULT 'immediate'",
+        }
+        for name, definition in follow_additions.items():
+            if name not in follow_columns:
+                connection.execute(text(f"ALTER TABLE user_novel_follows ADD COLUMN {name} {definition}"))
         connection.execute(text("""
             CREATE TABLE IF NOT EXISTS novel_update_events (
                 id INTEGER PRIMARY KEY,
