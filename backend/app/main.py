@@ -139,3 +139,8 @@ async def general_exception_handler(request: Request, exc: Exception):
 @app.get("/")
 async def root():
     return {"message": "Welcome to Your API"}
+
+
+@app.get("/health")
+async def health():
+    return {"status": "healthy"}
