@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { chapterService } from "../services/chapterService";
 import { novelService } from "../services/novelService";
@@ -53,6 +53,7 @@ const Reader: React.FC = () => {
   const [chaptersError, setChaptersError] = useState<string | null>(null);
   const [fontScale, setFontScale] = useState(1);
   const [theme, setTheme] = useState<"night" | "dusk" | "paper">("night");
+  const contentRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -109,6 +110,30 @@ const Reader: React.FC = () => {
 
     fetchChapters();
   }, [novel_id]);
+
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content || !chapter) return;
+    let timeout: number | undefined;
+    const saveProgress = () => {
+      const maxScroll = Math.max(content.scrollHeight - content.clientHeight, 1);
+      const percent = Math.min(100, Math.max(0, (content.scrollTop / maxScroll) * 100));
+      window.clearTimeout(timeout);
+      timeout = window.setTimeout(() => {
+        chapterService.updateReadingProgress(
+          novel_id,
+          chapter.chapter_number,
+          Math.round(content.scrollTop),
+          percent
+        ).catch((err) => console.error("Failed to save reading progress", err));
+      }, 500);
+    };
+    content.addEventListener("scroll", saveProgress, { passive: true });
+    return () => {
+      content.removeEventListener("scroll", saveProgress);
+      window.clearTimeout(timeout);
+    };
+  }, [chapter, novel_id]);
 
   const goToChapter = (target: number) => {
     navigate(`/library/${library_id}/novels/${novel_id}/${target}`);
@@ -197,6 +222,7 @@ const Reader: React.FC = () => {
         </header>
 
         <div
+          ref={contentRef}
           className="reader-content"
           style={{ fontSize: `${1.05 * fontScale}rem` }}
         >

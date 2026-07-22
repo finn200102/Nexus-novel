@@ -190,3 +190,21 @@ def test_queue_chapter_downloads_persists_jobs(client, db, monkeypatch):
     response = client.get(f"/chapter/queue/{novel.id}", headers=headers)
     assert response.status_code == status.HTTP_200_OK
     assert len(response.json()) == 2
+
+
+def test_reading_progress_is_persisted_per_user(client, db):
+    novel, headers, _, _, _ = create_test_novel(db)
+    add_chapter(client, novel.id, headers)
+
+    response = client.put(
+        f"/chapter/progress/{novel.id}",
+        json={"chapter_number": 1, "position": 240, "percent": 37.5},
+        headers=headers,
+    )
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["position"] == 240
+    assert response.json()["percent"] == 37.5
+
+    response = client.get(f"/chapter/progress/{novel.id}", headers=headers)
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["chapter_number"] == 1

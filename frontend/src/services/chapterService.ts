@@ -66,6 +66,23 @@ export const chapterService = {
       throw error;
     }
   },
+  async getReadingProgress(novelId: number) {
+    const response = await apiClient.get(`/chapter/progress/${novelId}`);
+    return response.data;
+  },
+  async updateReadingProgress(
+    novelId: number,
+    chapterNumber: number,
+    position: number,
+    percent: number
+  ) {
+    const response = await apiClient.put(`/chapter/progress/${novelId}`, {
+      chapter_number: chapterNumber,
+      position,
+      percent,
+    });
+    return response.data;
+  },
 
   async deleteChapterById(chapterId: number) {
     try {

@@ -4,7 +4,7 @@ from config.database import SessionLocal as SessionFactory
 from config.database import get_db
 from app.models.user import User
 from ..schemas.chapter import Chapter as ChapterSchema
-from ..schemas.chapter import ChapterCreate, ChapterUpdate, ChapterContent, ChapterDownloadJob as ChapterDownloadJobSchema, ChapterDownloadQueueRequest
+from ..schemas.chapter import ChapterCreate, ChapterUpdate, ChapterContent, ChapterDownloadJob as ChapterDownloadJobSchema, ChapterDownloadQueueRequest, ReadingProgressResponse, ReadingProgressUpdate
 from app.models.chapter import Chapter
 from app.models.novel import Novel
 import app.services.chapter_services as chapter_services
@@ -13,6 +13,7 @@ import app.services.novel_services as novel_services
 from app.auth.dependencies import get_current_user
 from app.models.chapter import ContentStatus
 from app.models.download_job import ChapterDownloadJob
+from app.models.reading_progress import ReadingProgress
 
 from pathlib import Path
 import os
@@ -605,6 +606,53 @@ def get_chapter_download_queue(
         .limit(100)
         .all()
     )
+
+
+@router.get("/progress/{novel_id:int}", response_model=ReadingProgressResponse | None)
+def get_reading_progress(
+    novel_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    novel = novel_services.get_novel_by_id(db, novel_id)
+    if not novel or novel.library_id not in [library.id for library in current_user.libraries]:
+        raise HTTPException(status_code=404, detail="Novel not found")
+    return db.query(ReadingProgress).filter(
+        ReadingProgress.user_id == current_user.id,
+        ReadingProgress.novel_id == novel_id,
+    ).first()
+
+
+@router.put("/progress/{novel_id:int}", response_model=ReadingProgressResponse)
+def update_reading_progress(
+    novel_id: int,
+    update: ReadingProgressUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    novel = novel_services.get_novel_by_id(db, novel_id)
+    if not novel or novel.library_id not in [library.id for library in current_user.libraries]:
+        raise HTTPException(status_code=404, detail="Novel not found")
+    chapter = db.query(Chapter).filter(
+        Chapter.novel_id == novel_id,
+        Chapter.chapter_number == update.chapter_number,
+    ).first()
+    if not chapter:
+        raise HTTPException(status_code=404, detail="Chapter not found")
+    progress = db.query(ReadingProgress).filter(
+        ReadingProgress.user_id == current_user.id,
+        ReadingProgress.novel_id == novel_id,
+    ).first()
+    if not progress:
+        progress = ReadingProgress(user_id=current_user.id, novel_id=novel_id)
+        db.add(progress)
+    progress.chapter_id = chapter.id
+    progress.chapter_number = update.chapter_number
+    progress.position = max(update.position, 0)
+    progress.percent = min(max(update.percent, 0), 100)
+    db.commit()
+    db.refresh(progress)
+    return progress
 
 
 @router.get("/{novel_id:int}", response_model=list[ChapterSchema])

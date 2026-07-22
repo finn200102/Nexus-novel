@@ -87,3 +87,17 @@ def ensure_runtime_schema(engine) -> None:
                 error TEXT NULL
             )
         """))
+        connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS reading_progress (
+                id INTEGER PRIMARY KEY,
+                created_at TIMESTAMP,
+                updated_at TIMESTAMP,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                novel_id INTEGER NOT NULL REFERENCES novels(id) ON DELETE CASCADE,
+                chapter_id INTEGER NULL REFERENCES chapters(id) ON DELETE SET NULL,
+                chapter_number INTEGER NULL,
+                position INTEGER NOT NULL DEFAULT 0,
+                percent FLOAT NOT NULL DEFAULT 0,
+                CONSTRAINT uq_user_novel_progress UNIQUE (user_id, novel_id)
+            )
+        """))

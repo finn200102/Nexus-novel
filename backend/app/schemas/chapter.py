@@ -75,3 +75,19 @@ class ChapterDownloadJob(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ReadingProgressUpdate(BaseModel):
+    chapter_number: int
+    position: int = 0
+    percent: float = 0
+
+
+class ReadingProgressResponse(BaseModel):
+    novel_id: int
+    chapter_number: Optional[int] = None
+    position: int
+    percent: float
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
