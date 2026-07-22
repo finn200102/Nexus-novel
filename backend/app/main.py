@@ -37,7 +37,12 @@ logger = get_logger(__name__)
 
 app = FastAPI(title="Your API", description="API description", version="0.1.0")
 
-origins = ["http://localhost", "http://localhost:3000", "http://localhost:5173"]
+origins = [
+    "http://localhost",
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
 
 app.add_middleware(
     CORSMiddleware,

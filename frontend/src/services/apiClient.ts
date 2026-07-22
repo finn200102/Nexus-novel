@@ -2,7 +2,9 @@
 import axios from "axios";
 
 const apiClient = axios.create({
-  baseURL: "/api",
+  // The direct dev URL also works when the Vite and API processes run in
+  // separate local sessions. Production continues to use the reverse proxy.
+  baseURL: import.meta.env.VITE_API_URL || (import.meta.env.DEV ? "http://127.0.0.1:8000" : "/api"),
 });
 
 // Request interceptor to add the token to every request

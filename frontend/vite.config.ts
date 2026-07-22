@@ -12,7 +12,7 @@ export default defineConfig(({ mode }) => {
       port: parseInt(env.VITE_FRONTEND_PORT || "5173", 10),
       proxy: {
         "/api": {
-          target: env.VITE_BACKEND_URL || "http://localhost:8000",
+          target: env.VITE_BACKEND_URL || "http://127.0.0.1:8000",
           changeOrigin: true,
           secure: false,
           rewrite: (path) => path.replace(/^\/api/, ""),
