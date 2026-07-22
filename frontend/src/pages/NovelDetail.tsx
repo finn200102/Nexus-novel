@@ -102,13 +102,13 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
     }
   };
 
-  const updateFollowState = async (followState: "following" | "muted" | "unfollowed") => {
+  const updateFollowState = async (followState: "plan_to_read" | "reading" | "on_hold" | "completed" | "dropped" | "ignored") => {
     try {
       setUpdatingFollow(true);
       const updatedNovel = await novelService.updateFollowState(libraryId, novelId, followState);
       setNovel(updatedNovel);
       addToast(
-        followState === "following" ? "Following source updates" : followState === "muted" ? "Following is muted" : "No longer following this story",
+        followState === "reading" ? "Story marked as reading" : `Story marked as ${followState.replace(/_/g, " ")}`,
         "success"
       );
     } catch (err) {
@@ -193,12 +193,15 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
                   <select
                     value={novel.follow_state}
                     disabled={updatingFollow}
-                    onChange={(event) => updateFollowState(event.target.value as "following" | "muted" | "unfollowed")}
+                    onChange={(event) => updateFollowState(event.target.value as "plan_to_read" | "reading" | "on_hold" | "completed" | "dropped" | "ignored")}
                     aria-label="Follow state"
                   >
-                    <option value="following">Following updates</option>
-                    <option value="muted">Muted</option>
-                    <option value="unfollowed">Not following</option>
+                    <option value="plan_to_read">Plan to read</option>
+                    <option value="reading">Reading</option>
+                    <option value="on_hold">On hold</option>
+                    <option value="completed">Completed</option>
+                    <option value="dropped">Dropped</option>
+                    <option value="ignored">Ignored</option>
                   </select>
                 </label>
                 <button

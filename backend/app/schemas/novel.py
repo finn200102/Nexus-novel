@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Literal, Optional
 from datetime import datetime
 
@@ -36,7 +36,7 @@ class Novel(BaseModel):
     analysis_type: Optional[str] = None
     analyzed_chapter_count: Optional[int] = None
     parsed_at: Optional[datetime] = None
-    follow_state: Literal["following", "muted", "unfollowed"] = "following"
+    follow_state: Literal["plan_to_read", "reading", "on_hold", "completed", "dropped", "ignored"] = "plan_to_read"
     followed_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
@@ -57,4 +57,19 @@ class NovelUpdate(BaseModel):
 
 
 class NovelFollowUpdate(BaseModel):
-    follow_state: Literal["following", "muted", "unfollowed"]
+    follow_state: Literal["plan_to_read", "reading", "on_hold", "completed", "dropped", "ignored"]
+
+
+class NovelUpdateEvent(BaseModel):
+    id: int
+    novel_id: int
+    event_type: str
+    chapter_count: int
+    first_chapter_number: Optional[int] = None
+    last_chapter_number: Optional[int] = None
+    message: str
+    details: dict = Field(default_factory=dict)
+    created_at: datetime
+    read_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)

@@ -198,9 +198,46 @@ def test_update_follow_state(client_with_auth, db):
 
     response = client_with_auth.patch(
         f"/novel/{novel.id}/follow?library_id={library.id}",
-        json={"follow_state": "muted"},
+        json={"follow_state": "on_hold"},
         headers=headers,
     )
 
     assert response.status_code == status.HTTP_200_OK
-    assert response.json()["follow_state"] == "muted"
+    assert response.json()["follow_state"] == "on_hold"
+
+
+def test_update_events_are_user_scoped_and_markable(client_with_auth, db):
+    response, headers, _, url, library = add_novel_resources(client_with_auth, db)
+    assert response.status_code == status.HTTP_201_CREATED
+    novel = get_novel_by_url(db, url).first()
+    assert novel is not None
+
+    from app.models.update_event import NovelUpdateEvent
+
+    event = NovelUpdateEvent(
+        user_id=library.user_id,
+        novel_id=novel.id,
+        event_type="new_chapters",
+        chapter_count=2,
+        first_chapter_number=11,
+        last_chapter_number=12,
+        message="2 new chapter(s) available",
+        details={"chapter_numbers": [11, 12]},
+    )
+    db.add(event)
+    db.commit()
+    db.refresh(event)
+
+    response = client_with_auth.get(
+        f"/novel/updates?library_id={library.id}&unread_only=true",
+        headers=headers,
+    )
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()[0]["id"] == event.id
+
+    response = client_with_auth.post(
+        f"/novel/updates/{event.id}/read",
+        headers=headers,
+    )
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["read_at"] is not None

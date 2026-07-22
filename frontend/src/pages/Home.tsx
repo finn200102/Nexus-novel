@@ -4,6 +4,7 @@ import {
   BookMarked,
   Database,
   Download,
+  Bell,
   Library,
   Play,
   Sparkles,
@@ -11,7 +12,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { useLibraryContext } from "../context/LibraryContext";
 import { novelService } from "../services/novelService";
-import { Novel } from "../types/novel";
+import { Novel, NovelUpdateEvent } from "../types/novel";
 import defaultCoverImage from "../assets/cover.png";
 import "../styles/home.css";
 
@@ -22,6 +23,7 @@ const Home: React.FC = () => {
   const navigate = useNavigate();
   const { activeLibrary, libraries, isLoading: librariesLoading, selectLibrary } = useLibraryContext();
   const [novels, setNovels] = useState<Novel[]>([]);
+  const [updates, setUpdates] = useState<NovelUpdateEvent[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -33,8 +35,14 @@ const Home: React.FC = () => {
       }
       setLoading(true);
       try {
-        const data = await novelService.getAllNovels(activeLibrary.id, "");
-        if (!cancelled) setNovels(Array.isArray(data) ? data : []);
+        const [data, updateData] = await Promise.all([
+          novelService.getAllNovels(activeLibrary.id, ""),
+          novelService.getUpdateEvents(activeLibrary.id, true),
+        ]);
+        if (!cancelled) {
+          setNovels(Array.isArray(data) ? data : []);
+          setUpdates(Array.isArray(updateData) ? updateData : []);
+        }
       } catch (error) {
         console.error("Failed to load dashboard novels", error);
         if (!cancelled) setNovels([]);
@@ -125,6 +133,20 @@ const Home: React.FC = () => {
             <div><span className="activity-list__icon"><Database size={16} /></span><p><strong>Metadata server</strong><small>Catalog search and source data are available.</small></p><b>Online</b></div>
             <div><span className="activity-list__icon"><Download size={16} /></span><p><strong>Downloads</strong><small>Manage chapter transfers from one place.</small></p><button type="button" onClick={() => navigate("/downloads")}>Open</button></div>
             <div><span className="activity-list__icon"><Play size={16} /></span><p><strong>Reading queue</strong><small>{recent.length ? `${recent.length} recent stories ready to open.` : "Add a story to start reading."}</small></p><button type="button" onClick={goToLibrary} disabled={!activeLibrary}>Open</button></div>
+          </div>
+        </section>
+
+        <section className="dashboard-panel dashboard-panel--activity">
+          <header className="dashboard-panel__header"><div><p>Updates</p><h2>New chapters</h2></div><Bell size={18} aria-hidden="true" /></header>
+          <div className="activity-list">
+            {updates.length === 0 && <p className="dashboard-panel__status">No unread story updates.</p>}
+            {updates.slice(0, 5).map((update) => (
+              <div key={update.id}>
+                <span className="activity-list__icon"><BookMarked size={16} /></span>
+                <p><strong>{update.message}</strong><small>Chapters {update.first_chapter_number}–{update.last_chapter_number}</small></p>
+                <button type="button" onClick={() => navigate(`/library/${activeLibrary?.id}/novels/${update.novel_id}`)}>Open</button>
+              </div>
+            ))}
           </div>
         </section>
       </section>

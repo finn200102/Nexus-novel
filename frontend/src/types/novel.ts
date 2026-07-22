@@ -31,7 +31,7 @@ export interface Novel {
   updated_at: string;
   scrape_status?: "pending" | "completed" | "failed";
   scrape_error?: string | null;
-  follow_state: "following" | "muted" | "unfollowed";
+  follow_state: "plan_to_read" | "reading" | "on_hold" | "completed" | "dropped" | "ignored";
   followed_at: string | null;
 }
 
@@ -51,4 +51,17 @@ export interface NovelListItem {
   rating: number | null;
   img_url: string | null;
   created_at: string;
+}
+
+export interface NovelUpdateEvent {
+  id: number;
+  novel_id: number;
+  event_type: string;
+  chapter_count: number;
+  first_chapter_number: number | null;
+  last_chapter_number: number | null;
+  message: string;
+  details: Record<string, unknown>;
+  created_at: string;
+  read_at: string | null;
 }

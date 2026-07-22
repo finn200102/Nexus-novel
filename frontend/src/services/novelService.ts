@@ -1,6 +1,6 @@
 import apiClient from "./apiClient";
 import axios from "axios";
-import type { Novel } from "../types/novel";
+import type { Novel, NovelUpdateEvent } from "../types/novel";
 
 interface CreateNovelSchema {
   url: string;
@@ -136,7 +136,7 @@ export const novelService = {
   async updateFollowState(
     libraryId: number,
     novelId: number,
-    followState: "following" | "muted" | "unfollowed"
+    followState: "plan_to_read" | "reading" | "on_hold" | "completed" | "dropped" | "ignored"
   ): Promise<Novel> {
     const response = await apiClient.patch(
       `/novel/${novelId}/follow?library_id=${libraryId}`,
@@ -145,6 +145,16 @@ export const novelService = {
       }
     );
     return response.data as Novel;
+  },
+  async getUpdateEvents(libraryId: number, unreadOnly = false): Promise<NovelUpdateEvent[]> {
+    const response = await apiClient.get(
+      `/novel/updates?library_id=${libraryId}&unread_only=${unreadOnly}`
+    );
+    return response.data as NovelUpdateEvent[];
+  },
+  async markUpdateEventRead(eventId: number): Promise<NovelUpdateEvent> {
+    const response = await apiClient.post(`/novel/updates/${eventId}/read`);
+    return response.data as NovelUpdateEvent;
   },
   async deleteNovelsByIds(libraryId: number, novelIds: number[]) {
     try {

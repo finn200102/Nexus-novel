@@ -1,14 +1,17 @@
 from fastapi import APIRouter, Depends, status, HTTPException, BackgroundTasks
 import httpx
+from sqlalchemy import desc
 from sqlalchemy.orm import Session
 from config.database import get_db
 from ..schemas.novel import Novel as NovelSchema
-from ..schemas.novel import NovelCreate, NovelFollowUpdate, NovelUpdate
+from ..schemas.novel import NovelCreate, NovelFollowUpdate, NovelUpdate, NovelUpdateEvent as NovelUpdateEventSchema
 from app.models.chapter import ContentStatus
 from app.models.user import User
 from app.models.novel import Novel
 from app.models.chapter import Chapter
 from app.models.library import Library
+from app.models.follow import UserNovelFollow
+from app.models.update_event import NovelUpdateEvent
 import app.services.novel_services as novel_services
 from app.services.author_services import create_author, get_author_by_name
 from app.services.chapter_services import (
@@ -27,7 +30,55 @@ import shutil
 logger = get_logger(__name__)
 
 import asyncio
-from datetime import datetime
+from datetime import UTC, datetime
+
+
+FOLLOW_STATES = {"plan_to_read", "reading", "on_hold", "completed", "dropped", "ignored"}
+
+
+def get_or_create_follow(db: Session, user_id: int, novel: Novel) -> UserNovelFollow:
+    follow = (
+        db.query(UserNovelFollow)
+        .filter(UserNovelFollow.user_id == user_id, UserNovelFollow.novel_id == novel.id)
+        .first()
+    )
+    if follow:
+        return follow
+
+    legacy_state = novel.follow_state if novel.follow_state in FOLLOW_STATES else "plan_to_read"
+    follow = UserNovelFollow(
+        user_id=user_id,
+        novel_id=novel.id,
+        state=legacy_state,
+        followed_at=novel.followed_at,
+    )
+    db.add(follow)
+    db.flush()
+    return follow
+
+
+def create_update_event(
+    db: Session,
+    novel: Novel,
+    *,
+    event_type: str,
+    chapter_numbers: list[int],
+    message: str,
+) -> None:
+    if not novel.library or not novel.library.user_id or not chapter_numbers:
+        return
+    db.add(
+        NovelUpdateEvent(
+            user_id=novel.library.user_id,
+            novel_id=novel.id,
+            event_type=event_type,
+            chapter_count=len(chapter_numbers),
+            first_chapter_number=min(chapter_numbers),
+            last_chapter_number=max(chapter_numbers),
+            message=message,
+            details={"chapter_numbers": sorted(chapter_numbers)},
+        )
+    )
 
 
 def scrape_novel_background(
@@ -330,10 +381,12 @@ async def refresh_novel_metadata(
     existing_chapter_numbers = {
         ch.chapter_number for ch in get_chapters_by_novel_id(db, novel_id).all()
     }
+    new_chapter_numbers = []
 
     for chapter_meta in chapters_data:
         chapter_num = chapter_meta.get("chapter_number")
         if chapter_num not in existing_chapter_numbers:
+            new_chapter_numbers.append(chapter_num)
             chapter_data = {
                 "novel_id": novel_id,
                 "chapter_number": chapter_num,
@@ -343,6 +396,15 @@ async def refresh_novel_metadata(
                 "content_status": ContentStatus.MISSING,
             }
             create_chapter(db, chapter_data)
+
+    create_update_event(
+        db,
+        novel,
+        event_type="new_chapters",
+        chapter_numbers=new_chapter_numbers,
+        message=f"{len(new_chapter_numbers)} new chapter(s) available",
+    )
+    db.commit()
 
     metadata_client.invalidate_novel_cache(novel.metadata_id)
 
@@ -477,13 +539,55 @@ def update_follow_state(
     if not novel or novel.library_id != library_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Novel not found")
 
-    novel_data = {"follow_state": update.follow_state}
-    if update.follow_state == "following" and novel.follow_state != "following":
-        novel_data["followed_at"] = datetime.utcnow()
-    elif update.follow_state == "unfollowed":
-        novel_data["followed_at"] = None
+    follow = get_or_create_follow(db, current_user.id, novel)
+    follow.state = update.follow_state
+    follow.followed_at = follow.followed_at or datetime.now(UTC)
+    novel.follow_state = update.follow_state
+    novel.followed_at = follow.followed_at
+    db.commit()
+    db.refresh(novel)
+    return novel
 
-    return novel_services.update_novel(db, novel_id, novel_data)
+
+@router.get("/updates", response_model=list[NovelUpdateEventSchema])
+def get_update_events(
+    library_id: int,
+    unread_only: bool = False,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    check_library(db, library_id, current_user)
+    query = (
+        db.query(NovelUpdateEvent)
+        .join(Novel, Novel.id == NovelUpdateEvent.novel_id)
+        .filter(
+            NovelUpdateEvent.user_id == current_user.id,
+            Novel.library_id == library_id,
+        )
+    )
+    if unread_only:
+        query = query.filter(NovelUpdateEvent.read_at.is_(None))
+    return query.order_by(desc(NovelUpdateEvent.created_at)).limit(min(max(limit, 1), 100)).all()
+
+
+@router.post("/updates/{event_id:int}/read", response_model=NovelUpdateEventSchema)
+def mark_update_event_read(
+    event_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    event = (
+        db.query(NovelUpdateEvent)
+        .filter(NovelUpdateEvent.id == event_id, NovelUpdateEvent.user_id == current_user.id)
+        .first()
+    )
+    if not event:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Update event not found")
+    event.read_at = datetime.now(UTC)
+    db.commit()
+    db.refresh(event)
+    return event
 
 
 @router.get("/", response_model=list[NovelSchema])

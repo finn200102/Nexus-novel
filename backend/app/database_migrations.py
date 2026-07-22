@@ -21,3 +21,43 @@ def ensure_runtime_schema(engine) -> None:
         for name, definition in additions.items():
             if name not in existing_columns:
                 connection.execute(text(f"ALTER TABLE novels ADD COLUMN {name} {definition}"))
+
+        connection.execute(text("""
+            UPDATE novels
+            SET follow_state = CASE follow_state
+                WHEN 'following' THEN 'plan_to_read'
+                WHEN 'muted' THEN 'on_hold'
+                WHEN 'unfollowed' THEN 'ignored'
+                ELSE follow_state
+            END
+            WHERE follow_state IN ('following', 'muted', 'unfollowed')
+        """))
+
+        connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS user_novel_follows (
+                id INTEGER PRIMARY KEY,
+                created_at TIMESTAMP,
+                updated_at TIMESTAMP,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                novel_id INTEGER NOT NULL REFERENCES novels(id) ON DELETE CASCADE,
+                state VARCHAR(20) NOT NULL DEFAULT 'plan_to_read',
+                followed_at TIMESTAMP NULL,
+                CONSTRAINT uq_user_novel_follow UNIQUE (user_id, novel_id)
+            )
+        """))
+        connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS novel_update_events (
+                id INTEGER PRIMARY KEY,
+                created_at TIMESTAMP,
+                updated_at TIMESTAMP,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                novel_id INTEGER NOT NULL REFERENCES novels(id) ON DELETE CASCADE,
+                event_type VARCHAR(40) NOT NULL,
+                chapter_count INTEGER NOT NULL DEFAULT 0,
+                first_chapter_number INTEGER NULL,
+                last_chapter_number INTEGER NULL,
+                message TEXT NOT NULL DEFAULT '',
+                details JSON NOT NULL DEFAULT '{}',
+                read_at TIMESTAMP NULL
+            )
+        """))
