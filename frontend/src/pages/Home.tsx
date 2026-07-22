@@ -64,7 +64,10 @@ const Home: React.FC = () => {
 
   const goToLibrary = () => activeLibrary && navigate(`/library/${activeLibrary.id}`);
   const addNovel = () => {
-    if (!activeLibrary) return;
+    if (!activeLibrary) {
+      window.dispatchEvent(new CustomEvent("nexus:create-library"));
+      return;
+    }
     window.dispatchEvent(new CustomEvent("nexus:add-novel", { detail: { libraryId: activeLibrary.id } }));
     goToLibrary();
   };
@@ -84,8 +87,8 @@ const Home: React.FC = () => {
           <h1>{activeLibrary ? activeLibrary.name : "Your story dashboard"}</h1>
           <p>{activeLibrary ? "Your library at a glance." : "Select or create a library to begin collecting stories."}</p>
         </div>
-        <button type="button" className="dashboard__action" onClick={addNovel} disabled={!activeLibrary}>
-          <Download size={16} aria-hidden="true" /> Import story
+        <button type="button" className="dashboard__action" onClick={addNovel}>
+          <Download size={16} aria-hidden="true" /> {activeLibrary ? "Import story" : "Create a library"}
         </button>
       </header>
 
@@ -110,7 +113,7 @@ const Home: React.FC = () => {
           </header>
           {loading && <p className="dashboard-panel__status">Refreshing library...</p>}
           {!loading && recent.length === 0 && (
-            <div className="dashboard-empty"><BookMarked size={22} /><p>Your next story will appear here.</p><button type="button" onClick={addNovel} disabled={!activeLibrary}>Import a story</button></div>
+            <div className="dashboard-empty"><BookMarked size={22} /><p>Your next story will appear here.</p><button type="button" onClick={addNovel}>{activeLibrary ? "Import a story" : "Create a library"}</button></div>
           )}
           <div className="continue-grid">
             {recent.map((novel) => (

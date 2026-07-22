@@ -1,7 +1,7 @@
 import React, { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import { authService } from "../../services/authService";
+import { useAuth } from "../../context/AuthContext";
 import "../../styles/auth-styles.css";
 
 interface FormData {
@@ -18,11 +18,10 @@ const LoginForm: React.FC = () => {
   const [submitStatus, setSubmitStatus] = useState<"success" | "error" | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>("");
   const navigate = useNavigate();
+  const { login } = useAuth();
 
   useEffect(() => {
-    if (authService.isAuthenticated()) {
-      navigate("/");
-    }
+    // The protected route redirects authenticated users away from this page.
   }, [navigate]);
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -32,7 +31,7 @@ const LoginForm: React.FC = () => {
     setErrorMessage("");
 
     try {
-      await authService.login(formData);
+      await login(formData.username, formData.password);
       setSubmitStatus("success");
       setFormData({ username: "", password: "" });
       navigate("/");

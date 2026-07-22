@@ -44,7 +44,10 @@ const Navbar: React.FC<NavbarProps> = ({ onRequestCreateLibrary }) => {
     exact ? location.pathname === to : location.pathname.startsWith(to);
 
   const triggerAddNovel = () => {
-    if (!activeLibrary) return;
+    if (!activeLibrary) {
+      onRequestCreateLibrary?.();
+      return;
+    }
     window.dispatchEvent(new CustomEvent("nexus:add-novel", { detail: { libraryId: activeLibrary.id } }));
     navigate(`/library/${activeLibrary.id}`);
   };
@@ -77,8 +80,7 @@ const Navbar: React.FC<NavbarProps> = ({ onRequestCreateLibrary }) => {
           <button
             type="button"
             className={location.pathname.startsWith("/library") ? "is-active" : ""}
-            onClick={() => activeLibrary && navigate(`/library/${activeLibrary.id}`)}
-            disabled={!activeLibrary}
+            onClick={() => activeLibrary ? navigate(`/library/${activeLibrary.id}`) : onRequestCreateLibrary?.()}
           >
             <Library size={18} aria-hidden="true" />
             My library
@@ -120,7 +122,7 @@ const Navbar: React.FC<NavbarProps> = ({ onRequestCreateLibrary }) => {
           <button type="button" className="app-topbar__bell" title="Notifications" aria-label="Notifications">
             <Bell size={18} aria-hidden="true" />
           </button>
-          <button type="button" className="app-topbar__add" onClick={triggerAddNovel} disabled={!activeLibrary}>
+          <button type="button" className="app-topbar__add" onClick={triggerAddNovel}>
             <Plus size={17} aria-hidden="true" /> Add story
           </button>
         </div>

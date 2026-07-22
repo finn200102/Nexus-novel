@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Navbar from "./Navbar";
 import CreateLibraryModal from "../library/CreateLibraryModal";
 
@@ -8,6 +8,12 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [showLibraryModal, setShowLibraryModal] = useState(false);
+
+  useEffect(() => {
+    const handler = () => setShowLibraryModal(true);
+    window.addEventListener("nexus:create-library", handler);
+    return () => window.removeEventListener("nexus:create-library", handler);
+  }, []);
 
   return (
     <div className="layout-shell">

@@ -1,10 +1,12 @@
 import React from "react";
 import {
   BrowserRouter as Router,
+  Navigate,
   Routes,
   Route,
   useParams,
 } from "react-router-dom";
+import { ReactNode } from "react";
 import Layout from "./components/layout/Layout";
 import Home from "./pages/Home";
 import Signup from "./pages/Signup";
@@ -17,6 +19,7 @@ import DiscoverNovelDetail from "./pages/DiscoverNovelDetail";
 import Downloads from "./pages/Downloads";
 
 import { ToastContainer } from "./components/common/Toast";
+import { useAuth } from "./context/AuthContext";
 
 // Wrap individual components with Layout
 const WrappedHome = () => (
@@ -25,16 +28,18 @@ const WrappedHome = () => (
   </Layout>
 );
 
-const WrappedSignup = () => (
-  <Layout>
-    <Signup />
-  </Layout>
-);
+const WrappedSignup = () => <Signup />;
 
-const WrappedLogin = () => (
-  <Layout>
-    <Login />
-  </Layout>
+const WrappedLogin = () => <Login />;
+
+const ProtectedRoute = ({ children }: { children: ReactNode }) => {
+  const { isAuthenticated, isLoading } = useAuth();
+  if (isLoading) return <div className="auth-loading" role="status">Loading Nexus Novel…</div>;
+  return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
+};
+
+const Protected = ({ children }: { children: ReactNode }) => (
+  <ProtectedRoute>{children}</ProtectedRoute>
 );
 
 const App: React.FC = () => {
@@ -42,21 +47,21 @@ const App: React.FC = () => {
     <Router>
       <ToastContainer />
       <Routes>
-        <Route path="/" element={<WrappedHome />} />
+        <Route path="/" element={<Protected><WrappedHome /></Protected>} />
         <Route path="/signup" element={<WrappedSignup />} />
         <Route path="/login" element={<WrappedLogin />} />
-        <Route path="/discover" element={<WrappedDiscover />} />
-        <Route path="/discover/:site" element={<WrappedDiscover />} />
-        <Route path="/discover/:site/:novelId" element={<WrappedDiscoverDetail />} />
-        <Route path="/downloads" element={<WrappedDownloads />} />
-        <Route path="/library/:libraryId" element={<LibraryWrapper />} />
+        <Route path="/discover" element={<Protected><WrappedDiscover /></Protected>} />
+        <Route path="/discover/:site" element={<Protected><WrappedDiscover /></Protected>} />
+        <Route path="/discover/:site/:novelId" element={<Protected><WrappedDiscoverDetail /></Protected>} />
+        <Route path="/downloads" element={<Protected><WrappedDownloads /></Protected>} />
+        <Route path="/library/:libraryId" element={<Protected><LibraryWrapper /></Protected>} />
         <Route
           path="/library/:libraryId/novels/:novelId"
-          element={<NovelWrapper />}
+          element={<Protected><NovelWrapper /></Protected>}
         />
        <Route
           path="/library/:libraryId/novels/:novelId/:chapterNumber"
-          element={<ChapterWrapper />}
+          element={<Protected><ChapterWrapper /></Protected>}
         />
          </Routes>
     </Router>
