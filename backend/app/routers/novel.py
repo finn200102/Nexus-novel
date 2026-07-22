@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, status, HTTPException, BackgroundTasks, Header
 import httpx
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
@@ -18,6 +18,7 @@ from app.models.chapter import Chapter
 from app.models.library import Library
 from app.models.follow import UserNovelFollow
 from app.models.update_event import NovelUpdateEvent
+from app.models.download_job import ChapterDownloadJob
 import app.services.novel_services as novel_services
 from app.services.author_services import create_author, get_author_by_name
 from app.services.chapter_services import (
@@ -37,6 +38,14 @@ logger = get_logger(__name__)
 
 import asyncio
 from datetime import UTC, datetime
+from pydantic import BaseModel, Field
+
+
+router = APIRouter(
+    prefix="/novel",
+    tags=["novels"],
+    responses={404: {"description": "Not found"}},
+)
 
 
 FOLLOW_STATES = {"plan_to_read", "reading", "on_hold", "completed", "dropped", "ignored"}
@@ -70,17 +79,43 @@ def create_update_event(
     event_type: str,
     chapter_numbers: list[int],
     message: str,
-) -> None:
+) -> NovelUpdateEvent | None:
     if not novel.library or not novel.library.user_id or not chapter_numbers:
-        return
+        return None
     follow = get_or_create_follow(db, novel.library.user_id, novel)
     download_plan = 0
     if follow.download_policy == "next_chapter":
         download_plan = min(1, len(chapter_numbers))
     elif follow.download_policy == "next_n":
         download_plan = min(follow.download_count, len(chapter_numbers))
-    db.add(
-        NovelUpdateEvent(
+    notification_visible = follow.notification_policy == "immediate"
+    if follow.notification_policy == "after_n":
+        previous = (
+            db.query(NovelUpdateEvent)
+            .filter(
+                NovelUpdateEvent.user_id == follow.user_id,
+                NovelUpdateEvent.novel_id == novel.id,
+                NovelUpdateEvent.notification_visible.is_(False),
+            )
+            .all()
+        )
+        notification_visible = sum(event.chapter_count for event in previous) + len(chapter_numbers) >= max(follow.notification_count or 1, 1)
+    elif follow.notification_policy in {"daily_digest", "weekly_digest"}:
+        latest = (
+            db.query(NovelUpdateEvent)
+            .filter(
+                NovelUpdateEvent.user_id == follow.user_id,
+                NovelUpdateEvent.novel_id == novel.id,
+                NovelUpdateEvent.notification_visible.is_(True),
+            )
+            .order_by(NovelUpdateEvent.created_at.desc())
+            .first()
+        )
+        if latest and latest.created_at:
+            latest_date = latest.created_at.date()
+            current_date = datetime.now(UTC).date()
+            notification_visible = current_date != latest_date if follow.notification_policy == "daily_digest" else current_date.isocalendar().week != latest_date.isocalendar().week
+    event = NovelUpdateEvent(
             user_id=novel.library.user_id,
             novel_id=novel.id,
             event_type=event_type,
@@ -92,9 +127,139 @@ def create_update_event(
                 "chapter_numbers": sorted(chapter_numbers),
                 "download_plan_count": download_plan,
                 "download_policy": follow.download_policy,
+                "notification_policy": follow.notification_policy,
+                "notification_count": follow.notification_count,
             },
+            notification_visible=notification_visible,
         )
-    )
+    db.add(event)
+    return event
+
+
+class MetadataChapterEvent(BaseModel):
+    chapter_number: int
+    chapter_id: int | None = None
+    title: str | None = None
+    url: str | None = None
+    word_count: int | None = None
+
+
+class MetadataRefreshEvent(BaseModel):
+    event: str
+    job_id: str | int
+    metadata_novel_id: int
+    source_id: int
+    site: str
+    new_chapter_numbers: list[int] = Field(default_factory=list)
+    chapters: list[MetadataChapterEvent] = Field(default_factory=list)
+    message: str | None = None
+
+
+@router.post("/internal/metadata-events")
+def receive_metadata_event(
+    event: MetadataRefreshEvent,
+    db: Session = Depends(get_db),
+    webhook_secret: str | None = Header(default=None, alias="X-Nexus-Webhook-Secret"),
+):
+    expected_secret = os.getenv("NEXUS_NOVEL_WEBHOOK_SECRET", "").strip()
+    if not expected_secret or webhook_secret != expected_secret:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid webhook secret")
+    if event.event == "source_refresh_failed":
+        created_events = 0
+        for novel in db.query(Novel).filter(Novel.metadata_id == event.metadata_novel_id).all():
+            if not novel.library:
+                continue
+            follow = get_or_create_follow(db, novel.library.user_id, novel)
+            if follow.state in {"completed", "dropped", "ignored"}:
+                continue
+            duplicate = any(
+                str((item.details or {}).get("source_job_id")) == str(event.job_id)
+                for item in db.query(NovelUpdateEvent).filter(NovelUpdateEvent.novel_id == novel.id).all()
+            )
+            if duplicate:
+                continue
+            db.add(NovelUpdateEvent(
+                user_id=novel.library.user_id,
+                novel_id=novel.id,
+                event_type="source_failed",
+                message=event.message or "Source refresh failed",
+                details={"source_job_id": str(event.job_id), "source_id": event.source_id, "site": event.site},
+                notification_visible=follow.notification_policy == "immediate",
+            ))
+            created_events += 1
+        db.commit()
+        return {"accepted": True, "created_events": created_events, "queued_downloads": 0}
+    if event.event != "source_refresh_completed" or not event.new_chapter_numbers:
+        return {"accepted": True, "created_events": 0, "queued_downloads": 0}
+
+    novels = db.query(Novel).filter(Novel.metadata_id == event.metadata_novel_id).all()
+    created_events = 0
+    queued_downloads = 0
+    for novel in novels:
+        if not novel.library:
+            continue
+        follow = get_or_create_follow(db, novel.library.user_id, novel)
+        if follow.state in {"on_hold", "completed", "dropped", "ignored"}:
+            continue
+        existing = (
+            db.query(NovelUpdateEvent)
+            .filter(NovelUpdateEvent.novel_id == novel.id)
+            .all()
+        )
+        if any(str((item.details or {}).get("source_job_id")) == str(event.job_id) for item in existing):
+            continue
+        chapters_by_number = {chapter.chapter_number: chapter for chapter in event.chapters}
+        chapter_rows = {}
+        for number in event.new_chapter_numbers:
+            chapter = db.query(Chapter).filter(Chapter.novel_id == novel.id, Chapter.chapter_number == number).first()
+            source = chapters_by_number.get(number)
+            if not chapter:
+                chapter = Chapter(
+                    novel_id=novel.id,
+                    chapter_number=number,
+                    title=source.title if source else f"Chapter {number}",
+                    site_chapter_id=source.chapter_id if source else None,
+                    source_url=source.url if source else None,
+                    word_count=source.word_count if source else None,
+                    content_status=ContentStatus.MISSING,
+                )
+                db.add(chapter)
+                db.flush()
+            chapter_rows[number] = chapter
+        update = create_update_event(
+            db,
+            novel,
+            event_type="new_chapters",
+            chapter_numbers=event.new_chapter_numbers,
+            message=f"{len(event.new_chapter_numbers)} new chapter(s) available",
+        )
+        if update:
+            update.details = {**(update.details or {}), "source_job_id": str(event.job_id), "source_id": event.source_id, "site": event.site}
+        created_events += 1
+        if follow.download_policy == "next_chapter":
+            requested = 1
+        elif follow.download_policy == "next_n":
+            requested = max(follow.download_count or 0, 0)
+        else:
+            requested = 0
+        if requested:
+            active_jobs = {
+                job.chapter_id
+                for job in db.query(ChapterDownloadJob)
+                .filter(
+                    ChapterDownloadJob.user_id == novel.library.user_id,
+                    ChapterDownloadJob.novel_id == novel.id,
+                    ChapterDownloadJob.status.in_({"queued", "processing"}),
+                )
+                .all()
+            }
+            for chapter in sorted(chapter_rows.values(), key=lambda row: row.chapter_number)[:requested]:
+                if chapter.id in active_jobs:
+                    continue
+                db.add(ChapterDownloadJob(user_id=novel.library.user_id, library_id=novel.library.id, novel_id=novel.id, chapter_id=chapter.id))
+                queued_downloads += 1
+    db.commit()
+    return {"accepted": True, "created_events": created_events, "queued_downloads": queued_downloads}
 
 
 def scrape_novel_background(
@@ -178,13 +343,6 @@ def scrape_novel_background(
             )
     finally:
         db.close()
-
-
-router = APIRouter(
-    prefix="/novel",
-    tags=["novels"],
-    responses={404: {"description": "Not found"}},
-)
 
 
 def supported_src(url):
@@ -561,6 +719,7 @@ def update_follow_state(
     follow.download_policy = update.download_policy
     follow.download_count = update.download_count
     follow.notification_policy = update.notification_policy
+    follow.notification_count = update.notification_count
     novel.follow_state = update.follow_state
     novel.followed_at = follow.followed_at
     db.commit()
@@ -587,6 +746,7 @@ def get_follow_settings(
         download_policy=follow.download_policy,
         download_count=follow.download_count,
         notification_policy=follow.notification_policy,
+        notification_count=follow.notification_count,
     )
 
 
@@ -605,6 +765,7 @@ def get_update_events(
         .filter(
             NovelUpdateEvent.user_id == current_user.id,
             Novel.library_id == library_id,
+            NovelUpdateEvent.notification_visible.is_(True),
         )
     )
     if unread_only:

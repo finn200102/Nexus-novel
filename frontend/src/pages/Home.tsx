@@ -72,6 +72,16 @@ const Home: React.FC = () => {
     goToLibrary();
   };
 
+  const openUpdate = async (update: NovelUpdateEvent) => {
+    try {
+      await novelService.markUpdateEventRead(update.id);
+      setUpdates((current) => current.filter((item) => item.id !== update.id));
+    } catch (error) {
+      console.error("Failed to mark update read", error);
+    }
+    navigate(`/library/${activeLibrary?.id}/novels/${update.novel_id}`);
+  };
+
   const metricCards = [
     { label: "Total stories", value: formatCompact(novels.length), detail: activeLibrary ? activeLibrary.name : "No library selected", icon: Library, tone: "violet" },
     { label: "Tracked chapters", value: formatCompact(totalChapters), detail: "Across your collection", icon: BookMarked, tone: "blue" },
@@ -147,7 +157,7 @@ const Home: React.FC = () => {
               <div key={update.id}>
                 <span className="activity-list__icon"><BookMarked size={16} /></span>
                 <p><strong>{update.message}</strong><small>Chapters {update.first_chapter_number}–{update.last_chapter_number}</small></p>
-                <button type="button" onClick={() => navigate(`/library/${activeLibrary?.id}/novels/${update.novel_id}`)}>Open</button>
+                <button type="button" onClick={() => openUpdate(update)}>Open</button>
               </div>
             ))}
           </div>

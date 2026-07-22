@@ -45,6 +45,7 @@ def ensure_runtime_schema(engine) -> None:
                 download_policy VARCHAR(20) NOT NULL DEFAULT 'none',
                 download_count INTEGER NOT NULL DEFAULT 0,
                 notification_policy VARCHAR(20) NOT NULL DEFAULT 'immediate',
+                notification_count INTEGER NOT NULL DEFAULT 1,
                 CONSTRAINT uq_user_novel_follow UNIQUE (user_id, novel_id)
             )
         """))
@@ -53,6 +54,7 @@ def ensure_runtime_schema(engine) -> None:
             "download_policy": "VARCHAR(20) NOT NULL DEFAULT 'none'",
             "download_count": "INTEGER NOT NULL DEFAULT 0",
             "notification_policy": "VARCHAR(20) NOT NULL DEFAULT 'immediate'",
+            "notification_count": "INTEGER NOT NULL DEFAULT 1",
         }
         for name, definition in follow_additions.items():
             if name not in follow_columns:
@@ -70,9 +72,13 @@ def ensure_runtime_schema(engine) -> None:
                 last_chapter_number INTEGER NULL,
                 message TEXT NOT NULL DEFAULT '',
                 details JSON NOT NULL DEFAULT '{}',
-                read_at TIMESTAMP NULL
+                read_at TIMESTAMP NULL,
+                notification_visible BOOLEAN NOT NULL DEFAULT 1
             )
         """))
+        event_columns = {column["name"] for column in inspect(engine).get_columns("novel_update_events")}
+        if "notification_visible" not in event_columns:
+            connection.execute(text("ALTER TABLE novel_update_events ADD COLUMN notification_visible BOOLEAN NOT NULL DEFAULT 1"))
         connection.execute(text("""
             CREATE TABLE IF NOT EXISTS chapter_download_jobs (
                 id INTEGER PRIMARY KEY,

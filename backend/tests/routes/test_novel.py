@@ -220,6 +220,51 @@ def test_update_follow_state(client_with_auth, db):
     assert response.json()["notification_policy"] == "daily_digest"
 
 
+def test_metadata_refresh_event_creates_user_event_and_download_job(client_with_auth, db, monkeypatch):
+    from app.models.download_job import ChapterDownloadJob
+    from app.models.update_event import NovelUpdateEvent
+
+    response, headers, _, url, library = add_novel_resources(client_with_auth, db)
+    assert response.status_code == status.HTTP_201_CREATED
+    novel = get_novel_by_url(db, url).first()
+    novel.metadata_id = 77
+    db.commit()
+    response = client_with_auth.patch(
+        f"/novel/{novel.id}/follow?library_id={library.id}",
+        json={
+            "follow_state": "reading",
+            "download_policy": "next_n",
+            "download_count": 2,
+            "notification_policy": "immediate",
+        },
+        headers=headers,
+    )
+    assert response.status_code == status.HTTP_200_OK
+    monkeypatch.setenv("NEXUS_NOVEL_WEBHOOK_SECRET", "test-secret")
+    response = client_with_auth.post(
+        "/novel/internal/metadata-events",
+        headers={"X-Nexus-Webhook-Secret": "test-secret"},
+        json={
+            "event": "source_refresh_completed",
+            "job_id": "job-1",
+            "metadata_novel_id": 77,
+            "source_id": 9,
+            "site": "royalroad",
+            "new_chapter_numbers": [11, 12, 13],
+            "chapters": [
+                {"chapter_number": 11, "chapter_id": 11, "title": "Eleven"},
+                {"chapter_number": 12, "chapter_id": 12, "title": "Twelve"},
+                {"chapter_number": 13, "chapter_id": 13, "title": "Thirteen"},
+            ],
+        },
+    )
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["created_events"] == 1
+    assert response.json()["queued_downloads"] == 2
+    assert db.query(NovelUpdateEvent).filter(NovelUpdateEvent.novel_id == novel.id).count() == 1
+    assert db.query(ChapterDownloadJob).filter(ChapterDownloadJob.novel_id == novel.id).count() == 2
+
+
 def test_update_events_are_user_scoped_and_markable(client_with_auth, db):
     response, headers, _, url, library = add_novel_resources(client_with_auth, db)
     assert response.status_code == status.HTTP_201_CREATED

@@ -3,7 +3,7 @@ import defaultCoverImage from "../assets/cover.png";
 import { novelService } from "../services/novelService";
 import ChapterList from "../components/novel/ChapterList";
 import NovelDetails from "../components/novel/NovelDetails";
-import { Novel } from "../types/novel";
+import { Novel, NovelFollowSettings } from "../types/novel";
 import { NovelDetailHeroSkeleton } from "../components/common/Skeleton";
 import { useToast } from "../context/ToastContext";
 import { Bell } from "lucide-react";
@@ -20,14 +20,19 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
   const [error, setError] = useState<string | null>(null);
   const [updating, setUpdating] = useState<boolean>(false);
   const [updatingFollow, setUpdatingFollow] = useState(false);
+  const [followSettings, setFollowSettings] = useState<NovelFollowSettings | null>(null);
   const { addToast } = useToast();
   const fetchNovel = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await novelService.getNovelById(libraryId, novelId);
+      const [data, settings] = await Promise.all([
+        novelService.getNovelById(libraryId, novelId),
+        novelService.getFollowSettings(libraryId, novelId),
+      ]);
 
       if (data && typeof data === "object" && "id" in data) {
         setNovel(data);
+        setFollowSettings(settings);
       } else {
         console.error("Expected novel object but got:", data);
         setError("Unexpected data format");
@@ -102,11 +107,25 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
     }
   };
 
-  const updateFollowState = async (followState: "plan_to_read" | "reading" | "on_hold" | "completed" | "dropped" | "ignored") => {
+  const updateFollowState = async (
+    followState: "plan_to_read" | "reading" | "on_hold" | "completed" | "dropped" | "ignored",
+    settings: Partial<NovelFollowSettings> = {},
+  ) => {
     try {
       setUpdatingFollow(true);
-      const updatedNovel = await novelService.updateFollowState(libraryId, novelId, followState);
+      const nextSettings: NovelFollowSettings = {
+        novel_id: novelId,
+        follow_state: followState,
+        notification_policy: "immediate",
+        notification_count: 1,
+        download_policy: "none",
+        download_count: 1,
+        ...(followSettings || {}),
+        ...settings,
+      };
+      const updatedNovel = await novelService.updateFollowState(libraryId, novelId, followState, nextSettings);
       setNovel(updatedNovel);
+      setFollowSettings(nextSettings);
       addToast(
         followState === "reading" ? "Story marked as reading" : `Story marked as ${followState.replace(/_/g, " ")}`,
         "success"
@@ -204,6 +223,61 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
                     <option value="ignored">Ignored</option>
                   </select>
                 </label>
+                <label className="follow-state-control">
+                  <span>Notify</span>
+                  <select
+                    value={followSettings?.notification_policy || "immediate"}
+                    disabled={updatingFollow}
+                    onChange={(event) => updateFollowState(novel.follow_state, { ...(followSettings || { novel_id: novel.id, follow_state: novel.follow_state, download_policy: "none", download_count: 0, notification_count: 1 }), notification_policy: event.target.value as NovelFollowSettings["notification_policy"] })}
+                    aria-label="Notification policy"
+                  >
+                    <option value="immediate">Immediately</option>
+                    <option value="daily_digest">Daily digest</option>
+                    <option value="weekly_digest">Weekly digest</option>
+                    <option value="after_n">After chapter count</option>
+                  </select>
+                </label>
+                {followSettings?.notification_policy === "after_n" && (
+                  <label className="follow-state-control">
+                    <span>Chapters</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={followSettings.notification_count}
+                      disabled={updatingFollow}
+                      onChange={(event) => updateFollowState(novel.follow_state, { notification_count: Math.max(1, Number(event.target.value) || 1) })}
+                      aria-label="Notify after this many new chapters"
+                    />
+                  </label>
+                )}
+                <label className="follow-state-control">
+                  <span>Download</span>
+                  <select
+                    value={followSettings?.download_policy || "none"}
+                    disabled={updatingFollow}
+                    onChange={(event) => updateFollowState(novel.follow_state, { ...(followSettings || { novel_id: novel.id, follow_state: novel.follow_state, notification_policy: "immediate", notification_count: 1, download_count: 0 }), download_policy: event.target.value as NovelFollowSettings["download_policy"] })}
+                    aria-label="Automatic download policy"
+                  >
+                    <option value="none">No auto-download</option>
+                    <option value="next_chapter">Next chapter</option>
+                    <option value="next_n">Next N chapters</option>
+                  </select>
+                </label>
+                {followSettings?.download_policy === "next_n" && (
+                  <label className="follow-state-control">
+                    <span>Batch</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={followSettings.download_count}
+                      disabled={updatingFollow}
+                      onChange={(event) => updateFollowState(novel.follow_state, { download_count: Math.max(1, Number(event.target.value) || 1) })}
+                      aria-label="Number of chapters to auto-download"
+                    />
+                  </label>
+                )}
                 <button
                   onClick={handleRescrape}
                   disabled={updating}

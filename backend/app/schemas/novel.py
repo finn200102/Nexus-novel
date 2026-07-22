@@ -61,6 +61,7 @@ class NovelFollowUpdate(BaseModel):
     download_policy: Literal["none", "next_chapter", "next_n"] = "none"
     download_count: int = Field(default=0, ge=0, le=100)
     notification_policy: Literal["immediate", "daily_digest", "weekly_digest", "after_n"] = "immediate"
+    notification_count: int = Field(default=1, ge=1, le=100)
 
 
 class NovelFollowSettings(BaseModel):
@@ -69,6 +70,7 @@ class NovelFollowSettings(BaseModel):
     download_policy: Literal["none", "next_chapter", "next_n"]
     download_count: int
     notification_policy: Literal["immediate", "daily_digest", "weekly_digest", "after_n"]
+    notification_count: int
 
 
 class NovelUpdateEvent(BaseModel):

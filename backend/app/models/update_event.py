@@ -1,4 +1,4 @@
-from sqlalchemy import Column, ForeignKey, Integer, JSON, String, Text, DateTime
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, JSON, String, Text, DateTime
 from sqlalchemy.orm import relationship
 
 from app.models.base import BaseModel
@@ -18,6 +18,7 @@ class NovelUpdateEvent(BaseModel):
     message = Column(Text, nullable=False, default="", server_default="")
     details = Column(JSON, nullable=False, default=dict, server_default="{}")
     read_at = Column(DateTime, nullable=True)
+    notification_visible = Column(Boolean, nullable=False, default=True, server_default="1")
 
     user = relationship("User")
     novel = relationship("Novel")

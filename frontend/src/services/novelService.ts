@@ -1,6 +1,6 @@
 import apiClient from "./apiClient";
 import axios from "axios";
-import type { Novel, NovelUpdateEvent } from "../types/novel";
+import type { Novel, NovelFollowSettings, NovelUpdateEvent } from "../types/novel";
 
 interface CreateNovelSchema {
   url: string;
@@ -136,15 +136,21 @@ export const novelService = {
   async updateFollowState(
     libraryId: number,
     novelId: number,
-    followState: "plan_to_read" | "reading" | "on_hold" | "completed" | "dropped" | "ignored"
+    followState: "plan_to_read" | "reading" | "on_hold" | "completed" | "dropped" | "ignored",
+    settings: Partial<NovelFollowSettings> = {},
   ): Promise<Novel> {
     const response = await apiClient.patch(
       `/novel/${novelId}/follow?library_id=${libraryId}`,
       {
         follow_state: followState,
+        ...settings,
       }
     );
     return response.data as Novel;
+  },
+  async getFollowSettings(libraryId: number, novelId: number): Promise<NovelFollowSettings> {
+    const response = await apiClient.get(`/novel/${novelId}/follow?library_id=${libraryId}`);
+    return response.data as NovelFollowSettings;
   },
   async getUpdateEvents(libraryId: number, unreadOnly = false): Promise<NovelUpdateEvent[]> {
     const response = await apiClient.get(

@@ -65,3 +65,12 @@ export interface NovelUpdateEvent {
   created_at: string;
   read_at: string | null;
 }
+
+export interface NovelFollowSettings {
+  novel_id: number;
+  follow_state: Novel["follow_state"];
+  download_policy: "none" | "next_chapter" | "next_n";
+  download_count: number;
+  notification_policy: "immediate" | "daily_digest" | "weekly_digest" | "after_n";
+  notification_count: number;
+}
