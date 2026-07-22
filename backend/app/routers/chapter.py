@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, status, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
+from config.database import SessionLocal as SessionFactory
 from config.database import get_db
 from app.models.user import User
 from ..schemas.chapter import Chapter as ChapterSchema
-from ..schemas.chapter import ChapterCreate, ChapterUpdate, ChapterContent
+from ..schemas.chapter import ChapterCreate, ChapterUpdate, ChapterContent, ChapterDownloadJob as ChapterDownloadJobSchema, ChapterDownloadQueueRequest
 from app.models.chapter import Chapter
 from app.models.novel import Novel
 import app.services.chapter_services as chapter_services
@@ -11,6 +12,7 @@ import app.services.library_services as library_services
 import app.services.novel_services as novel_services
 from app.auth.dependencies import get_current_user
 from app.models.chapter import ContentStatus
+from app.models.download_job import ChapterDownloadJob
 
 from pathlib import Path
 import os
@@ -40,6 +42,38 @@ router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 logger = get_logger(__name__)
+
+
+def run_queued_download(job_id: int, db_session_factory):
+    db = db_session_factory()
+    try:
+        job = db.query(ChapterDownloadJob).filter(ChapterDownloadJob.id == job_id).first()
+        if not job or job.status != "queued":
+            return
+        job.status = "processing"
+        job.attempt_count = (job.attempt_count or 0) + 1
+        db.commit()
+        download_chapter_background(
+            job.chapter_id,
+            job.novel_id,
+            db.query(Chapter).filter(Chapter.id == job.chapter_id).one().chapter_number,
+            job.library_id,
+            db_session_factory,
+        )
+        db.expire_all()
+        chapter = db.query(Chapter).filter(Chapter.id == job.chapter_id).first()
+        job.status = "completed" if chapter and chapter.content_status == ContentStatus.PRESENT else "failed"
+        job.error = None if job.status == "completed" else (chapter.download_error if chapter else "Chapter disappeared")
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        job = db.query(ChapterDownloadJob).filter(ChapterDownloadJob.id == job_id).first()
+        if job:
+            job.status = "failed"
+            job.error = str(exc)[:1000]
+            db.commit()
+    finally:
+        db.close()
 
 
 def download_chapter_background(
@@ -499,6 +533,78 @@ def download_chapter(
     )
 
     return chapter
+
+
+@router.post("/queue/{library_id:int}/{novel_id:int}", response_model=list[ChapterDownloadJobSchema])
+def queue_chapter_downloads(
+    library_id: int,
+    novel_id: int,
+    request: ChapterDownloadQueueRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if request.count < 1 or request.count > 100:
+        raise HTTPException(status_code=400, detail="Download count must be between 1 and 100")
+    library = library_services.get_library_by_id(db, library_id)
+    novel = novel_services.get_novel_by_id(db, novel_id)
+    if not library or library.user_id != current_user.id or not novel or novel.library_id != library_id:
+        raise HTTPException(status_code=404, detail="Novel not found")
+
+    existing_jobs = {
+        job.chapter_id
+        for job in db.query(ChapterDownloadJob)
+        .filter(
+            ChapterDownloadJob.user_id == current_user.id,
+            ChapterDownloadJob.novel_id == novel_id,
+            ChapterDownloadJob.status.in_(["queued", "processing"]),
+        )
+        .all()
+    }
+    candidates = (
+        db.query(Chapter)
+        .filter(
+            Chapter.novel_id == novel_id,
+            Chapter.content_status == ContentStatus.MISSING,
+            ~Chapter.id.in_(existing_jobs or {-1}),
+        )
+        .order_by(Chapter.chapter_number.asc())
+        .limit(request.count)
+        .all()
+    )
+    jobs = []
+    for chapter in candidates:
+        job = ChapterDownloadJob(
+            user_id=current_user.id,
+            library_id=library_id,
+            novel_id=novel_id,
+            chapter_id=chapter.id,
+        )
+        db.add(job)
+        jobs.append(job)
+    db.commit()
+    for job in jobs:
+        db.refresh(job)
+        background_tasks.add_task(run_queued_download, job.id, SessionFactory)
+    return jobs
+
+
+@router.get("/queue/{novel_id:int}", response_model=list[ChapterDownloadJobSchema])
+def get_chapter_download_queue(
+    novel_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return (
+        db.query(ChapterDownloadJob)
+        .filter(
+            ChapterDownloadJob.novel_id == novel_id,
+            ChapterDownloadJob.user_id == current_user.id,
+        )
+        .order_by(ChapterDownloadJob.created_at.desc())
+        .limit(100)
+        .all()
+    )
 
 
 @router.get("/{novel_id:int}", response_model=list[ChapterSchema])

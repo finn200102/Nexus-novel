@@ -16,6 +16,7 @@ from app.models.tag import Tag
 from app.models.user import User
 from app.models.follow import UserNovelFollow
 from app.models.update_event import NovelUpdateEvent
+from app.models.download_job import ChapterDownloadJob
 from app.database_migrations import ensure_runtime_schema
 
 Base.metadata.create_all(bind=engine)

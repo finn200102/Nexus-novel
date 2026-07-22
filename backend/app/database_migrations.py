@@ -73,3 +73,17 @@ def ensure_runtime_schema(engine) -> None:
                 read_at TIMESTAMP NULL
             )
         """))
+        connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS chapter_download_jobs (
+                id INTEGER PRIMARY KEY,
+                created_at TIMESTAMP,
+                updated_at TIMESTAMP,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                library_id INTEGER NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+                novel_id INTEGER NOT NULL REFERENCES novels(id) ON DELETE CASCADE,
+                chapter_id INTEGER NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
+                status VARCHAR(20) NOT NULL DEFAULT 'queued',
+                attempt_count INTEGER NOT NULL DEFAULT 0,
+                error TEXT NULL
+            )
+        """))

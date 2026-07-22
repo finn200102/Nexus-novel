@@ -58,3 +58,20 @@ class ChapterUpdate(BaseModel):
     novel_id: int
     title: Optional[str] = None
     content_status: ContentStatus
+
+
+class ChapterDownloadQueueRequest(BaseModel):
+    count: int = 1
+
+
+class ChapterDownloadJob(BaseModel):
+    id: int
+    novel_id: int
+    chapter_id: int
+    status: str
+    attempt_count: int
+    error: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

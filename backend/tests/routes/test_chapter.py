@@ -160,3 +160,33 @@ def test_get_downloaded_chapter_content(client, db):
 
 def test_download_chapter(client, db):
     pytest.skip("Download functionality requires pybindings and metadata server")
+
+
+def test_queue_chapter_downloads_persists_jobs(client, db, monkeypatch):
+    novel, headers, _, _, library = create_test_novel(db)
+    for chapter_number in (1, 2, 3):
+        response = client.post(
+            "/chapter/",
+            json={
+                "novel_id": novel.id,
+                "chapter_number": chapter_number,
+                "title": f"Chapter {chapter_number}",
+                "content_status": "MISSING",
+            },
+            headers=headers,
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+
+    monkeypatch.setattr("app.routers.chapter.run_queued_download", lambda *_args: None)
+    response = client.post(
+        f"/chapter/queue/{library.id}/{novel.id}",
+        json={"count": 2},
+        headers=headers,
+    )
+    assert response.status_code == status.HTTP_200_OK
+    assert len(response.json()) == 2
+    assert all(job["status"] == "queued" for job in response.json())
+
+    response = client.get(f"/chapter/queue/{novel.id}", headers=headers)
+    assert response.status_code == status.HTTP_200_OK
+    assert len(response.json()) == 2
