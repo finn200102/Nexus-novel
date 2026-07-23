@@ -5,6 +5,8 @@ import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
+  const backendTarget = env.VITE_BACKEND_URL || "http://127.0.0.1:8180";
+  const targetIsComposeProxy = /:\s*8180(?:\/|$)/.test(backendTarget);
 
   return {
     plugins: [react(), tailwindcss()],
@@ -12,10 +14,10 @@ export default defineConfig(({ mode }) => {
       port: parseInt(env.VITE_FRONTEND_PORT || "5173", 10),
       proxy: {
         "/api": {
-          target: env.VITE_BACKEND_URL || "http://127.0.0.1:8000",
+          target: backendTarget,
           changeOrigin: true,
           secure: false,
-          rewrite: (path) => path.replace(/^\/api/, ""),
+          rewrite: targetIsComposeProxy ? undefined : (path) => path.replace(/^\/api/, ""),
         },
       },
     },
