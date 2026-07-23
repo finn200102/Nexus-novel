@@ -25,7 +25,10 @@ def queue_missing_chapters(db: Session, *, user_id: int, library_id: int, novel_
     )
     if active_ids:
         query = query.filter(~Chapter.id.in_(active_ids))
-    chapters = query.order_by(Chapter.chapter_number.asc()).limit(count).all()
+    remaining = max(count - len(active_ids), 0)
+    if remaining == 0:
+        return []
+    chapters = query.order_by(Chapter.chapter_number.asc()).limit(remaining).all()
     jobs = [ChapterDownloadJob(
         user_id=user_id,
         library_id=library_id,
