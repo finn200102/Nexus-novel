@@ -5,6 +5,8 @@ import { chapterService } from "../services/chapterService";
 import { useLibraryContext } from "../context/LibraryContext";
 import { useToast } from "../context/ToastContext";
 import { Novel } from "../types/novel";
+import type { DownloadJob } from "../types/activity";
+import { downloadService } from "../services/downloadService";
 import defaultCoverImage from "../assets/cover.png";
 import "../styles/library.css";
 import "../styles/novel-list.css";
@@ -45,6 +47,7 @@ const Downloads: React.FC = () => {
   const [novelStatuses, setNovelStatuses] = useState<NovelDownloadStatus[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [expandedNovel, setExpandedNovel] = useState<number | null>(null);
+  const [jobs, setJobs] = useState<DownloadJob[]>([]);
 
   const fetchDownloadStatuses = useCallback(async () => {
     if (!activeLibraryId) {
@@ -54,6 +57,7 @@ const Downloads: React.FC = () => {
 
     try {
       const novels = await novelService.getAllNovels(activeLibraryId);
+      setJobs(await downloadService.listJobs(activeLibraryId));
       console.log("DownloadPage: Fetched novels:", novels.length);
       const statusesPromises = novels.map(async (novel) => {
         try {
@@ -146,6 +150,16 @@ const Downloads: React.FC = () => {
     (s) => s.processing > 0 || s.failed > 0
   );
 
+  const updateJob = async (job: DownloadJob, action: "retry" | "cancel") => {
+    try {
+      const updated = action === "retry" ? await downloadService.retry(job.id) : await downloadService.cancel(job.id);
+      setJobs((current) => current.map((item) => item.id === updated.id ? updated : item));
+    } catch (error) {
+      console.error(`Failed to ${action} download job`, error);
+      addToast(`Failed to ${action} download job`, "error");
+    }
+  };
+
   const getNovelProgress = (status: NovelDownloadStatus) => {
     return status.total > 0
       ? Math.round((status.present / status.total) * 100)
@@ -186,6 +200,11 @@ const Downloads: React.FC = () => {
           </p>
         </div>
       )}
+
+      {jobs.length > 0 && <section className="downloads-job-panel" aria-label="Durable download queue">
+        <div className="downloads-section-header"><h2>Durable queue</h2><span>{jobs.filter((job) => ["queued", "processing", "retry_wait"].includes(job.status)).length} active</span></div>
+        <div className="downloads-job-list">{jobs.slice(0, 25).map((job) => <article key={job.id} className="downloads-job-row"><div><strong>Chapter {job.chapter_id}</strong><small>{job.status.replace(/_/g, " ")} · attempt {job.attempt_count}/{job.max_attempts}</small>{job.error && <small className="downloads-chapter-error">{job.error}</small>}</div><div className="downloads-chapter-actions">{["failed", "cancelled", "retry_wait"].includes(job.status) && <button className="downloads-btn downloads-btn--small downloads-btn--retry" onClick={() => updateJob(job, "retry")}>Retry</button>}{["queued", "processing", "retry_wait"].includes(job.status) && <button className="downloads-btn downloads-btn--small" onClick={() => updateJob(job, "cancel")}>Cancel</button>}</div></article>)}</div>
+      </section>}
 
       {novelStatuses.map((status) => {
         const isExpanded = expandedNovel === status.novel.id;

@@ -3,6 +3,7 @@
 import asyncio
 import signal
 from datetime import UTC, datetime
+from sqlalchemy import or_
 
 from config.database import SessionLocal
 from app.models.download_job import ChapterDownloadJob
@@ -59,7 +60,13 @@ def release_due_notifications(db) -> int:
 def process_downloads(db) -> int:
     jobs = (
         db.query(ChapterDownloadJob)
-        .filter(ChapterDownloadJob.status == "queued")
+        .filter(
+            or_(
+                ChapterDownloadJob.status == "queued",
+                (ChapterDownloadJob.status == "retry_wait")
+                & (ChapterDownloadJob.next_attempt_at <= datetime.now(UTC)),
+            )
+        )
         .order_by(ChapterDownloadJob.created_at.asc())
         .limit(10)
         .all()

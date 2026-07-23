@@ -1,0 +1,16 @@
+.activity-page { display: grid; gap: 20px; }
+.activity-page__header { display: flex; align-items: flex-start; justify-content: space-between; padding: 24px; color: #aab4c4; background: linear-gradient(135deg, #171d2a, #111722); border: 1px solid #293343; border-radius: 8px; }
+.activity-page__header h1 { margin: 4px 0 8px; color: #f4f6fb; font-size: 28px; }
+.activity-page__header p:last-child { margin: 0; font-size: 13px; }
+.activity-section__title { display: flex; align-items: center; gap: 9px; color: #a994ff; }
+.activity-section__title h2 { margin: 0; color: #f1f3f8; font-size: 16px; }
+.activity-calendar, .activity-feed { display: grid; gap: 14px; padding: 20px; background: #111722; border: 1px solid #293343; border-radius: 8px; }
+.activity-calendar__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.activity-day { display: grid; gap: 5px; padding: 13px; background: #171f2c; border: 1px solid #273244; border-radius: 6px; }
+.activity-day strong, .activity-event strong { color: #eef1f6; font-size: 13px; }
+.activity-day span, .activity-day small, .activity-event p, .activity-event small { color: #8f9bad; font-size: 11px; }
+.activity-event { display: flex; align-items: center; gap: 12px; padding: 13px 0; border-top: 1px solid #222b3a; }
+.activity-event:first-of-type { border-top: 0; }
+.activity-event__icon { display: grid; place-items: center; width: 30px; height: 30px; color: #a994ff; background: #28204c; border-radius: 50%; }
+.activity-event p { margin: 4px 0; }.activity-event__read, .activity-event__new { margin-left: auto; color: #8794a8; font-size: 10px; }.activity-event__new { color: #66d29a; }
+.activity-page__empty { margin: 0; color: #8995a6; font-size: 13px; }

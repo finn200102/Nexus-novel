@@ -105,9 +105,31 @@ def ensure_runtime_schema(engine) -> None:
                 chapter_id INTEGER NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
                 status VARCHAR(20) NOT NULL DEFAULT 'queued',
                 attempt_count INTEGER NOT NULL DEFAULT 0,
+                max_attempts INTEGER NOT NULL DEFAULT 3,
+                next_attempt_at TIMESTAMP NULL,
+                started_at TIMESTAMP NULL,
+                finished_at TIMESTAMP NULL,
+                last_attempt_at TIMESTAMP NULL,
+                cancelled_at TIMESTAMP NULL,
+                cancellation_reason TEXT NULL,
+                error_code VARCHAR(80) NULL,
                 error TEXT NULL
             )
         """))
+        job_columns = {column["name"] for column in inspect(engine).get_columns("chapter_download_jobs")}
+        job_additions = {
+            "max_attempts": "INTEGER NOT NULL DEFAULT 3",
+            "next_attempt_at": "TIMESTAMP NULL",
+            "started_at": "TIMESTAMP NULL",
+            "finished_at": "TIMESTAMP NULL",
+            "last_attempt_at": "TIMESTAMP NULL",
+            "cancelled_at": "TIMESTAMP NULL",
+            "cancellation_reason": "TEXT NULL",
+            "error_code": "VARCHAR(80) NULL",
+        }
+        for name, definition in job_additions.items():
+            if name not in job_columns:
+                connection.execute(text(f"ALTER TABLE chapter_download_jobs ADD COLUMN {name} {definition}"))
         connection.execute(text("""
             CREATE TABLE IF NOT EXISTS reading_progress (
                 id INTEGER PRIMARY KEY,

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, ForeignKey, Integer, String, Text
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from app.models.base import BaseModel
@@ -15,6 +15,14 @@ class ChapterDownloadJob(BaseModel):
     chapter_id = Column(Integer, ForeignKey("chapters.id", ondelete="CASCADE"), nullable=False)
     status = Column(String(20), nullable=False, default="queued", server_default="queued")
     attempt_count = Column(Integer, nullable=False, default=0, server_default="0")
+    max_attempts = Column(Integer, nullable=False, default=3, server_default="3")
+    next_attempt_at = Column(DateTime, nullable=True)
+    started_at = Column(DateTime, nullable=True)
+    finished_at = Column(DateTime, nullable=True)
+    last_attempt_at = Column(DateTime, nullable=True)
+    cancelled_at = Column(DateTime, nullable=True)
+    cancellation_reason = Column(Text, nullable=True)
+    error_code = Column(String(80), nullable=True)
     error = Column(Text, nullable=True)
 
     user = relationship("User")

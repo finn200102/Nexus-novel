@@ -15,6 +15,7 @@ from app.models.chapter import ContentStatus
 from app.models.download_job import ChapterDownloadJob
 from app.models.reading_progress import ReadingProgress
 from app.models.reading_annotation import ReadingAnnotation
+from app.services.download_job_service import claim_job, complete_job, fail_or_retry_job
 
 from pathlib import Path
 import os
@@ -49,31 +50,34 @@ logger = get_logger(__name__)
 def run_queued_download(job_id: int, db_session_factory):
     db = db_session_factory()
     try:
-        job = db.query(ChapterDownloadJob).filter(ChapterDownloadJob.id == job_id).first()
-        if not job or job.status != "queued":
+        job = claim_job(db, job_id)
+        if not job:
             return
-        job.status = "processing"
-        job.attempt_count = (job.attempt_count or 0) + 1
-        db.commit()
+        chapter = db.query(Chapter).filter(Chapter.id == job.chapter_id).first()
+        if not chapter:
+            fail_or_retry_job(db, job, "Chapter disappeared", error_code="CHAPTER_NOT_FOUND")
+            return
         download_chapter_background(
             job.chapter_id,
             job.novel_id,
-            db.query(Chapter).filter(Chapter.id == job.chapter_id).one().chapter_number,
+            chapter.chapter_number,
             job.library_id,
             db_session_factory,
         )
         db.expire_all()
+        job = db.query(ChapterDownloadJob).filter(ChapterDownloadJob.id == job_id).first()
+        if not job or job.status == "cancelled":
+            return
         chapter = db.query(Chapter).filter(Chapter.id == job.chapter_id).first()
-        job.status = "completed" if chapter and chapter.content_status == ContentStatus.PRESENT else "failed"
-        job.error = None if job.status == "completed" else (chapter.download_error if chapter else "Chapter disappeared")
-        db.commit()
+        if chapter and chapter.content_status == ContentStatus.PRESENT:
+            complete_job(db, job)
+        else:
+            fail_or_retry_job(db, job, (chapter.download_error if chapter else "Chapter disappeared") or "Download failed")
     except Exception as exc:
         db.rollback()
         job = db.query(ChapterDownloadJob).filter(ChapterDownloadJob.id == job_id).first()
         if job:
-            job.status = "failed"
-            job.error = str(exc)[:1000]
-            db.commit()
+            fail_or_retry_job(db, job, str(exc), error_code="DOWNLOAD_EXCEPTION")
     finally:
         db.close()
 
@@ -559,7 +563,7 @@ def queue_chapter_downloads(
         .filter(
             ChapterDownloadJob.user_id == current_user.id,
             ChapterDownloadJob.novel_id == novel_id,
-            ChapterDownloadJob.status.in_(["queued", "processing"]),
+            ChapterDownloadJob.status.in_(["queued", "processing", "retry_wait"]),
         )
         .all()
     }

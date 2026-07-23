@@ -543,6 +543,13 @@
   border: 1px solid #dee2e6;
 }
 
+.downloads-job-panel { display: grid; gap: 12px; margin-bottom: 20px; padding: 18px; background: #111722; border: 1px solid #293343; border-radius: 8px; }
+.downloads-job-panel h2 { margin: 0; color: #f1f3f8; font-size: 16px; }
+.downloads-job-panel .downloads-section-header { margin: 0; }
+.downloads-job-list { display: grid; gap: 7px; }
+.downloads-job-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 0; border-top: 1px solid #222b3a; }
+.downloads-job-row:first-child { border-top: 0; }
+.downloads-job-row strong, .downloads-job-row small { display: block; }.downloads-job-row strong { color: #eef1f6; font-size: 13px; }.downloads-job-row small { margin-top: 4px; color: #8f9bad; font-size: 11px; }
 .discover-empty__hint {
   font-size: 0.875rem;
   margin-top: 0.5rem;

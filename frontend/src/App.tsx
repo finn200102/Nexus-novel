@@ -17,6 +17,7 @@ import Reader from "./pages/Reader";
 import Discover from "./pages/Discover";
 import DiscoverNovelDetail from "./pages/DiscoverNovelDetail";
 import Downloads from "./pages/Downloads";
+import Activity from "./pages/Activity";
 
 import { ToastContainer } from "./components/common/Toast";
 import { useAuth } from "./context/AuthContext";
@@ -54,6 +55,7 @@ const App: React.FC = () => {
         <Route path="/discover/:site" element={<Protected><WrappedDiscover /></Protected>} />
         <Route path="/discover/:site/:novelId" element={<Protected><WrappedDiscoverDetail /></Protected>} />
         <Route path="/downloads" element={<Protected><WrappedDownloads /></Protected>} />
+        <Route path="/activity" element={<Protected><WrappedActivity /></Protected>} />
         <Route path="/library/:libraryId" element={<Protected><LibraryWrapper /></Protected>} />
         <Route
           path="/library/:libraryId/novels/:novelId"
@@ -138,6 +140,12 @@ const WrappedDiscoverDetail = () => (
 const WrappedDownloads = () => (
   <Layout>
     <Downloads />
+  </Layout>
+);
+
+const WrappedActivity = () => (
+  <Layout>
+    <Activity />
   </Layout>
 );
 

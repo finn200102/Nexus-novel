@@ -24,6 +24,7 @@ const navItems = [
   { label: "Dashboard", to: "/", icon: Grid2X2, exact: true },
   { label: "Discover", to: "/discover/all", icon: Compass },
   { label: "Downloads", to: "/downloads", icon: Download },
+  { label: "Activity", to: "/activity", icon: Bell },
 ];
 
 const Navbar: React.FC<NavbarProps> = ({ onRequestCreateLibrary }) => {

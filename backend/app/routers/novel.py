@@ -148,6 +148,7 @@ class MetadataChapterEvent(BaseModel):
 
 class MetadataRefreshEvent(BaseModel):
     event: str
+    delivery_id: str | None = None
     job_id: str | int
     metadata_novel_id: int
     source_id: int
@@ -159,7 +160,10 @@ class MetadataRefreshEvent(BaseModel):
 
 def claim_metadata_webhook_delivery(db: Session, event: MetadataRefreshEvent) -> bool:
     """Atomically claim a source job delivery before processing its effects."""
-    delivery_key = f"{event.source_id}:{event.job_id}"
+    # New metadata workers provide an immutable outbox delivery ID. Retain a
+    # deterministic legacy key for older workers, while including the event
+    # type so a failed attempt cannot suppress a later successful refresh.
+    delivery_key = event.delivery_id or f"{event.source_id}:{event.job_id}:{event.event}"
     try:
         # A savepoint lets a duplicate-key conflict roll back only the insert,
         # preserving the request transaction for the no-op response.

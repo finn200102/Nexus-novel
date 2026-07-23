@@ -361,6 +361,33 @@ def test_metadata_webhook_delivery_claim_is_unique_across_sessions(db):
     assert db.query(MetadataWebhookDelivery).count() == 1
 
 
+def test_metadata_webhook_allows_failure_then_success_for_same_source_job(db):
+    from app.models.metadata_webhook_delivery import MetadataWebhookDelivery
+    from app.routers.novel import MetadataRefreshEvent, claim_metadata_webhook_delivery
+
+    failed = MetadataRefreshEvent(
+        event="source_refresh_failed",
+        job_id="retried-job",
+        metadata_novel_id=999,
+        source_id=12,
+        site="royalroad",
+    )
+    completed = MetadataRefreshEvent(
+        event="source_refresh_completed",
+        job_id="retried-job",
+        metadata_novel_id=999,
+        source_id=12,
+        site="royalroad",
+    )
+
+    assert claim_metadata_webhook_delivery(db, failed) is True
+    db.commit()
+    assert claim_metadata_webhook_delivery(db, completed) is True
+    db.commit()
+
+    assert db.query(MetadataWebhookDelivery).count() == 2
+
+
 def test_update_events_are_user_scoped_and_markable(client_with_auth, db):
     response, headers, _, url, library = add_novel_resources(client_with_auth, db)
     assert response.status_code == status.HTTP_201_CREATED
