@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Search, SlidersHorizontal, X } from "lucide-react";
+import { BookOpen, Plus, RefreshCw, Search, SlidersHorizontal, X } from "lucide-react";
 import { discoveryService } from "../services/discoveryService";
 import { useLibraryContext } from "../context/LibraryContext";
 import { useToast } from "../context/ToastContext";
@@ -8,6 +8,7 @@ import { DiscoveredNovel, DiscoveryFilters } from "../types/discovery";
 import { Novel } from "../types/novel";
 import NovelCard from "../components/novel/NovelCard";
 import { NovelCardSkeleton } from "../components/common/Skeleton";
+import CreateNovelForm from "../components/novel/CreateNovelForm";
 import defaultCoverImage from "../assets/cover.png";
 import "../styles/library.css";
 import "../styles/novel-list.css";
@@ -52,9 +53,13 @@ const Discover: React.FC = () => {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filters, setFilters] = useState<DiscoveryFilters>(EMPTY_FILTERS);
   const [appliedFilters, setAppliedFilters] = useState<DiscoveryFilters>(EMPTY_FILTERS);
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastRefreshAt, setLastRefreshAt] = useState<Date | null>(null);
+  const [catalogStatus, setCatalogStatus] = useState<"unknown" | "online" | "offline">("unknown");
   const searchFromUrl = new URLSearchParams(window.location.search).get("q") || "";
 
-  const currentSite = site || "royalroad";
+  const currentSite = site || "all";
 
   useEffect(() => {
     setNovels([]);
@@ -96,13 +101,32 @@ const Discover: React.FC = () => {
       }
       setHasMore(response.has_more);
       setNextCursor(response.next_cursor);
+      setCatalogStatus("online");
+      if (page === 1) {
+        setLastRefreshAt(new Date());
+      }
     } catch (err) {
       console.error("Failed to fetch novels:", err);
       setError("Failed to load novels. Please try again.");
+      setCatalogStatus("offline");
     } finally {
       setLoading(false);
       setLoadingMore(false);
     }
+  };
+
+  const handleRefresh = () => {
+    setNextCursor(null);
+    setHasMore(true);
+    setIsRefreshing(true);
+    void fetchNovels(currentSite, 1, searchFromUrl, appliedFilters).finally(() => {
+      setIsRefreshing(false);
+    });
+  };
+
+  const handleImportSuccess = () => {
+    setIsImportOpen(false);
+    handleRefresh();
   };
 
   const handleSiteChange = (newSite: string) => {
@@ -233,7 +257,32 @@ const Discover: React.FC = () => {
             Search the Nexus metadata server, compare sources, and bring the stories you want into your library.
           </p>
         </div>
+        <div className="discover-hero__actions">
+          <button type="button" className="discover-secondary-btn" onClick={handleRefresh} disabled={loading || isRefreshing}>
+            <RefreshCw size={16} className={isRefreshing ? "is-spinning" : ""} aria-hidden="true" />
+            {isRefreshing ? "Refreshing" : "Refresh catalog"}
+          </button>
+          <button
+            type="button"
+            className="discover-primary-btn"
+            onClick={() => setIsImportOpen(true)}
+            disabled={!activeLibraryId}
+            title={activeLibraryId ? "Import a novel by URL" : "Select a library before importing"}
+          >
+            <Plus size={17} aria-hidden="true" /> Import novel
+          </button>
+        </div>
       </header>
+
+      <div className={`discover-catalog-status discover-catalog-status--${catalogStatus}`} role="status">
+        <span className="discover-catalog-status__dot" aria-hidden="true" />
+        <span>
+          {catalogStatus === "offline" ? "Metadata catalog unavailable" : "Metadata catalog online"}
+          {lastRefreshAt && catalogStatus === "online" && (
+            <small> · checked {lastRefreshAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</small>
+          )}
+        </span>
+      </div>
 
       <div className="discover-toolbar">
         <form className="discover-toolbar__search" onSubmit={submitSearch}>
@@ -359,7 +408,30 @@ const Discover: React.FC = () => {
 
       {!loading && novels.length === 0 && !error && (
         <div className="discover-empty">
-          <p>No novels found on {getSiteDisplayName(currentSite)}.</p>
+          <BookOpen size={32} aria-hidden="true" />
+          {searchFromUrl || hasActiveFilters ? (
+            <>
+              <h2>No matching novels</h2>
+              <p>Try a broader search or clear your filters to see more of the Nexus catalog.</p>
+              <button type="button" onClick={clearFilters}>Clear filters</button>
+            </>
+          ) : (
+            <>
+              <h2>Your catalog is ready for its first story</h2>
+              <p>
+                The metadata server is connected, but it has no imported novels yet. Import a story URL or load a catalog export to start discovering.
+              </p>
+              <div className="discover-empty__actions">
+                <button type="button" onClick={() => setIsImportOpen(true)} disabled={!activeLibraryId}>
+                  <Plus size={16} aria-hidden="true" /> Import novel by URL
+                </button>
+                <button type="button" className="is-secondary" onClick={handleRefresh} disabled={isRefreshing}>
+                  <RefreshCw size={16} className={isRefreshing ? "is-spinning" : ""} aria-hidden="true" /> Check again
+                </button>
+              </div>
+              {!activeLibraryId && <small>Select or create a library before importing.</small>}
+            </>
+          )}
         </div>
       )}
 
@@ -392,6 +464,15 @@ const Discover: React.FC = () => {
           </div>
           {renderPagination()}
         </>
+      )}
+
+      {activeLibraryId && (
+        <CreateNovelForm
+          library_id={activeLibraryId}
+          isOpen={isImportOpen}
+          onClose={() => setIsImportOpen(false)}
+          onSuccess={handleImportSuccess}
+        />
       )}
     </div>
   );

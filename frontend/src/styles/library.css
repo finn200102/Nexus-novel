@@ -10,10 +10,24 @@
   animation: fade-in 0.5s ease;
 }
 
-.discover-hero { display: flex; align-items: end; min-height: 118px; padding: 0 0 24px; border-bottom: 1px solid #252d3a; }
+.discover-hero { display: flex; align-items: end; justify-content: space-between; gap: 24px; min-height: 118px; padding: 0 0 24px; border-bottom: 1px solid #252d3a; }
 .discover-hero__eyebrow { margin: 0 0 6px; color: #997fff; font-size: 11px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
 .discover-hero h1 { margin: 0; font-size: 28px; line-height: 1.15; }
 .discover-hero p:not(.discover-hero__eyebrow) { max-width: 650px; margin: 9px 0 0; color: #97a2b3; font-size: 14px; }
+.discover-hero__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 9px; }
+.discover-primary-btn, .discover-secondary-btn { display: inline-flex; align-items: center; gap: 7px; min-height: 38px; padding: 0 13px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 700; }
+.discover-primary-btn { color: #fff; background: #5d39d8; border: 1px solid #6d49e4; }
+.discover-primary-btn:hover { background: #704af0; }
+.discover-secondary-btn { color: #c5cedb; background: #151c26; border: 1px solid #303b4c; }
+.discover-secondary-btn:hover { color: #fff; border-color: #58677d; }
+.discover-primary-btn:disabled, .discover-secondary-btn:disabled { opacity: .55; cursor: not-allowed; }
+.discover-catalog-status { display: flex; align-items: center; gap: 8px; margin: 14px 0 0; color: #94a1b3; font-size: 12px; }
+.discover-catalog-status small { color: #748194; }
+.discover-catalog-status__dot { width: 7px; height: 7px; border-radius: 50%; background: #45d49a; box-shadow: 0 0 0 3px rgba(69,212,154,.12); }
+.discover-catalog-status--offline { color: #f0a6a6; }
+.discover-catalog-status--offline .discover-catalog-status__dot { background: #f06d78; box-shadow: 0 0 0 3px rgba(240,109,120,.12); }
+.is-spinning { animation: discover-spin .8s linear infinite; }
+@keyframes discover-spin { to { transform: rotate(360deg); } }
 .discover-toolbar { display: grid; gap: 14px; }
 .discover-toolbar__search { display: flex; align-items: center; gap: 10px; max-width: 640px; height: 42px; padding: 0 13px; color: #8793a4; background: #121923; border: 1px solid #2a3341; border-radius: 6px; }
 .discover-toolbar__search:focus-within { border-color: #7657f5; box-shadow: 0 0 0 3px rgba(118,87,245,.15); }
