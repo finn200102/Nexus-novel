@@ -51,6 +51,9 @@
 .app-topbar__actions { display: flex; align-items: center; gap: 12px; }
 .app-topbar__health { display: flex; align-items: center; gap: 7px; color: #a9b6c7; font-size: 11px; }
 .app-topbar__health span { width: 7px; height: 7px; border-radius: 50%; background: #41c781; box-shadow: 0 0 0 3px rgba(65,199,129,.1); }
+.app-topbar__health .health-dot--degraded { background: #f6b94d; box-shadow: 0 0 0 3px rgba(246,185,77,.12); }
+.app-topbar__health .health-dot--offline { background: #ed6b83; box-shadow: 0 0 0 3px rgba(237,107,131,.12); }
+.app-topbar__health .health-dot--unknown { background: #8491a7; box-shadow: 0 0 0 3px rgba(132,145,167,.12); }
 .app-topbar__bell { display: grid; place-items: center; width: 34px; height: 34px; color: #aeb8c5; border: 1px solid #293343; border-radius: 50%; }
 .app-topbar__bell:hover { color: #fff; border-color: #48576d; }
 .app-topbar__add { display: inline-flex; align-items: center; gap: 7px; height: 38px; padding: 0 13px; color: #fff; background: #6546db; border: 1px solid #7557ea; border-radius: 5px; font-size: 12px; font-weight: 700; }

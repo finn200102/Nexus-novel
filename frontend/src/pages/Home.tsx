@@ -12,6 +12,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { useLibraryContext } from "../context/LibraryContext";
 import { novelService } from "../services/novelService";
+import { activityService, OperationsSummary } from "../services/activityService";
 import { Novel, NovelUpdateEvent } from "../types/novel";
 import defaultCoverImage from "../assets/cover.png";
 import "../styles/home.css";
@@ -25,6 +26,7 @@ const Home: React.FC = () => {
   const [novels, setNovels] = useState<Novel[]>([]);
   const [updates, setUpdates] = useState<NovelUpdateEvent[]>([]);
   const [loading, setLoading] = useState(false);
+  const [operations, setOperations] = useState<OperationsSummary | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -35,17 +37,20 @@ const Home: React.FC = () => {
       }
       setLoading(true);
       try {
-        const [data, updateData] = await Promise.all([
+        const [data, updateData, operationsData] = await Promise.all([
           novelService.getAllNovels(activeLibrary.id, ""),
           novelService.getUpdateEvents(activeLibrary.id, true),
+          activityService.getOperationsSummary(activeLibrary.id),
         ]);
         if (!cancelled) {
           setNovels(Array.isArray(data) ? data : []);
           setUpdates(Array.isArray(updateData) ? updateData : []);
+          setOperations(operationsData);
         }
       } catch (error) {
         console.error("Failed to load dashboard novels", error);
         if (!cancelled) setNovels([]);
+        if (!cancelled) setOperations(null);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -143,9 +148,10 @@ const Home: React.FC = () => {
         <section className="dashboard-panel dashboard-panel--activity">
           <header className="dashboard-panel__header"><div><p>Activity</p><h2>Library pulse</h2></div></header>
           <div className="activity-list">
-            <div><span className="activity-list__icon"><Database size={16} /></span><p><strong>Metadata server</strong><small>Catalog search and source data are available.</small></p><b>Online</b></div>
-            <div><span className="activity-list__icon"><Download size={16} /></span><p><strong>Downloads</strong><small>Manage chapter transfers from one place.</small></p><button type="button" onClick={() => navigate("/downloads")}>Open</button></div>
-            <div><span className="activity-list__icon"><Play size={16} /></span><p><strong>Reading queue</strong><small>{recent.length ? `${recent.length} recent stories ready to open.` : "Add a story to start reading."}</small></p><button type="button" onClick={goToLibrary} disabled={!activeLibrary}>Open</button></div>
+            <div><span className="activity-list__icon"><Database size={16} /></span><p><strong>Metadata server</strong><small>{operations?.metadata_server.detail || "Checking metadata readiness…"}</small></p><b className={`status-${operations?.metadata_server.status || "unknown"}`}>{operations?.metadata_server.status || "Checking"}</b></div>
+            <div><span className="activity-list__icon"><Download size={16} /></span><p><strong>Downloads</strong><small>{operations ? `${operations.downloads.queued} queued · ${operations.downloads.running} running · ${operations.downloads.failed} failed` : "Checking download queue…"}</small></p><button type="button" onClick={() => navigate("/downloads")}>Open</button></div>
+            <div><span className="activity-list__icon"><Play size={16} /></span><p><strong>Followed stories</strong><small>{operations ? `${operations.reading_stories} reading · ${operations.unread_updates} unread updates` : "Checking follow state…"}</small></p><button type="button" onClick={goToLibrary} disabled={!activeLibrary}>Open</button></div>
+            <div><span className="activity-list__icon"><Bell size={16} /></span><p><strong>Source health</strong><small>{operations ? `${operations.source_failures} recent source failures · ${operations.refresh_schedules} refresh schedules` : "Checking source health…"}</small></p><b className={operations?.source_failures ? "status-degraded" : "status-online"}>{operations?.source_failures ? "Attention" : "Healthy"}</b></div>
           </div>
         </section>
 

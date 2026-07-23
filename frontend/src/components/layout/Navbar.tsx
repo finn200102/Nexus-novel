@@ -15,6 +15,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import LibrarySwitcher from "./LibrarySwitcher";
 import { useLibraryContext } from "../../context/LibraryContext";
 import { useAuth } from "../../context/AuthContext";
+import { activityService, OperationsSummary } from "../../services/activityService";
 
 interface NavbarProps {
   onRequestCreateLibrary?: () => void;
@@ -34,6 +35,19 @@ const Navbar: React.FC<NavbarProps> = ({ onRequestCreateLibrary }) => {
   const { isAuthenticated, user, logout } = useAuth();
   const [query, setQuery] = useState("");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [metadataStatus, setMetadataStatus] = useState<OperationsSummary["metadata_server"]["status"] | "unknown">("unknown");
+
+  React.useEffect(() => {
+    if (!activeLibrary) {
+      setMetadataStatus("unknown");
+      return;
+    }
+    let cancelled = false;
+    activityService.getOperationsSummary(activeLibrary.id)
+      .then((summary) => { if (!cancelled) setMetadataStatus(summary.metadata_server.status); })
+      .catch(() => { if (!cancelled) setMetadataStatus("offline"); });
+    return () => { cancelled = true; };
+  }, [activeLibrary?.id]);
 
   const submitSearch = (event: React.FormEvent) => {
     event.preventDefault();
@@ -117,8 +131,8 @@ const Navbar: React.FC<NavbarProps> = ({ onRequestCreateLibrary }) => {
           <kbd>⌘ K</kbd>
         </form>
         <div className="app-topbar__actions">
-          <button type="button" className="app-topbar__health">
-            <span /> Metadata server online
+          <button type="button" className="app-topbar__health" title="Metadata server readiness">
+            <span className={`health-dot health-dot--${metadataStatus}`} /> Metadata server {metadataStatus}
           </button>
           <button type="button" className="app-topbar__bell" title="Notifications" aria-label="Notifications">
             <Bell size={18} aria-hidden="true" />
