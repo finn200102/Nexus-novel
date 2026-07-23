@@ -2,9 +2,12 @@
 import axios from "axios";
 
 const apiClient = axios.create({
-  // Keep the browser on the same origin. Vite proxies /api in development;
-  // nginx proxies it to novel-api in the Compose deployment.
-  baseURL: import.meta.env.VITE_API_URL || "/api",
+  // Docker serves the UI and API behind one nginx origin. During local Vite
+  // development, use the host-exposed API directly; its CORS policy allows
+  // the Vite origin and this avoids proxying back into the frontend server.
+  baseURL:
+    import.meta.env.VITE_API_URL ||
+    (import.meta.env.DEV ? "http://127.0.0.1:8000" : "/api"),
 });
 
 // Request interceptor to add the token to every request
