@@ -10,6 +10,7 @@ import {
   Plus,
   Search,
   X,
+  Server,
 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import LibrarySwitcher from "./LibrarySwitcher";
@@ -26,6 +27,7 @@ const navItems = [
   { label: "Discover", to: "/discover/all", icon: Compass },
   { label: "Downloads", to: "/downloads", icon: Download },
   { label: "Activity", to: "/activity", icon: Bell },
+  { label: "Operations", to: "/operations", icon: Server },
 ];
 
 const Navbar: React.FC<NavbarProps> = ({ onRequestCreateLibrary }) => {
