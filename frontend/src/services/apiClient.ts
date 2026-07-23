@@ -2,9 +2,9 @@
 import axios from "axios";
 
 const apiClient = axios.create({
-  // The direct dev URL also works when the Vite and API processes run in
-  // separate local sessions. Production continues to use the reverse proxy.
-  baseURL: import.meta.env.VITE_API_URL || (import.meta.env.DEV ? "http://127.0.0.1:8000" : "/api"),
+  // Keep the browser on the same origin. Vite proxies /api in development;
+  // nginx proxies it to novel-api in the Compose deployment.
+  baseURL: import.meta.env.VITE_API_URL || "/api",
 });
 
 // Request interceptor to add the token to every request
