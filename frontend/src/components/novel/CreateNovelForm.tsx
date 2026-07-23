@@ -1,4 +1,5 @@
 import React, { FormEvent, useEffect, useState } from "react";
+import axios from "axios";
 import { novelService } from "../../services/novelService";
 import { useToast } from "../../context/ToastContext";
 import "../../styles/novel-form.css";
@@ -75,7 +76,13 @@ const CreateNovelForm: React.FC<CreateNovelProps> = ({
       }
     } catch (error) {
       console.error("Failed to add novel", error);
-      addToast("Something went wrong. Please try again.", "error");
+      const detail = axios.isAxiosError(error) ? error.response?.data?.detail : undefined;
+      if (detail === "Novel already exists") {
+        addToast("This novel is already in your library.", "success");
+        onSuccess?.();
+      } else {
+        addToast(detail || "Something went wrong. Please try again.", "error");
+      }
     } finally {
       setIsSubmitting(false);
     }

@@ -401,12 +401,19 @@ async def add_novel(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if novel_services.get_novel_by_url(db, novel.url).first():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Novel already exists"
-        )
+    # Validate the target library before inspecting an existing URL. This keeps
+    # duplicate imports safe across users while making retries from the UI
+    # idempotent for the library that already owns the novel.
+    library = check_library(db, novel.library_id, current_user)
 
-    check_library(db, novel.library_id, current_user)
+    existing_novel = novel_services.get_novel_by_url(db, novel.url).first()
+    if existing_novel:
+        if existing_novel.library_id == library.id:
+            return existing_novel
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Novel already exists in another library",
+        )
 
     if not supported_src(novel.url):
         raise HTTPException(

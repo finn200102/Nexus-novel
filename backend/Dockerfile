@@ -19,8 +19,7 @@ RUN apt-get update \
 COPY --from=rust-toolchain /usr/local/cargo /usr/local/cargo
 COPY --from=rust-toolchain /usr/local/rustup /usr/local/rustup
 
-COPY backend ./backend
-COPY rustbindings ./rustbindings
+COPY backend/pyproject.toml backend/uv.lock backend/README.md ./backend/
 
 WORKDIR /app/backend
 
@@ -28,8 +27,19 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/root/.cargo/git \
     pip install --no-cache-dir uv \
-    && uv sync --locked --no-dev \
-    && cd /app/rustbindings/pybindings \
+    && uv sync --locked --no-dev
+
+# Keep the expensive Rust extension layer independent from Python application
+# source changes. Backend edits can now reuse this layer and only rebuild the
+# final source-copy layer.
+COPY rustbindings ./rustbindings
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=cache,target=/root/.cargo/registry \
+    --mount=type=cache,target=/root/.cargo/git \
+    cd /app/rustbindings/pybindings \
     && VIRTUAL_ENV=/app/backend/.venv /app/backend/.venv/bin/maturin develop --release
+
+COPY backend ./backend
 
 CMD ["/app/backend/.venv/bin/uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
