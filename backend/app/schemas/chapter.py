@@ -91,3 +91,28 @@ class ReadingProgressResponse(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ReadingAnnotationCreate(BaseModel):
+    chapter_number: int
+    annotation_type: str = "bookmark"
+    position: int = 0
+    percent: float = 0
+    quote: Optional[str] = None
+    note: Optional[str] = None
+
+
+class ReadingAnnotationResponse(BaseModel):
+    id: int
+    novel_id: int
+    chapter_id: int
+    chapter_number: int
+    annotation_type: str
+    position: int
+    percent: float
+    quote: Optional[str] = None
+    note: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

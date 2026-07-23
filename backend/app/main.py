@@ -18,6 +18,7 @@ from app.models.follow import UserNovelFollow
 from app.models.update_event import NovelUpdateEvent
 from app.models.download_job import ChapterDownloadJob
 from app.models.reading_progress import ReadingProgress
+from app.models.reading_annotation import ReadingAnnotation
 from app.database_migrations import ensure_runtime_schema
 
 Base.metadata.create_all(bind=engine)

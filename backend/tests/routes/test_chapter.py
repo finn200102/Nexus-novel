@@ -208,3 +208,33 @@ def test_reading_progress_is_persisted_per_user(client, db):
     response = client.get(f"/chapter/progress/{novel.id}", headers=headers)
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["chapter_number"] == 1
+
+
+def test_reading_annotations_are_private_and_positioned(client, db):
+    novel, headers, _, _, _ = create_test_novel(db)
+    add_chapter(client, novel.id, headers)
+
+    response = client.post(
+        f"/chapter/annotations/{novel.id}",
+        json={
+            "chapter_number": 1,
+            "annotation_type": "note",
+            "position": 120,
+            "percent": 18.5,
+            "quote": "A memorable line",
+            "note": "Follow this thread later",
+        },
+        headers=headers,
+    )
+    assert response.status_code == status.HTTP_201_CREATED
+    assert response.json()["chapter_number"] == 1
+    assert response.json()["note"] == "Follow this thread later"
+
+    response = client.get(f"/chapter/annotations/{novel.id}", headers=headers)
+    assert response.status_code == status.HTTP_200_OK
+    assert len(response.json()) == 1
+
+    response = client.delete(
+        f"/chapter/annotations/{response.json()[0]['id']}", headers=headers
+    )
+    assert response.status_code == status.HTTP_204_NO_CONTENT

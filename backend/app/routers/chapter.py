@@ -4,7 +4,7 @@ from config.database import SessionLocal as SessionFactory
 from config.database import get_db
 from app.models.user import User
 from ..schemas.chapter import Chapter as ChapterSchema
-from ..schemas.chapter import ChapterCreate, ChapterUpdate, ChapterContent, ChapterDownloadJob as ChapterDownloadJobSchema, ChapterDownloadQueueRequest, ReadingProgressResponse, ReadingProgressUpdate
+from ..schemas.chapter import ChapterCreate, ChapterUpdate, ChapterContent, ChapterDownloadJob as ChapterDownloadJobSchema, ChapterDownloadQueueRequest, ReadingProgressResponse, ReadingProgressUpdate, ReadingAnnotationCreate, ReadingAnnotationResponse
 from app.models.chapter import Chapter
 from app.models.novel import Novel
 import app.services.chapter_services as chapter_services
@@ -14,6 +14,7 @@ from app.auth.dependencies import get_current_user
 from app.models.chapter import ContentStatus
 from app.models.download_job import ChapterDownloadJob
 from app.models.reading_progress import ReadingProgress
+from app.models.reading_annotation import ReadingAnnotation
 
 from pathlib import Path
 import os
@@ -653,6 +654,75 @@ def update_reading_progress(
     db.commit()
     db.refresh(progress)
     return progress
+
+
+@router.get("/annotations/{novel_id:int}", response_model=list[ReadingAnnotationResponse])
+def get_reading_annotations(
+    novel_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    novel = novel_services.get_novel_by_id(db, novel_id)
+    if not novel or novel.library_id not in [library.id for library in current_user.libraries]:
+        raise HTTPException(status_code=404, detail="Novel not found")
+    annotations = db.query(ReadingAnnotation).filter(
+        ReadingAnnotation.user_id == current_user.id,
+        ReadingAnnotation.novel_id == novel_id,
+    ).order_by(ReadingAnnotation.created_at.desc()).all()
+    return [
+        {**annotation.__dict__, "chapter_number": annotation.chapter.chapter_number}
+        for annotation in annotations
+    ]
+
+
+@router.post("/annotations/{novel_id:int}", response_model=ReadingAnnotationResponse, status_code=status.HTTP_201_CREATED)
+def create_reading_annotation(
+    novel_id: int,
+    annotation: ReadingAnnotationCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    novel = novel_services.get_novel_by_id(db, novel_id)
+    if not novel or novel.library_id not in [library.id for library in current_user.libraries]:
+        raise HTTPException(status_code=404, detail="Novel not found")
+    if annotation.annotation_type not in {"bookmark", "note", "highlight"}:
+        raise HTTPException(status_code=422, detail="Unsupported annotation type")
+    chapter = db.query(Chapter).filter(
+        Chapter.novel_id == novel_id,
+        Chapter.chapter_number == annotation.chapter_number,
+    ).first()
+    if not chapter:
+        raise HTTPException(status_code=404, detail="Chapter not found")
+    item = ReadingAnnotation(
+        user_id=current_user.id,
+        novel_id=novel_id,
+        chapter_id=chapter.id,
+        annotation_type=annotation.annotation_type,
+        position=max(annotation.position, 0),
+        percent=min(max(annotation.percent, 0), 100),
+        quote=annotation.quote,
+        note=annotation.note,
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return {**item.__dict__, "chapter_number": chapter.chapter_number}
+
+
+@router.delete("/annotations/{annotation_id:int}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_reading_annotation(
+    annotation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    item = db.query(ReadingAnnotation).filter(
+        ReadingAnnotation.id == annotation_id,
+        ReadingAnnotation.user_id == current_user.id,
+    ).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Annotation not found")
+    db.delete(item)
+    db.commit()
 
 
 @router.get("/{novel_id:int}", response_model=list[ChapterSchema])

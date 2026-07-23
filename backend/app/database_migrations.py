@@ -107,3 +107,18 @@ def ensure_runtime_schema(engine) -> None:
                 CONSTRAINT uq_user_novel_progress UNIQUE (user_id, novel_id)
             )
         """))
+        connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS reading_annotations (
+                id INTEGER PRIMARY KEY,
+                created_at TIMESTAMP,
+                updated_at TIMESTAMP,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                novel_id INTEGER NOT NULL REFERENCES novels(id) ON DELETE CASCADE,
+                chapter_id INTEGER NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
+                annotation_type VARCHAR(20) NOT NULL DEFAULT 'bookmark',
+                position INTEGER NOT NULL DEFAULT 0,
+                percent FLOAT NOT NULL DEFAULT 0,
+                quote TEXT NULL,
+                note TEXT NULL
+            )
+        """))

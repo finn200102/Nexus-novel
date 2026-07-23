@@ -83,6 +83,24 @@ export const chapterService = {
     });
     return response.data;
   },
+  async getReadingAnnotations(novelId: number) {
+    const response = await apiClient.get(`/chapter/annotations/${novelId}`);
+    return response.data;
+  },
+  async createReadingAnnotation(novelId: number, annotation: {
+    chapter_number: number;
+    annotation_type: "bookmark" | "note" | "highlight";
+    position: number;
+    percent: number;
+    quote?: string;
+    note?: string;
+  }) {
+    const response = await apiClient.post(`/chapter/annotations/${novelId}`, annotation);
+    return response.data;
+  },
+  async deleteReadingAnnotation(annotationId: number) {
+    await apiClient.delete(`/chapter/annotations/${annotationId}`);
+  },
 
   async deleteChapterById(chapterId: number) {
     try {
