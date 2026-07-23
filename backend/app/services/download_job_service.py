@@ -40,7 +40,10 @@ def queue_missing_chapters(db: Session, *, user_id: int, library_id: int, novel_
 
 
 def claim_job(db: Session, job_id: int, *, worker_id: str | None = None) -> ChapterDownloadJob | None:
-    now = datetime.now(UTC)
+    # SQLAlchemy's DateTime columns are stored without timezone information in
+    # the existing PostgreSQL schema. Normalize the comparison value so queued
+    # jobs do not fail before the downloader gets a chance to run.
+    now = datetime.now(UTC).replace(tzinfo=None)
     job = db.query(ChapterDownloadJob).filter(ChapterDownloadJob.id == job_id).first()
     if not job or job.status not in {"queued", "retry_wait"}:
         return None

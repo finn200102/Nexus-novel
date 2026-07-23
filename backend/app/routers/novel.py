@@ -32,6 +32,7 @@ from app.services.library_services import get_library_by_id
 import app.services.chapter_services as chapter_services
 from app.auth.dependencies import get_current_user
 from app.services import metadata_client
+from app.services.download_job_service import queue_missing_chapters
 from app.logging_config import get_logger
 import os
 import shutil
@@ -742,6 +743,25 @@ def update_follow_state(
     follow.notification_count = update.notification_count
     novel.follow_state = update.follow_state
     novel.followed_at = follow.followed_at
+    # Applying an automatic-download policy should also honor it immediately
+    # for chapters already known to the catalog. Future refresh webhooks will
+    # queue subsequent chapters through the same durable-job path.
+    if update.download_policy == "next_chapter":
+        queue_missing_chapters(
+            db,
+            user_id=current_user.id,
+            library_id=library_id,
+            novel_id=novel.id,
+            count=1,
+        )
+    elif update.download_policy == "next_n":
+        queue_missing_chapters(
+            db,
+            user_id=current_user.id,
+            library_id=library_id,
+            novel_id=novel.id,
+            count=max(update.download_count, 1),
+        )
     db.commit()
     db.refresh(novel)
     return novel

@@ -57,6 +57,14 @@ def run_queued_download(job_id: int, db_session_factory):
         if not chapter:
             fail_or_retry_job(db, job, "Chapter disappeared", error_code="CHAPTER_NOT_FOUND")
             return
+        # Jobs created by the durable queue do not pass through the interactive
+        # chapter endpoint, so establish the same processing state here before
+        # the downloader opens its worker session.
+        if chapter.content_status == ContentStatus.MISSING:
+            chapter.content_status = ContentStatus.PROCESSING
+            chapter.download_started_at = datetime.utcnow()
+            chapter.download_error = None
+            db.commit()
         download_chapter_background(
             job.chapter_id,
             job.novel_id,

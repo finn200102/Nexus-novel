@@ -294,7 +294,9 @@ def test_metadata_refresh_event_creates_user_event_and_download_job(client_with_
     assert response.json()["created_events"] == 1
     assert response.json()["queued_downloads"] == 2
     assert db.query(NovelUpdateEvent).filter(NovelUpdateEvent.novel_id == novel.id).count() == 1
-    assert db.query(ChapterDownloadJob).filter(ChapterDownloadJob.novel_id == novel.id).count() == 2
+    # Two known chapters were queued when the policy was applied, and two of
+    # the newly reported chapters were queued by the refresh event.
+    assert db.query(ChapterDownloadJob).filter(ChapterDownloadJob.novel_id == novel.id).count() == 4
 
 
 def test_metadata_refresh_event_duplicate_is_noop(client_with_auth, db, monkeypatch):
@@ -329,7 +331,7 @@ def test_metadata_refresh_event_duplicate_is_noop(client_with_auth, db, monkeypa
     assert second.json() == {"accepted": True, "created_events": 0, "queued_downloads": 0}
     assert db.query(MetadataWebhookDelivery).count() == 1
     assert db.query(NovelUpdateEvent).filter(NovelUpdateEvent.novel_id == novel.id).count() == 1
-    assert db.query(ChapterDownloadJob).filter(ChapterDownloadJob.novel_id == novel.id).count() == 1
+    assert db.query(ChapterDownloadJob).filter(ChapterDownloadJob.novel_id == novel.id).count() == 2
 
 
 def test_metadata_refresh_event_requires_secret_before_claiming(client_with_auth, db, monkeypatch):

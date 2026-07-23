@@ -57,7 +57,8 @@ def release_due_notifications(db) -> int:
     return changed
 
 
-def process_downloads(db) -> int:
+def process_downloads() -> int:
+    db = SessionLocal()
     jobs = (
         db.query(ChapterDownloadJob)
         .filter(
@@ -73,6 +74,7 @@ def process_downloads(db) -> int:
     )
     ids = [job.id for job in jobs]
     db.expunge_all()
+    db.close()
     for job_id in ids:
         run_queued_download(job_id, SessionLocal)
     return len(ids)
@@ -84,9 +86,11 @@ async def run() -> None:
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, stop.set)
     while not stop.is_set():
+        # The downloader is synchronous internally and bridges to async source
+        # clients with asyncio.run(). Keep it off this worker's event loop.
+        await asyncio.to_thread(process_downloads)
         db = SessionLocal()
         try:
-            process_downloads(db)
             release_due_notifications(db)
         finally:
             db.close()
