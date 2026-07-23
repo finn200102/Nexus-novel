@@ -7,6 +7,7 @@ from sqlalchemy import (
     ForeignKey,
     Table,
     DateTime,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 from app.models.base import BaseModel
@@ -21,6 +22,9 @@ novel_tag = Table(
 
 class Novel(BaseModel):
     __tablename__ = "novels"
+    __table_args__ = (
+        UniqueConstraint("library_id", "url", name="uq_novels_library_url"),
+    )
 
     title = Column(String(255), nullable=False, index=True)
     author_id = Column(Integer, ForeignKey("authors.id"))
@@ -34,7 +38,9 @@ class Novel(BaseModel):
     genre_id = Column(Integer, ForeignKey("genres.id"))
     library_id = Column(Integer, ForeignKey("libraries.id"), nullable=False)
 
-    metadata_id = Column(Integer, unique=True)
+    # Metadata records are shared catalog facts. A user may add the same work
+    # to more than one library, so this must not be globally unique.
+    metadata_id = Column(Integer, index=True)
     scrape_status = Column(String(20), default="pending")  # pending, completed, failed
     scrape_error = Column(String(500), nullable=True)
     author = Column(String(255))

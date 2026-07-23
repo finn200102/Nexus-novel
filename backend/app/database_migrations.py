@@ -13,6 +13,7 @@ def ensure_runtime_schema(engine) -> None:
         return
 
     integer_primary_key = "SERIAL PRIMARY KEY" if engine.dialect.name == "postgresql" else "INTEGER PRIMARY KEY"
+    boolean_default = "TRUE" if engine.dialect.name == "postgresql" else "1"
 
     existing_columns = {column["name"] for column in inspector.get_columns("novels")}
     additions = {
@@ -20,11 +21,18 @@ def ensure_runtime_schema(engine) -> None:
         "followed_at": "TIMESTAMP NULL",
     }
     with engine.begin() as connection:
+        # Early Nexus Novel versions made metadata_id globally unique. Catalog
+        # metadata is shared, but library membership is per-library, so remove
+        # that constraint before accepting the same work in another library.
+        if engine.dialect.name == "postgresql":
+            connection.execute(text("ALTER TABLE novels DROP CONSTRAINT IF EXISTS novels_metadata_id_key"))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_novels_metadata_id ON novels (metadata_id)"))
+            connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_novels_library_url ON novels (library_id, url)"))
         for name, definition in additions.items():
             if name not in existing_columns:
                 connection.execute(text(f"ALTER TABLE novels ADD COLUMN {name} {definition}"))
 
-        connection.execute(text("""
+        connection.execute(text(f"""
             UPDATE novels
             SET follow_state = CASE follow_state
                 WHEN 'following' THEN 'plan_to_read'
@@ -61,7 +69,7 @@ def ensure_runtime_schema(engine) -> None:
         for name, definition in follow_additions.items():
             if name not in follow_columns:
                 connection.execute(text(f"ALTER TABLE user_novel_follows ADD COLUMN {name} {definition}"))
-        connection.execute(text("""
+        connection.execute(text(f"""
             CREATE TABLE IF NOT EXISTS novel_update_events (
                 id INTEGER PRIMARY KEY,
                 created_at TIMESTAMP,
@@ -73,9 +81,9 @@ def ensure_runtime_schema(engine) -> None:
                 first_chapter_number INTEGER NULL,
                 last_chapter_number INTEGER NULL,
                 message TEXT NOT NULL DEFAULT '',
-                details JSON NOT NULL DEFAULT '{}',
+                details JSON NOT NULL DEFAULT '{{}}',
                 read_at TIMESTAMP NULL,
-                notification_visible BOOLEAN NOT NULL DEFAULT 1
+                notification_visible BOOLEAN NOT NULL DEFAULT {boolean_default}
             )
         """))
         connection.execute(text(f"""
@@ -93,7 +101,9 @@ def ensure_runtime_schema(engine) -> None:
         """))
         event_columns = {column["name"] for column in inspect(engine).get_columns("novel_update_events")}
         if "notification_visible" not in event_columns:
-            connection.execute(text("ALTER TABLE novel_update_events ADD COLUMN notification_visible BOOLEAN NOT NULL DEFAULT 1"))
+            connection.execute(text(
+                f"ALTER TABLE novel_update_events ADD COLUMN notification_visible BOOLEAN NOT NULL DEFAULT {boolean_default}"
+            ))
         connection.execute(text("""
             CREATE TABLE IF NOT EXISTS chapter_download_jobs (
                 id INTEGER PRIMARY KEY,

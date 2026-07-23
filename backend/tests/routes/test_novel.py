@@ -75,6 +75,24 @@ def test_add_novel_is_idempotent_for_same_library(client_with_auth, db):
     assert second_response.json()["id"] == first_response.json()["id"]
 
 
+def test_add_novel_to_a_second_library(client_with_auth, db):
+    first_response, headers, novel_data, url, library = add_novel_resources(
+        client_with_auth, db
+    )
+    second_library = create_library(
+        db, {"name": "Library2", "user_id": library.user_id}
+    )
+
+    second_response = client_with_auth.post(
+        "/novel/", json={"url": url, "library_id": second_library.id}, headers=headers
+    )
+
+    assert first_response.status_code == status.HTTP_201_CREATED
+    assert second_response.status_code == status.HTTP_201_CREATED
+    assert second_response.json()["id"] != first_response.json()["id"]
+    assert second_response.json()["library_id"] == second_library.id
+
+
 def test_add_novel_unauthorized(client_with_auth, db):
     """Test that adding a novel fails without authentication"""
     # Create a user and library

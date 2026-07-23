@@ -55,12 +55,14 @@ def get_novel_by_title(db: Session, title):
     return novels
 
 
-def get_novel_by_url(db: Session, url):
+def get_novel_by_url(db: Session, url, library_id=None):
     """
     Returns novels that match that url
     """
 
     novels = db.query(Novel).filter(Novel.url == url)
+    if library_id is not None:
+        novels = novels.filter(Novel.library_id == library_id)
     return novels
 
 
@@ -109,4 +111,3 @@ def update_novel(db: Session, novel_id, novel_data):
     db.commit()
     db.refresh(novel)
     return novel
-

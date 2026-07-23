@@ -422,14 +422,11 @@ async def add_novel(
     # idempotent for the library that already owns the novel.
     library = check_library(db, novel.library_id, current_user)
 
-    existing_novel = novel_services.get_novel_by_url(db, novel.url).first()
+    existing_novel = novel_services.get_novel_by_url(
+        db, novel.url, library.id
+    ).first()
     if existing_novel:
-        if existing_novel.library_id == library.id:
-            return existing_novel
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Novel already exists in another library",
-        )
+        return existing_novel
 
     if not supported_src(novel.url):
         raise HTTPException(
