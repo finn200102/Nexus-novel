@@ -279,6 +279,88 @@ def test_metadata_refresh_event_creates_user_event_and_download_job(client_with_
     assert db.query(ChapterDownloadJob).filter(ChapterDownloadJob.novel_id == novel.id).count() == 2
 
 
+def test_metadata_refresh_event_duplicate_is_noop(client_with_auth, db, monkeypatch):
+    from app.models.download_job import ChapterDownloadJob
+    from app.models.metadata_webhook_delivery import MetadataWebhookDelivery
+    from app.models.update_event import NovelUpdateEvent
+
+    response, headers, _, url, library = add_novel_resources(client_with_auth, db)
+    assert response.status_code == status.HTTP_201_CREATED
+    novel = get_novel_by_url(db, url).first()
+    novel.metadata_id = 78
+    db.commit()
+    client_with_auth.patch(
+        f"/novel/{novel.id}/follow?library_id={library.id}",
+        json={"follow_state": "reading", "download_policy": "next_chapter"},
+        headers=headers,
+    )
+    monkeypatch.setenv("NEXUS_NOVEL_WEBHOOK_SECRET", "test-secret")
+    payload = {
+        "event": "source_refresh_completed",
+        "job_id": "job-duplicate",
+        "metadata_novel_id": 78,
+        "source_id": 9,
+        "site": "royalroad",
+        "new_chapter_numbers": [21],
+        "chapters": [{"chapter_number": 21, "chapter_id": 21, "title": "Twenty-one"}],
+    }
+    first = client_with_auth.post("/novel/internal/metadata-events", headers={"X-Nexus-Webhook-Secret": "test-secret"}, json=payload)
+    second = client_with_auth.post("/novel/internal/metadata-events", headers={"X-Nexus-Webhook-Secret": "test-secret"}, json=payload)
+
+    assert first.json() == {"accepted": True, "created_events": 1, "queued_downloads": 1}
+    assert second.json() == {"accepted": True, "created_events": 0, "queued_downloads": 0}
+    assert db.query(MetadataWebhookDelivery).count() == 1
+    assert db.query(NovelUpdateEvent).filter(NovelUpdateEvent.novel_id == novel.id).count() == 1
+    assert db.query(ChapterDownloadJob).filter(ChapterDownloadJob.novel_id == novel.id).count() == 1
+
+
+def test_metadata_refresh_event_requires_secret_before_claiming(client_with_auth, db, monkeypatch):
+    from app.models.metadata_webhook_delivery import MetadataWebhookDelivery
+
+    monkeypatch.setenv("NEXUS_NOVEL_WEBHOOK_SECRET", "test-secret")
+    response = client_with_auth.post(
+        "/novel/internal/metadata-events",
+        headers={"X-Nexus-Webhook-Secret": "wrong-secret"},
+        json={
+            "event": "source_refresh_completed",
+            "job_id": "unauthorized-job",
+            "metadata_novel_id": 999,
+            "source_id": 9,
+            "site": "royalroad",
+        },
+    )
+
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+    assert db.query(MetadataWebhookDelivery).count() == 0
+
+
+def test_metadata_webhook_delivery_claim_is_unique_across_sessions(db):
+    from app.models.metadata_webhook_delivery import MetadataWebhookDelivery
+    from app.routers.novel import claim_metadata_webhook_delivery, MetadataRefreshEvent
+    from sqlalchemy.orm import sessionmaker
+
+    event = MetadataRefreshEvent(
+        event="source_refresh_completed",
+        job_id="concurrent-job",
+        metadata_novel_id=999,
+        source_id=12,
+        site="royalroad",
+    )
+    session_factory = sessionmaker(bind=db.get_bind())
+    first_session = session_factory()
+    second_session = session_factory()
+    try:
+        assert claim_metadata_webhook_delivery(first_session, event) is True
+        first_session.commit()
+        assert claim_metadata_webhook_delivery(second_session, event) is False
+        second_session.rollback()
+    finally:
+        first_session.close()
+        second_session.close()
+
+    assert db.query(MetadataWebhookDelivery).count() == 1
+
+
 def test_update_events_are_user_scoped_and_markable(client_with_auth, db):
     response, headers, _, url, library = add_novel_resources(client_with_auth, db)
     assert response.status_code == status.HTTP_201_CREATED

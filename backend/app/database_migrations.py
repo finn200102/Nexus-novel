@@ -12,6 +12,8 @@ def ensure_runtime_schema(engine) -> None:
     if "novels" not in inspector.get_table_names():
         return
 
+    integer_primary_key = "SERIAL PRIMARY KEY" if engine.dialect.name == "postgresql" else "INTEGER PRIMARY KEY"
+
     existing_columns = {column["name"] for column in inspector.get_columns("novels")}
     additions = {
         "follow_state": "VARCHAR(20) NOT NULL DEFAULT 'following'",
@@ -74,6 +76,19 @@ def ensure_runtime_schema(engine) -> None:
                 details JSON NOT NULL DEFAULT '{}',
                 read_at TIMESTAMP NULL,
                 notification_visible BOOLEAN NOT NULL DEFAULT 1
+            )
+        """))
+        connection.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS metadata_webhook_deliveries (
+                id {integer_primary_key},
+                created_at TIMESTAMP,
+                updated_at TIMESTAMP,
+                delivery_key VARCHAR(512) NOT NULL,
+                source_job_id VARCHAR(255) NOT NULL,
+                source_id INTEGER NOT NULL,
+                event_type VARCHAR(80) NOT NULL,
+                claimed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT uq_metadata_webhook_delivery_key UNIQUE (delivery_key)
             )
         """))
         event_columns = {column["name"] for column in inspect(engine).get_columns("novel_update_events")}

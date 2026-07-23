@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, status, HTTPException, BackgroundTasks, Header
 import httpx
 from sqlalchemy import desc
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from config.database import get_db
 from ..schemas.novel import Novel as NovelSchema
@@ -19,6 +20,7 @@ from app.models.library import Library
 from app.models.follow import UserNovelFollow
 from app.models.update_event import NovelUpdateEvent
 from app.models.download_job import ChapterDownloadJob
+from app.models.metadata_webhook_delivery import MetadataWebhookDelivery
 import app.services.novel_services as novel_services
 from app.services.author_services import create_author, get_author_by_name
 from app.services.chapter_services import (
@@ -155,6 +157,27 @@ class MetadataRefreshEvent(BaseModel):
     message: str | None = None
 
 
+def claim_metadata_webhook_delivery(db: Session, event: MetadataRefreshEvent) -> bool:
+    """Atomically claim a source job delivery before processing its effects."""
+    delivery_key = f"{event.source_id}:{event.job_id}"
+    try:
+        # A savepoint lets a duplicate-key conflict roll back only the insert,
+        # preserving the request transaction for the no-op response.
+        with db.begin_nested():
+            db.add(
+                MetadataWebhookDelivery(
+                    delivery_key=delivery_key,
+                    source_job_id=str(event.job_id),
+                    source_id=event.source_id,
+                    event_type=event.event,
+                )
+            )
+            db.flush()
+    except IntegrityError:
+        return False
+    return True
+
+
 @router.post("/internal/metadata-events")
 def receive_metadata_event(
     event: MetadataRefreshEvent,
@@ -164,6 +187,8 @@ def receive_metadata_event(
     expected_secret = os.getenv("NEXUS_NOVEL_WEBHOOK_SECRET", "").strip()
     if not expected_secret or webhook_secret != expected_secret:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid webhook secret")
+    if not claim_metadata_webhook_delivery(db, event):
+        return {"accepted": True, "created_events": 0, "queued_downloads": 0}
     if event.event == "source_refresh_failed":
         created_events = 0
         for novel in db.query(Novel).filter(Novel.metadata_id == event.metadata_novel_id).all():
@@ -171,12 +196,6 @@ def receive_metadata_event(
                 continue
             follow = get_or_create_follow(db, novel.library.user_id, novel)
             if follow.state in {"completed", "dropped", "ignored"}:
-                continue
-            duplicate = any(
-                str((item.details or {}).get("source_job_id")) == str(event.job_id)
-                for item in db.query(NovelUpdateEvent).filter(NovelUpdateEvent.novel_id == novel.id).all()
-            )
-            if duplicate:
                 continue
             db.add(NovelUpdateEvent(
                 user_id=novel.library.user_id,
@@ -200,13 +219,6 @@ def receive_metadata_event(
             continue
         follow = get_or_create_follow(db, novel.library.user_id, novel)
         if follow.state in {"on_hold", "completed", "dropped", "ignored"}:
-            continue
-        existing = (
-            db.query(NovelUpdateEvent)
-            .filter(NovelUpdateEvent.novel_id == novel.id)
-            .all()
-        )
-        if any(str((item.details or {}).get("source_job_id")) == str(event.job_id) for item in existing):
             continue
         chapters_by_number = {chapter.chapter_number: chapter for chapter in event.chapters}
         chapter_rows = {}
