@@ -4,6 +4,7 @@ import "./index.css";
 import "./styles/theme.css";
 import "./styles/layout.css";
 import App from "./App.tsx";
+import { ToastContainer } from "./components/common/Toast";
 import { AuthProvider } from "./context/AuthContext";
 import { LibraryProvider } from "./context/LibraryContext";
 import { ToastProvider } from "./context/ToastContext";
@@ -16,7 +17,8 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <AuthProvider>
       <LibraryProvider>
-        <ToastProvider>
+      <ToastProvider>
+          <ToastContainer />
           <App />
         </ToastProvider>
       </LibraryProvider>

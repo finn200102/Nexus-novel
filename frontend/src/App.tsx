@@ -19,7 +19,6 @@ import DiscoverNovelDetail from "./pages/DiscoverNovelDetail";
 import Downloads from "./pages/Downloads";
 import Activity from "./pages/Activity";
 
-import { ToastContainer } from "./components/common/Toast";
 import { useAuth } from "./context/AuthContext";
 
 // Wrap individual components with Layout
@@ -46,7 +45,6 @@ const Protected = ({ children }: { children: ReactNode }) => (
 const App: React.FC = () => {
   return (
     <Router>
-      <ToastContainer />
       <Routes>
         <Route path="/" element={<Protected><WrappedHome /></Protected>} />
         <Route path="/signup" element={<WrappedSignup />} />

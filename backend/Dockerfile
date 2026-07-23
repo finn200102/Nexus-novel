@@ -32,14 +32,18 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # Keep the expensive Rust extension layer independent from Python application
 # source changes. Backend edits can now reuse this layer and only rebuild the
 # final source-copy layer.
-COPY rustbindings ./rustbindings
+COPY rustbindings /app/rustbindings
+
+ARG BUILD_RUSTBINDINGS=1
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/root/.cargo/git \
-    cd /app/rustbindings/pybindings \
-    && VIRTUAL_ENV=/app/backend/.venv /app/backend/.venv/bin/maturin develop --release
+    if [ "$BUILD_RUSTBINDINGS" = "1" ]; then \
+      cd /app/rustbindings/pybindings \
+      && VIRTUAL_ENV=/app/backend/.venv /app/backend/.venv/bin/maturin develop --release; \
+    fi
 
-COPY backend ./backend
+COPY backend /app/backend
 
 CMD ["/app/backend/.venv/bin/uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
