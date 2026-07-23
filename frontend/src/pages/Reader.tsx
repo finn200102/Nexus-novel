@@ -78,13 +78,12 @@ const Reader: React.FC = () => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [chapterData, savedProgress] = await Promise.all([
-          chapterService.getChapterContentByNumber(chapter_number, library_id, novel_id),
-          chapterService.getReadingProgress(novel_id),
-        ]);
+        const chapterData = await chapterService.getChapterContentByNumber(chapter_number, library_id, novel_id);
+        const savedProgress = await chapterService.getReadingProgress(novel_id).catch(() => null);
         setChapter(chapterData);
         setProgress(savedProgress);
         setRestoredPosition(false);
+        localStorage.setItem(`nexus-reader-chapter-${novel_id}-${chapter_number}`, JSON.stringify(chapterData));
 
         if (chapterData && chapterData.novel_id) {
           const novelData = await novelService.getNovelById(
@@ -95,7 +94,14 @@ const Reader: React.FC = () => {
         }
         setError(null);
       } catch (err) {
-        setError("Failed to load content. Please try again later.");
+        const cached = localStorage.getItem(`nexus-reader-chapter-${novel_id}-${chapter_number}`);
+        if (cached) {
+          setChapter(JSON.parse(cached));
+          setProgress(null);
+          setError("Offline mode: showing the last cached copy.");
+        } else {
+          setError("Failed to load content. Please try again later.");
+        }
         console.error("Error fetching data:", err);
       } finally {
         setLoading(false);
@@ -224,8 +230,25 @@ const Reader: React.FC = () => {
     setAnnotations((current) => current.filter((annotation) => annotation.id !== id));
   };
 
+  const exportReadingState = () => {
+    const payload = {
+      exported_at: new Date().toISOString(),
+      novel_id: novel_id,
+      novel_title: novel?.title,
+      progress,
+      annotations,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `nexus-reading-state-${novel_id}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   if (loading) return <div className="reader-loading">Loading content...</div>;
-  if (error) return <div className="reader-error">{error}</div>;
+  if (error && !chapter) return <div className="reader-error">{error}</div>;
   if (!chapter || !novel)
     return <div className="reader-not-found">Content not found</div>;
 
@@ -273,6 +296,7 @@ const Reader: React.FC = () => {
       </aside>
 
       <article className="reader-body">
+        {error && <div className="reader-sidebar__status">{error}</div>}
         <header className="reader-toolbar">
           <div>
             <p className="reader-toolbar__eyebrow">{novel.author}</p>
@@ -291,6 +315,7 @@ const Reader: React.FC = () => {
             <div className="reader-type-controls">
               <button type="button" onClick={() => void addAnnotation("bookmark")} title="Bookmark current position">Bookmark</button>
               <button type="button" onClick={() => void addAnnotation("note")} title="Add a private note">Note</button>
+              <button type="button" onClick={exportReadingState} title="Export progress and annotations">Export</button>
             </div>
             <div className="reader-theme-controls">
               {themeOptions.map((option) => (
