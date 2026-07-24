@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+import time
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -17,6 +18,9 @@ from app.models.user import User
 from app.schemas.operations import OperationCounts, OperationsSummary, ServiceStatus
 
 router = APIRouter(prefix="/operations", tags=["operations"])
+
+_METADATA_SNAPSHOT_TTL = 5.0
+_metadata_snapshot: tuple[float, OperationCounts, dict[str, int], int] | None = None
 
 
 class RefreshScheduleCreate(BaseModel):
@@ -64,11 +68,15 @@ def _metadata_status() -> ServiceStatus:
 
 
 def _metadata_operations() -> tuple[OperationCounts, dict[str, int], int]:
+    global _metadata_snapshot
+    now = time.monotonic()
+    if _metadata_snapshot and now - _metadata_snapshot[0] < _METADATA_SNAPSHOT_TTL:
+        return _metadata_snapshot[1], _metadata_snapshot[2], _metadata_snapshot[3]
     jobs = OperationCounts()
     health: dict[str, int] = {}
     schedules = 0
     try:
-        job_response = _metadata_get("/api/jobs/?limit=500")
+        job_response = _metadata_get("/api/jobs/?limit=200")
         if job_response.status_code == 200:
             statuses = [item.get("status") for item in job_response.json().get("data", [])]
             jobs = OperationCounts(
@@ -88,6 +96,7 @@ def _metadata_operations() -> tuple[OperationCounts, dict[str, int], int]:
             schedules = len(schedule_response.json())
     except httpx.HTTPError:
         pass
+    _metadata_snapshot = (now, jobs, health, schedules)
     return jobs, health, schedules
 
 
