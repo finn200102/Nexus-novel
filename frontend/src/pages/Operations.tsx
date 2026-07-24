@@ -132,6 +132,9 @@ const Operations: React.FC = () => {
 
   const metadataStatus = summary?.metadata_server.status || "unknown";
   const metadataHealth = Object.entries(summary?.source_health || {}).map(([status, count]) => `${count} ${status}`).join(" · ") || "No source health records";
+  const attemptLabel = (job: MetadataJob) => job.attempt_count > job.max_attempts
+    ? `retry cycle exhausted (${job.attempt_count}/${job.max_attempts} recorded)`
+    : `attempt ${job.attempt_count}/${job.max_attempts}`;
 
   return <div className="operations-page" aria-live="polite">
     <header className="operations-page__header">
@@ -162,7 +165,7 @@ const Operations: React.FC = () => {
       </article>
       <article className="operations-panel">
         <header><h2>Failed metadata jobs</h2><span>{failedJobs.length} need attention</span></header>
-        {failedJobs.length ? <div className="operations-control-list">{failedJobs.slice(0, 8).map((job) => <div className="operations-control-row" key={job.id}><div><strong>{job.job_type} · {job.site}</strong><small>{jobExplanation(job)} · attempt {job.attempt_count}/{job.max_attempts}</small></div><div className="operations-control-actions"><button type="button" className="operations-action" disabled={!job.retryable} onClick={() => void retryJob(job)}>{job.retryable ? "Retry" : "Not retryable"}</button><button type="button" className="operations-action operations-action--quiet" onClick={() => void archiveJob(job)}>Archive</button></div></div>)}</div> : <p className="operations-empty">No failed metadata jobs.</p>}
+        {failedJobs.length ? <div className="operations-control-list">{failedJobs.slice(0, 8).map((job) => <div className="operations-control-row" key={job.id}><div><strong>{job.job_type} · {job.site}</strong><small>{jobExplanation(job)} · {attemptLabel(job)}</small></div><div className="operations-control-actions"><button type="button" className="operations-action" disabled={!job.retryable} onClick={() => void retryJob(job)}>{job.retryable ? "Retry" : "Not retryable"}</button><button type="button" className="operations-action operations-action--quiet" onClick={() => void archiveJob(job)}>Archive</button></div></div>)}</div> : <p className="operations-empty">No failed metadata jobs.</p>}
       </article>
     </section>
     <section className="operations-panel">
