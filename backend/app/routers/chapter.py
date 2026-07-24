@@ -328,18 +328,22 @@ def download_chapter_background(
                         chapter_number,
                         int(site_chapter_id),
                         site_name,
-                        timeout=60.0,
+                        timeout=float(os.getenv("NEXUS_CHAPTER_DOWNLOAD_TIMEOUT", "180")),
                     )
                 )
             except asyncio.TimeoutError:
-                logger.error("Chapter download timed out", chapter_id=chapter_id)
+                logger.error(
+                    "Chapter download timed out",
+                    chapter_id=chapter_id,
+                    timeout_seconds=os.getenv("NEXUS_CHAPTER_DOWNLOAD_TIMEOUT", "180"),
+                )
                 chapter_services.update_chapter(
                     db,
                     chapter_id,
                     {
                         "content_status": ContentStatus.FAILED,
                         "download_finished_at": datetime.utcnow(),
-                        "download_error": "Download timed out after 60 seconds",
+                        "download_error": f"Download timed out after {os.getenv('NEXUS_CHAPTER_DOWNLOAD_TIMEOUT', '180')} seconds",
                     },
                 )
                 return
