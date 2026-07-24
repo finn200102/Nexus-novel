@@ -54,12 +54,17 @@ router = APIRouter(
 FOLLOW_STATES = {"plan_to_read", "reading", "on_hold", "completed", "dropped", "ignored"}
 
 
-def get_or_create_follow(db: Session, user_id: int, novel: Novel) -> UserNovelFollow:
+def get_existing_follow(db: Session, user_id: int, novel: Novel) -> UserNovelFollow | None:
     follow = (
         db.query(UserNovelFollow)
         .filter(UserNovelFollow.user_id == user_id, UserNovelFollow.novel_id == novel.id)
         .first()
     )
+    return follow
+
+
+def get_or_create_follow(db: Session, user_id: int, novel: Novel) -> UserNovelFollow:
+    follow = get_existing_follow(db, user_id, novel)
     if follow:
         return follow
 
@@ -85,7 +90,9 @@ def create_update_event(
 ) -> NovelUpdateEvent | None:
     if not novel.library or not novel.library.user_id or not chapter_numbers:
         return None
-    follow = get_or_create_follow(db, novel.library.user_id, novel)
+    follow = get_existing_follow(db, novel.library.user_id, novel)
+    if not follow:
+        return None
     download_plan = 0
     if follow.download_policy == "next_chapter":
         download_plan = min(1, len(chapter_numbers))
@@ -199,7 +206,9 @@ def receive_metadata_event(
         for novel in db.query(Novel).filter(Novel.metadata_id == event.metadata_novel_id).all():
             if not novel.library:
                 continue
-            follow = get_or_create_follow(db, novel.library.user_id, novel)
+            follow = get_existing_follow(db, novel.library.user_id, novel)
+            if not follow:
+                continue
             if follow.state in {"completed", "dropped", "ignored"}:
                 continue
             db.add(NovelUpdateEvent(
@@ -222,7 +231,9 @@ def receive_metadata_event(
     for novel in novels:
         if not novel.library:
             continue
-        follow = get_or_create_follow(db, novel.library.user_id, novel)
+        follow = get_existing_follow(db, novel.library.user_id, novel)
+        if not follow:
+            continue
         if follow.state in {"on_hold", "completed", "dropped", "ignored"}:
             continue
         chapters_by_number = {chapter.chapter_number: chapter for chapter in event.chapters}

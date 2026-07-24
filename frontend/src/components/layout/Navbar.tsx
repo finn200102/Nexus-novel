@@ -17,6 +17,8 @@ import LibrarySwitcher from "./LibrarySwitcher";
 import { useLibraryContext } from "../../context/LibraryContext";
 import { useAuth } from "../../context/AuthContext";
 import { activityService, OperationsSummary } from "../../services/activityService";
+import { novelService } from "../../services/novelService";
+import type { NovelUpdateEvent } from "../../types/novel";
 
 interface NavbarProps {
   onRequestCreateLibrary?: () => void;
@@ -38,6 +40,8 @@ const Navbar: React.FC<NavbarProps> = ({ onRequestCreateLibrary }) => {
   const [query, setQuery] = useState("");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [metadataStatus, setMetadataStatus] = useState<OperationsSummary["metadata_server"]["status"] | "unknown">("unknown");
+  const [notifications, setNotifications] = useState<NovelUpdateEvent[]>([]);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
 
   React.useEffect(() => {
     if (!activeLibrary) {
@@ -50,6 +54,22 @@ const Navbar: React.FC<NavbarProps> = ({ onRequestCreateLibrary }) => {
       .catch(() => { if (!cancelled) setMetadataStatus("offline"); });
     return () => { cancelled = true; };
   }, [activeLibrary?.id]);
+
+  React.useEffect(() => {
+    if (!activeLibrary) { setNotifications([]); return; }
+    let cancelled = false;
+    novelService.getUpdateEvents(activeLibrary.id, true)
+      .then((items) => { if (!cancelled) setNotifications(items); })
+      .catch(() => { if (!cancelled) setNotifications([]); });
+    return () => { cancelled = true; };
+  }, [activeLibrary?.id]);
+
+  const markNotificationRead = async (event: NovelUpdateEvent) => {
+    try {
+      await novelService.markUpdateEventRead(event.id);
+      setNotifications((current) => current.filter((item) => item.id !== event.id));
+    } catch { /* Activity page remains available if marking fails. */ }
+  };
 
   const submitSearch = (event: React.FormEvent) => {
     event.preventDefault();
@@ -136,9 +156,12 @@ const Navbar: React.FC<NavbarProps> = ({ onRequestCreateLibrary }) => {
           <button type="button" className="app-topbar__health" title="Metadata server readiness">
             <span className={`health-dot health-dot--${metadataStatus}`} /> Metadata server {metadataStatus}
           </button>
-          <button type="button" className="app-topbar__bell" title="Notifications" aria-label="Notifications">
-            <Bell size={18} aria-hidden="true" />
-          </button>
+          <div className="app-topbar__notifications">
+            <button type="button" className="app-topbar__bell" title="Notifications" aria-label="Notifications" aria-expanded={notificationsOpen} onClick={() => setNotificationsOpen((open) => !open)}>
+              <Bell size={18} aria-hidden="true" />{notifications.length > 0 && <span className="app-topbar__notification-count">{notifications.length > 9 ? "9+" : notifications.length}</span>}
+            </button>
+            {notificationsOpen && <div className="app-topbar__notification-menu" role="dialog" aria-label="Unread notifications"><strong>Unread updates</strong>{notifications.length === 0 && <p>No new story updates.</p>}{notifications.slice(0, 6).map((event) => <button type="button" key={event.id} onClick={() => void markNotificationRead(event)}><span>{event.message}</span><small>Chapter {event.first_chapter_number ?? "new"} · Mark read</small></button>)}<button type="button" className="app-topbar__notification-all" onClick={() => { setNotificationsOpen(false); navigate("/activity"); }}>Open activity</button></div>}
+          </div>
           <button type="button" className="app-topbar__add" onClick={triggerAddNovel}>
             <Plus size={17} aria-hidden="true" /> Add story
           </button>

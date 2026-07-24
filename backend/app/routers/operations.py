@@ -1,7 +1,8 @@
 from datetime import UTC, datetime
 
 import httpx
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -18,8 +19,37 @@ from app.schemas.operations import OperationCounts, OperationsSummary, ServiceSt
 router = APIRouter(prefix="/operations", tags=["operations"])
 
 
+class RefreshScheduleCreate(BaseModel):
+    site: str | None = None
+    interval_minutes: int = Field(default=360, ge=15, le=10080)
+    batch_size: int = Field(default=100, ge=1, le=1000)
+    enabled: bool = True
+
+
+class RefreshScheduleUpdate(BaseModel):
+    interval_minutes: int | None = Field(default=None, ge=15, le=10080)
+    batch_size: int | None = Field(default=None, ge=1, le=1000)
+    enabled: bool | None = None
+
+
 def _metadata_get(path: str):
     return httpx.get(f"{settings.METADATA_SERVER_URL}{path}", timeout=1.0)
+
+
+def _metadata_proxy(method: str, path: str, **kwargs):
+    try:
+        response = httpx.request(method, f"{settings.METADATA_SERVER_URL}{path}", timeout=3.0, **kwargs)
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=503, detail=f"Metadata service unavailable: {exc}") from exc
+    if response.status_code >= 400:
+        try:
+            detail = response.json().get("detail", response.text)
+        except ValueError:
+            detail = response.text
+        raise HTTPException(status_code=response.status_code, detail=detail or "Metadata request failed")
+    if not response.content:
+        return {"success": True}
+    return response.json()
 
 
 def _metadata_status() -> ServiceStatus:
@@ -127,3 +157,62 @@ def summary(
         refresh_schedules=refresh_schedules,
         generated_at=datetime.now(UTC),
     )
+
+
+@router.get("/schedules")
+def list_refresh_schedules(current_user: User = Depends(get_current_user)):
+    return _metadata_proxy("GET", "/api/refresh-schedules/")
+
+
+@router.post("/schedules", status_code=201)
+def create_refresh_schedule(
+    request: RefreshScheduleCreate,
+    current_user: User = Depends(get_current_user),
+):
+    return _metadata_proxy("POST", "/api/refresh-schedules/", json=request.model_dump())
+
+
+@router.patch("/schedules/{schedule_id}")
+def update_refresh_schedule(
+    schedule_id: str,
+    request: RefreshScheduleUpdate,
+    current_user: User = Depends(get_current_user),
+):
+    return _metadata_proxy(
+        "PATCH",
+        f"/api/refresh-schedules/{schedule_id}",
+        json=request.model_dump(exclude_none=True),
+    )
+
+
+@router.delete("/schedules/{schedule_id}")
+def delete_refresh_schedule(
+    schedule_id: str,
+    current_user: User = Depends(get_current_user),
+):
+    return _metadata_proxy("DELETE", f"/api/refresh-schedules/{schedule_id}")
+
+
+@router.get("/metadata-jobs")
+def list_metadata_jobs(
+    status: str | None = Query(default=None),
+    job_type: str | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    current_user: User = Depends(get_current_user),
+):
+    params = {"limit": limit}
+    if status:
+        params["status"] = status
+    if job_type:
+        params["job_type"] = job_type
+    return _metadata_proxy("GET", "/api/jobs/", params=params)
+
+
+@router.post("/metadata-jobs/{job_id}/retry")
+def retry_metadata_job(job_id: str, current_user: User = Depends(get_current_user)):
+    return _metadata_proxy("POST", f"/api/jobs/{job_id}/retry")
+
+
+@router.delete("/metadata-jobs/{job_id}")
+def cancel_metadata_job(job_id: str, current_user: User = Depends(get_current_user)):
+    return _metadata_proxy("DELETE", f"/api/jobs/{job_id}")

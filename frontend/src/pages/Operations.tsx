@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Activity, AlertTriangle, CheckCircle2, Clock3, Database, Download, RefreshCw, Server, XCircle } from "lucide-react";
 import { useLibraryContext } from "../context/LibraryContext";
-import { activityService, OperationsSummary } from "../services/activityService";
+import { activityService, MetadataJob, OperationsSummary, RefreshSchedule } from "../services/activityService";
 import "../styles/operations.css";
 
 const Operations: React.FC = () => {
@@ -9,6 +9,9 @@ const Operations: React.FC = () => {
   const [summary, setSummary] = useState<OperationsSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [schedules, setSchedules] = useState<RefreshSchedule[]>([]);
+  const [failedJobs, setFailedJobs] = useState<MetadataJob[]>([]);
+  const [scheduleDraft, setScheduleDraft] = useState({ site: "", interval_minutes: 360, batch_size: 100 });
 
   const load = useCallback(async () => {
     if (!activeLibrary) {
@@ -27,11 +30,71 @@ const Operations: React.FC = () => {
     }
   }, [activeLibrary?.id]);
 
+  const loadControls = useCallback(async () => {
+    try {
+      const [nextSchedules, nextJobs] = await Promise.all([
+        activityService.getRefreshSchedules(),
+        activityService.getMetadataJobs("failed"),
+      ]);
+      setSchedules(nextSchedules);
+      setFailedJobs(nextJobs);
+    } catch {
+      setError("Automation controls are unavailable while the metadata service is offline.");
+    }
+  }, []);
+
   useEffect(() => {
     load();
+    void loadControls();
     const timer = window.setInterval(load, 10000);
-    return () => window.clearInterval(timer);
-  }, [load]);
+    const controlsTimer = window.setInterval(loadControls, 15000);
+    return () => { window.clearInterval(timer); window.clearInterval(controlsTimer); };
+  }, [load, loadControls]);
+
+  const createSchedule = async (event: React.FormEvent) => {
+    event.preventDefault();
+    try {
+      await activityService.createRefreshSchedule({
+        site: scheduleDraft.site.trim() || null,
+        interval_minutes: scheduleDraft.interval_minutes,
+        batch_size: scheduleDraft.batch_size,
+        enabled: true,
+      });
+      setScheduleDraft({ site: "", interval_minutes: 360, batch_size: 100 });
+      await loadControls();
+    } catch {
+      setError("Could not create refresh schedule.");
+    }
+  };
+
+  const toggleSchedule = async (schedule: RefreshSchedule) => {
+    try {
+      await activityService.updateRefreshSchedule(schedule.id, { enabled: !schedule.enabled });
+      await loadControls();
+    } catch {
+      setError("Could not update refresh schedule.");
+    }
+  };
+
+  const removeSchedule = async (schedule: RefreshSchedule) => {
+    if (!window.confirm(`Delete the ${schedule.site || "global"} refresh schedule?`)) return;
+    try {
+      await activityService.deleteRefreshSchedule(schedule.id);
+      await loadControls();
+    } catch {
+      setError("Could not delete refresh schedule.");
+    }
+  };
+
+  const retryJob = async (job: MetadataJob) => {
+    try {
+      await activityService.retryMetadataJob(job.id);
+      await loadControls();
+      await load();
+    } catch {
+      setError(`Could not retry job ${job.id}.`);
+    }
+  };
 
   if (!activeLibrary) return <div className="operations-page"><h1>Operations</h1><p className="operations-empty">Select a library to view its automation status.</p></div>;
 
@@ -53,6 +116,22 @@ const Operations: React.FC = () => {
     <section className="operations-panels">
       <article className="operations-panel"><header><h2>Metadata worker queue</h2><span><Clock3 size={14} /> {summary?.refresh_schedules ?? 0} schedules</span></header><div className="operations-breakdown"><div><b>{summary?.metadata_jobs.queued ?? 0}</b><small>Queued</small></div><div><b>{summary?.metadata_jobs.running ?? 0}</b><small>Running</small></div><div><b>{summary?.metadata_jobs.failed ?? 0}</b><small>Failed</small></div><div><b>{summary?.metadata_jobs.completed ?? 0}</b><small>Completed</small></div></div></article>
       <article className="operations-panel"><header><h2>Novel download worker</h2><span><Download size={14} /> Automatic downloads</span></header><div className="operations-breakdown"><div><b>{summary?.downloads.queued ?? 0}</b><small>Queued</small></div><div><b>{summary?.downloads.running ?? 0}</b><small>Running</small></div><div><b>{summary?.downloads.failed ?? 0}</b><small>Failed</small></div><div><b>{summary?.downloads.cancelled ?? 0}</b><small>Cancelled</small></div></div></article>
+    </section>
+    <section className="operations-controls">
+      <article className="operations-panel">
+        <header><h2>Refresh schedules</h2><span>{schedules.length} configured</span></header>
+        <form className="operations-schedule-form" onSubmit={createSchedule}>
+          <input aria-label="Source site" placeholder="Source site or all sources" value={scheduleDraft.site} onChange={(event) => setScheduleDraft({ ...scheduleDraft, site: event.target.value })} />
+          <label>Every <input aria-label="Refresh interval minutes" type="number" min="15" max="10080" value={scheduleDraft.interval_minutes} onChange={(event) => setScheduleDraft({ ...scheduleDraft, interval_minutes: Number(event.target.value) })} /> minutes</label>
+          <label>Batch <input aria-label="Refresh batch size" type="number" min="1" max="1000" value={scheduleDraft.batch_size} onChange={(event) => setScheduleDraft({ ...scheduleDraft, batch_size: Number(event.target.value) })} /></label>
+          <button type="submit" className="operations-action">Add schedule</button>
+        </form>
+        <div className="operations-control-list">{schedules.map((schedule) => <div className="operations-control-row" key={schedule.id}><div><strong>{schedule.site || "All sources"}</strong><small>Every {schedule.interval_minutes}m · batch {schedule.batch_size}</small></div><div className="operations-control-actions"><button type="button" className="operations-action operations-action--quiet" onClick={() => void toggleSchedule(schedule)}>{schedule.enabled ? "Pause" : "Enable"}</button><button type="button" className="operations-action operations-action--danger" onClick={() => void removeSchedule(schedule)}>Delete</button></div></div>)}</div>
+      </article>
+      <article className="operations-panel">
+        <header><h2>Failed metadata jobs</h2><span>{failedJobs.length} need attention</span></header>
+        {failedJobs.length ? <div className="operations-control-list">{failedJobs.slice(0, 8).map((job) => <div className="operations-control-row" key={job.id}><div><strong>{job.job_type} · {job.site}</strong><small>{job.message || job.error_code || "No failure explanation"} · attempt {job.attempt_count}/{job.max_attempts}</small></div><button type="button" className="operations-action" disabled={!job.retryable} onClick={() => void retryJob(job)}>{job.retryable ? "Retry" : "Not retryable"}</button></div>)}</div> : <p className="operations-empty">No failed metadata jobs.</p>}
+      </article>
     </section>
     <section className="operations-notice"><CheckCircle2 size={17} /><p><strong>Automation is event-driven.</strong> Source refreshes create update events and eligible downloads. Paused, completed, dropped, and ignored stories are excluded from automatic actions.</p></section>
     {summary?.source_failures ? <section className="operations-alert operations-alert--warning"><XCircle size={17} /> {summary.source_failures} source failure event(s) need attention in the Activity feed.</section> : null}

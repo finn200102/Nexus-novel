@@ -14,5 +14,20 @@
 .operations-card small, .operations-breakdown small { display: block; color: #92a1bc; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }.operations-card strong { display: block; margin-top: 4px; font-size: 22px; }.operations-card p { margin: 5px 0 0; color: #96a4bd; font-size: 12px; line-height: 1.35; }
 .operations-status--online { color: #6be5a6; }.operations-status--degraded { color: #f5c46b; }.operations-status--offline { color: #ff879c; }.operations-status--unknown { color: #a9b6c7; }
 .operations-panels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 14px; }.operations-panel { padding: 18px; }.operations-panel header { display: flex; justify-content: space-between; gap: 12px; align-items: center; }.operations-panel h2 { margin: 0; font-size: 16px; }.operations-panel header span { display: inline-flex; gap: 5px; align-items: center; color: #95a4bf; font-size: 11px; }.operations-breakdown { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 20px; }.operations-breakdown div { padding: 12px 8px; border-radius: 9px; background: rgba(25,42,76,.55); text-align: center; }.operations-breakdown b { display: block; font-size: 21px; }.operations-notice, .operations-alert { display: flex; gap: 10px; align-items: flex-start; margin-top: 14px; padding: 14px 16px; color: #a9b6c7; font-size: 13px; }.operations-notice svg { color: #66dfa3; flex: 0 0 auto; }.operations-notice p { margin: 0; }.operations-notice strong { color: #eef2ff; }.operations-alert { color: #ffb4c1; background: rgba(114,39,67,.28); border-color: rgba(220,91,126,.4); }.operations-alert--warning { color: #f5c46b; background: rgba(111,75,25,.2); border-color: rgba(214,158,61,.4); }.operations-empty { color: #96a4bd; }
+ .operations-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 14px; }
+.operations-schedule-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 16px; }
+.operations-schedule-form input { min-width: 110px; border: 1px solid #33456b; border-radius: 8px; background: #0b1730; color: #eef2ff; padding: 8px 9px; }
+.operations-schedule-form > input { flex: 1 1 160px; }
+.operations-schedule-form label { display: inline-flex; align-items: center; gap: 6px; color: #9eacc4; font-size: 12px; }
+.operations-action { border: 1px solid #5d42c8; border-radius: 8px; background: #6337d8; color: white; padding: 8px 10px; cursor: pointer; font-size: 12px; white-space: nowrap; }
+.operations-action:disabled { opacity: .55; cursor: not-allowed; }
+.operations-action--quiet { border-color: #33456b; background: #142342; color: #d5def5; }
+.operations-action--danger { border-color: rgba(220,91,126,.45); background: rgba(114,39,67,.35); color: #ffb4c1; }
+.operations-control-list { display: grid; gap: 8px; margin-top: 16px; }
+.operations-control-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border-radius: 9px; background: rgba(25,42,76,.55); }
+.operations-control-row strong, .operations-control-row small { display: block; }
+.operations-control-row strong { color: #eef2ff; font-size: 13px; }
+.operations-control-row small { max-width: 410px; margin-top: 4px; color: #93a2bd; font-size: 11px; line-height: 1.35; }
+.operations-control-actions { display: flex; gap: 6px; }
 @media (max-width: 900px) { .operations-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 620px) { .operations-page { padding: 24px 16px 40px; }.operations-page__header { align-items: flex-start; flex-direction: column; }.operations-grid, .operations-panels { grid-template-columns: 1fr; }.operations-breakdown { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 620px) { .operations-page { padding: 24px 16px 40px; }.operations-page__header { align-items: flex-start; flex-direction: column; }.operations-grid, .operations-panels, .operations-controls { grid-template-columns: 1fr; }.operations-breakdown { grid-template-columns: repeat(2, 1fr); }.operations-control-row { align-items: flex-start; flex-direction: column; }.operations-control-actions { width: 100%; }.operations-control-actions .operations-action { flex: 1; } }
