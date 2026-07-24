@@ -96,6 +96,11 @@ const Operations: React.FC = () => {
     }
   };
 
+  const jobExplanation = (job: MetadataJob) => {
+    const message = (job.message || job.error_code || "No failure explanation").replace(/\s+/g, " ");
+    return message.length > 180 ? `${message.slice(0, 177)}…` : message;
+  };
+
   if (!activeLibrary) return <div className="operations-page"><h1>Operations</h1><p className="operations-empty">Select a library to view its automation status.</p></div>;
 
   const metadataStatus = summary?.metadata_server.status || "unknown";
@@ -130,7 +135,7 @@ const Operations: React.FC = () => {
       </article>
       <article className="operations-panel">
         <header><h2>Failed metadata jobs</h2><span>{failedJobs.length} need attention</span></header>
-        {failedJobs.length ? <div className="operations-control-list">{failedJobs.slice(0, 8).map((job) => <div className="operations-control-row" key={job.id}><div><strong>{job.job_type} · {job.site}</strong><small>{job.message || job.error_code || "No failure explanation"} · attempt {job.attempt_count}/{job.max_attempts}</small></div><button type="button" className="operations-action" disabled={!job.retryable} onClick={() => void retryJob(job)}>{job.retryable ? "Retry" : "Not retryable"}</button></div>)}</div> : <p className="operations-empty">No failed metadata jobs.</p>}
+        {failedJobs.length ? <div className="operations-control-list">{failedJobs.slice(0, 8).map((job) => <div className="operations-control-row" key={job.id}><div><strong>{job.job_type} · {job.site}</strong><small>{jobExplanation(job)} · attempt {job.attempt_count}/{job.max_attempts}</small></div><button type="button" className="operations-action" disabled={!job.retryable} onClick={() => void retryJob(job)}>{job.retryable ? "Retry" : "Not retryable"}</button></div>)}</div> : <p className="operations-empty">No failed metadata jobs.</p>}
       </article>
     </section>
     <section className="operations-notice"><CheckCircle2 size={17} /><p><strong>Automation is event-driven.</strong> Source refreshes create update events and eligible downloads. Paused, completed, dropped, and ignored stories are excluded from automatic actions.</p></section>
