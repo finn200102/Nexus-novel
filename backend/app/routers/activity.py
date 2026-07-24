@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -7,10 +7,23 @@ from config.database import get_db
 from app.auth.dependencies import get_current_user
 from app.models.download_job import ChapterDownloadJob
 from app.models.user import User
+from app.models.update_event import NovelUpdateEvent
 from app.schemas.activity import ActivityDay, ActivityEventResponse, ActivitySummary
 from app.services.activity_service import activity_days, activity_events
 
 router = APIRouter(prefix="/activity", tags=["activity"])
+
+
+@router.post("/read-all")
+def mark_all_read(library_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    updated = db.query(NovelUpdateEvent).filter(
+        NovelUpdateEvent.user_id == current_user.id,
+        NovelUpdateEvent.library_id == library_id,
+        NovelUpdateEvent.read_at.is_(None),
+        NovelUpdateEvent.notification_visible.is_(True),
+    ).update({NovelUpdateEvent.read_at: datetime.now(UTC)}, synchronize_session=False)
+    db.commit()
+    return {"updated": updated}
 
 
 @router.get("/feed", response_model=list[ActivityEventResponse])

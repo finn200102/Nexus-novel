@@ -334,6 +334,70 @@ def test_metadata_refresh_event_duplicate_is_noop(client_with_auth, db, monkeypa
     assert db.query(ChapterDownloadJob).filter(ChapterDownloadJob.novel_id == novel.id).count() == 2
 
 
+def test_metadata_refresh_event_ignores_unfollowed_novel(client_with_auth, db, monkeypatch):
+    from app.models.download_job import ChapterDownloadJob
+    from app.models.update_event import NovelUpdateEvent
+
+    response, headers, _, url, library = add_novel_resources(client_with_auth, db)
+    assert response.status_code == status.HTTP_201_CREATED
+    novel = get_novel_by_url(db, url).first()
+    novel.metadata_id = 79
+    db.commit()
+    monkeypatch.setenv("NEXUS_NOVEL_WEBHOOK_SECRET", "test-secret")
+
+    response = client_with_auth.post(
+        "/novel/internal/metadata-events",
+        headers={"X-Nexus-Webhook-Secret": "test-secret"},
+        json={
+            "event": "source_refresh_completed",
+            "job_id": "unfollowed-job",
+            "metadata_novel_id": 79,
+            "source_id": 9,
+            "site": "royalroad",
+            "new_chapter_numbers": [31],
+        },
+    )
+
+    assert response.json() == {"accepted": True, "created_events": 0, "queued_downloads": 0}
+    assert db.query(NovelUpdateEvent).filter(NovelUpdateEvent.novel_id == novel.id).count() == 0
+    assert db.query(ChapterDownloadJob).filter(ChapterDownloadJob.novel_id == novel.id).count() == 0
+
+
+def test_metadata_refresh_event_does_not_download_on_hold(client_with_auth, db, monkeypatch):
+    from app.models.download_job import ChapterDownloadJob
+    from app.models.update_event import NovelUpdateEvent
+
+    response, headers, _, url, library = add_novel_resources(client_with_auth, db)
+    assert response.status_code == status.HTTP_201_CREATED
+    novel = get_novel_by_url(db, url).first()
+    novel.metadata_id = 80
+    db.commit()
+    client_with_auth.patch(
+        f"/novel/{novel.id}/follow?library_id={library.id}",
+        json={"follow_state": "on_hold", "download_policy": "next_n", "download_count": 2},
+        headers=headers,
+    )
+    existing_jobs = db.query(ChapterDownloadJob).filter(ChapterDownloadJob.novel_id == novel.id).count()
+    monkeypatch.setenv("NEXUS_NOVEL_WEBHOOK_SECRET", "test-secret")
+
+    response = client_with_auth.post(
+        "/novel/internal/metadata-events",
+        headers={"X-Nexus-Webhook-Secret": "test-secret"},
+        json={
+            "event": "source_refresh_completed",
+            "job_id": "on-hold-job",
+            "metadata_novel_id": 80,
+            "source_id": 9,
+            "site": "royalroad",
+            "new_chapter_numbers": [41, 42],
+        },
+    )
+
+    assert response.json() == {"accepted": True, "created_events": 0, "queued_downloads": 0}
+    assert db.query(NovelUpdateEvent).filter(NovelUpdateEvent.novel_id == novel.id).count() == 0
+    assert db.query(ChapterDownloadJob).filter(ChapterDownloadJob.novel_id == novel.id).count() == existing_jobs
+
+
 def test_metadata_refresh_event_requires_secret_before_claiming(client_with_auth, db, monkeypatch):
     from app.models.metadata_webhook_delivery import MetadataWebhookDelivery
 

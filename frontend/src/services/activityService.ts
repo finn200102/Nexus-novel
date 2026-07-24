@@ -53,6 +53,18 @@ export interface MetadataJob {
   results: Record<string, unknown>;
 }
 
+export interface SourceHealth {
+  site: string;
+  status: string;
+  circuit_state: string;
+  failure_count: number;
+  last_latency_ms?: number | null;
+  last_success_at?: string | null;
+  last_failure_at?: string | null;
+  last_error_code?: string | null;
+  last_error?: string | null;
+}
+
 export const activityService = {
   async getFeed(libraryId: number, unreadOnly = false): Promise<ActivityEvent[]> {
     const response = await apiClient.get(`/activity/feed?library_id=${libraryId}&unread_only=${unreadOnly}`);
@@ -81,6 +93,10 @@ export const activityService = {
     const response = await apiClient.patch(`/operations/schedules/${id}`, input);
     return response.data;
   },
+  async runRefreshSchedule(id: string): Promise<RefreshSchedule> {
+    const response = await apiClient.post(`/operations/schedules/${id}/run`);
+    return response.data;
+  },
   async deleteRefreshSchedule(id: string): Promise<void> {
     await apiClient.delete(`/operations/schedules/${id}`);
   },
@@ -94,5 +110,21 @@ export const activityService = {
   },
   async cancelMetadataJob(id: string): Promise<void> {
     await apiClient.delete(`/operations/metadata-jobs/${id}`);
+  },
+  async archiveMetadataJob(id: string): Promise<MetadataJob> {
+    const response = await apiClient.post(`/operations/metadata-jobs/${id}/archive`);
+    return response.data;
+  },
+  async getSourceHealth(): Promise<SourceHealth[]> {
+    const response = await apiClient.get("/operations/source-health");
+    return response.data;
+  },
+  async resetSourceHealth(site: string): Promise<SourceHealth> {
+    const response = await apiClient.post(`/operations/source-health/${encodeURIComponent(site)}/reset`);
+    return response.data;
+  },
+  async markAllRead(libraryId: number): Promise<number> {
+    const response = await apiClient.post(`/activity/read-all?library_id=${libraryId}`);
+    return response.data.updated;
   },
 };

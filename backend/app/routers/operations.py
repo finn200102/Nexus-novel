@@ -185,6 +185,14 @@ def update_refresh_schedule(
     )
 
 
+@router.post("/schedules/{schedule_id}/run")
+def run_refresh_schedule(
+    schedule_id: str,
+    current_user: User = Depends(get_current_user),
+):
+    return _metadata_proxy("POST", f"/api/refresh-schedules/{schedule_id}/run")
+
+
 @router.delete("/schedules/{schedule_id}")
 def delete_refresh_schedule(
     schedule_id: str,
@@ -216,3 +224,18 @@ def retry_metadata_job(job_id: str, current_user: User = Depends(get_current_use
 @router.delete("/metadata-jobs/{job_id}")
 def cancel_metadata_job(job_id: str, current_user: User = Depends(get_current_user)):
     return _metadata_proxy("DELETE", f"/api/jobs/{job_id}")
+
+
+@router.post("/metadata-jobs/{job_id}/archive")
+def archive_metadata_job(job_id: str, current_user: User = Depends(get_current_user)):
+    return _metadata_proxy("POST", f"/api/jobs/{job_id}/archive")
+
+
+@router.get("/source-health")
+def list_source_health(current_user: User = Depends(get_current_user)):
+    return _metadata_proxy("GET", "/api/jobs/source-health")
+
+
+@router.post("/source-health/{site}/reset")
+def reset_source_health(site: str, current_user: User = Depends(get_current_user)):
+    return _metadata_proxy("POST", f"/api/jobs/source-health/{site}/reset")
