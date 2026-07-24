@@ -28,6 +28,7 @@ def _login_response(user: User) -> dict:
         "message": "Login successful",
         "access_token": access_token,
         "token_type": "bearer",
+        "is_admin": bool(getattr(user, "is_admin", False)),
     }
 
 
@@ -45,9 +46,7 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
     # Convert bytes to string for storage
     hashed_password_str = hashed_password.decode("utf-8")
 
-    result = create_user(
-        db, user_data={"username": user.username, "password": hashed_password_str}
-    )
+    result = create_user(db, user_data={"username": user.username, "password": hashed_password_str, "is_admin": db.query(User).count() == 0})
     return _login_response(result)
 
 

@@ -6,7 +6,7 @@ import time
 from uuid import uuid4
 
 from config.database import engine, Base
-from app.routers import auth, novel, library, chapter, discovery, follow, download, activity, operations
+from app.routers import auth, novel, library, chapter, discovery, follow, download, activity, operations, catalog_scrape
 from app.models.author import Author
 from app.models.chapter import Chapter
 from app.models.genre import Genre
@@ -64,6 +64,7 @@ app.include_router(follow.router)
 app.include_router(download.router)
 app.include_router(activity.router)
 app.include_router(operations.router)
+app.include_router(catalog_scrape.router)
 
 
 @app.middleware("http")

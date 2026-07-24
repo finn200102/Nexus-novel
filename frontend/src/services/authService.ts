@@ -16,6 +16,7 @@ export interface AuthResponse {
   message: string;
   access_token: string;
   token_type: string;
+  is_admin?: boolean;
 }
 
 export const authService = {

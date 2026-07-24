@@ -19,6 +19,7 @@ import DiscoverNovelDetail from "./pages/DiscoverNovelDetail";
 import Downloads from "./pages/Downloads";
 import Activity from "./pages/Activity";
 import Operations from "./pages/Operations";
+import ScrapeJobs from "./pages/ScrapeJobs";
 
 import { useAuth } from "./context/AuthContext";
 
@@ -56,6 +57,7 @@ const App: React.FC = () => {
         <Route path="/downloads" element={<Protected><WrappedDownloads /></Protected>} />
         <Route path="/activity" element={<Protected><WrappedActivity /></Protected>} />
         <Route path="/operations" element={<Protected><WrappedOperations /></Protected>} />
+        <Route path="/scrape-jobs" element={<Protected><WrappedScrapeJobs /></Protected>} />
         <Route path="/library/:libraryId" element={<Protected><LibraryWrapper /></Protected>} />
         <Route
           path="/library/:libraryId/novels/:novelId"
@@ -152,6 +154,12 @@ const WrappedActivity = () => (
 const WrappedOperations = () => (
   <Layout>
     <Operations />
+  </Layout>
+);
+
+const WrappedScrapeJobs = () => (
+  <Layout>
+    <ScrapeJobs />
   </Layout>
 );
 

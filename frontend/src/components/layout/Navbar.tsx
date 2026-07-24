@@ -30,6 +30,7 @@ const navItems = [
   { label: "Downloads", to: "/downloads", icon: Download },
   { label: "Activity", to: "/activity", icon: Bell },
   { label: "Operations", to: "/operations", icon: Server },
+  { label: "Scrape Jobs", to: "/scrape-jobs", icon: Search },
 ];
 
 const Navbar: React.FC<NavbarProps> = ({ onRequestCreateLibrary }) => {

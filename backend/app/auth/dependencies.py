@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from config.database import get_db
 from app.auth.jwt import verify_token
 from app.services.user_services import get_user_by_id
+from app.models.user import User
 
 # OAuth2 scheme for token extraction from Authorization header
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
@@ -28,3 +29,9 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         )
 
     return user
+
+
+def require_admin(current_user: User = Depends(get_current_user)):
+    if not getattr(current_user, "is_admin", False):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Administrator access required")
+    return current_user

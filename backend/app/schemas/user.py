@@ -15,6 +15,7 @@ class UserLogin(UserBase):
 
 class User(UserBase):
     id: int
+    is_admin: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -25,5 +26,6 @@ class LoginResponse(BaseModel):
     message: str
     access_token: str
     token_type: str
+    is_admin: bool = False
 
     model_config = ConfigDict(from_attributes=True)

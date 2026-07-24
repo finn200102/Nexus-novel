@@ -21,6 +21,10 @@ def ensure_runtime_schema(engine) -> None:
         "followed_at": "TIMESTAMP NULL",
     }
     with engine.begin() as connection:
+        user_columns = {column["name"] for column in inspect(engine).get_columns("users")}
+        if "is_admin" not in user_columns:
+            connection.execute(text(f"ALTER TABLE users ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT {boolean_default.replace('TRUE', 'FALSE')}"))
+        connection.execute(text(f"UPDATE users SET is_admin = {boolean_default} WHERE id = (SELECT MIN(id) FROM users)"))
         # Early Nexus Novel versions made metadata_id globally unique. Catalog
         # metadata is shared, but library membership is per-library, so remove
         # that constraint before accepting the same work in another library.
