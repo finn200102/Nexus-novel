@@ -30,12 +30,22 @@ class UpdateCatalogRequest(BaseModel):
 
 
 async def _request(method: str, path: str, *, json: dict | None = None, params: dict | None = None):
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        response = await client.request(method, f"{settings.METADATA_SERVER_URL}{path}", json=json, params=params)
-        if response.status_code >= 400:
-            detail = response.text
-            raise HTTPException(status_code=response.status_code, detail=detail)
-        return response.json()
+    # Catalog previews touch an external source and must never hold the UI/API
+    # open for the generic 120-second client timeout. The metadata service has
+    # its own source timeout; this shorter gateway timeout gives the browser a
+    # deterministic, actionable response when a source is blocked or degraded.
+    timeout = 35.0 if path == "/catalog-scrapes/preview" else 30.0
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.request(method, f"{settings.METADATA_SERVER_URL}{path}", json=json, params=params)
+    except httpx.TimeoutException as exc:
+        raise HTTPException(status_code=504, detail="Metadata server timed out while contacting the source. Check source health and retry later.") from exc
+    except httpx.RequestError as exc:
+        raise HTTPException(status_code=502, detail="Metadata server is unavailable. Check the metadata service and retry.") from exc
+    if response.status_code >= 400:
+        detail = response.text
+        raise HTTPException(status_code=response.status_code, detail=detail)
+    return response.json()
 
 
 @router.get("/capabilities")
