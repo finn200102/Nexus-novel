@@ -33,7 +33,7 @@ class RefreshScheduleUpdate(BaseModel):
 
 
 def _metadata_get(path: str):
-    return httpx.get(f"{settings.METADATA_SERVER_URL}{path}", timeout=1.0)
+    return httpx.get(f"{settings.METADATA_SERVER_URL}{path}", timeout=3.0)
 
 
 def _metadata_proxy(method: str, path: str, **kwargs):
