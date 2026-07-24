@@ -70,6 +70,10 @@ export const chapterService = {
     const response = await apiClient.get(`/chapter/progress/${novelId}`);
     return response.data;
   },
+  async exportNovelEpub(novelId: number): Promise<Blob> {
+    const response = await apiClient.get(`/chapter/novel/${novelId}/export.epub`, { responseType: "blob" });
+    return response.data;
+  },
   async updateReadingProgress(
     novelId: number,
     chapterNumber: number,

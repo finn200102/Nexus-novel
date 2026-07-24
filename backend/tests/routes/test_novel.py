@@ -252,6 +252,25 @@ def test_update_follow_state(client_with_auth, db):
     assert response.json()["notification_policy"] == "daily_digest"
 
 
+def test_export_epub_contains_downloaded_chapters(client_with_auth, db):
+    from app.models.chapter import Chapter, ContentStatus
+
+    response, headers, _, url, library = add_novel_resources(client_with_auth, db)
+    assert response.status_code == status.HTTP_201_CREATED
+    novel = get_novel_by_url(db, url).first()
+    chapter = db.query(Chapter).filter(Chapter.novel_id == novel.id).first()
+    chapter.content_status = ContentStatus.PRESENT
+    chapter.content = "A downloaded chapter."
+    chapter.title = "Chapter One"
+    db.commit()
+
+    response = client_with_auth.get(f"/chapter/novel/{novel.id}/export.epub", headers=headers)
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.headers["content-type"].startswith("application/epub+zip")
+    assert response.content[:2] == b"PK"
+
+
 def test_metadata_refresh_event_creates_user_event_and_download_job(client_with_auth, db, monkeypatch):
     from app.models.download_job import ChapterDownloadJob
     from app.models.update_event import NovelUpdateEvent

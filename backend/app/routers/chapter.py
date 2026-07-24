@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, status, HTTPException, BackgroundTasks
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from config.database import SessionLocal as SessionFactory
 from config.database import get_db
@@ -34,6 +35,9 @@ from app.services.novel_downloader.parser import (
 )
 import asyncio
 from datetime import datetime
+from io import BytesIO
+from html import escape
+from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
 
 
 # Load environment variables
@@ -634,6 +638,57 @@ def get_reading_progress(
         ReadingProgress.user_id == current_user.id,
         ReadingProgress.novel_id == novel_id,
     ).first()
+
+
+@router.get("/novel/{novel_id:int}/export.epub")
+def export_novel_epub(
+    novel_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    novel = novel_services.get_novel_by_id(db, novel_id)
+    if not novel or novel.library_id not in [library.id for library in current_user.libraries]:
+        raise HTTPException(status_code=404, detail="Novel not found")
+    chapters = db.query(Chapter).filter(
+        Chapter.novel_id == novel_id,
+        Chapter.content_status == ContentStatus.PRESENT,
+        Chapter.content.isnot(None),
+    ).order_by(Chapter.chapter_number.asc()).all()
+    if not chapters:
+        raise HTTPException(status_code=409, detail="Download at least one chapter before exporting")
+
+    book_title = escape(novel.title or "Nexus Novel")
+    author = escape(novel.author or "Unknown author")
+    book_id = f"nexus-novel-{novel_id}"
+    package = BytesIO()
+    with ZipFile(package, "w") as archive:
+        archive.writestr("mimetype", "application/epub+zip", compress_type=ZIP_STORED)
+        archive.writestr("META-INF/container.xml", """<?xml version="1.0" encoding="UTF-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles>
+</container>""")
+        manifest = []
+        spine = []
+        for index, chapter in enumerate(chapters, start=1):
+            item_id = f"chapter-{index}"
+            filename = f"OEBPS/{item_id}.xhtml"
+            paragraphs = "".join(f"<p>{escape(line)}</p>" for line in (chapter.content or "").splitlines() if line.strip())
+            if not paragraphs:
+                paragraphs = f"<p>{escape(chapter.content or '')}</p>"
+            xhtml = f"""<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml"><head><title>{escape(chapter.title or f'Chapter {chapter.chapter_number}')}</title></head>
+<body><h1>{escape(chapter.title or f'Chapter {chapter.chapter_number}')}</h1>{paragraphs}</body></html>"""
+            archive.writestr(filename, xhtml, compress_type=ZIP_DEFLATED)
+            manifest.append(f'<item id="{item_id}" href="{item_id}.xhtml" media-type="application/xhtml+xml"/>')
+            spine.append(f'<itemref idref="{item_id}"/>')
+        opf = f"""<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="book-id">
+<metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="book-id">{book_id}</dc:identifier><dc:title>{book_title}</dc:title><dc:creator>{author}</dc:creator><dc:language>en</dc:language></metadata>
+<manifest>{''.join(manifest)}</manifest><spine>{''.join(spine)}</spine></package>"""
+        archive.writestr("OEBPS/content.opf", opf, compress_type=ZIP_DEFLATED)
+    package.seek(0)
+    filename = f"{(novel.title or 'nexus-novel').replace(' ', '-').lower()}.epub"
+    return StreamingResponse(package, media_type="application/epub+zip", headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
 @router.put("/progress/{novel_id:int}", response_model=ReadingProgressResponse)

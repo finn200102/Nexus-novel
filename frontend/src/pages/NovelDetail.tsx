@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import defaultCoverImage from "../assets/cover.png";
 import { novelService } from "../services/novelService";
+import { chapterService } from "../services/chapterService";
 import ChapterList from "../components/novel/ChapterList";
 import NovelDetails from "../components/novel/NovelDetails";
 import { Novel, NovelFollowSettings } from "../types/novel";
@@ -104,6 +105,22 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
       addToast("Failed to check status", "error");
     } finally {
       setUpdating(false);
+    }
+  };
+
+  const handleExportEpub = async () => {
+    try {
+      addToast("Preparing EPUB from downloaded chapters...", "info");
+      const blob = await chapterService.exportNovelEpub(novelId);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${(novel?.title || "nexus-novel").replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.epub`;
+      link.click();
+      URL.revokeObjectURL(url);
+      addToast("EPUB export downloaded", "success");
+    } catch {
+      addToast("Download at least one chapter before exporting", "error");
     }
   };
 
@@ -291,6 +308,9 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
                   className="action-button"
                 >
                   {updating ? "Refreshing..." : "Refresh Metadata"}
+                </button>
+                <button onClick={() => void handleExportEpub()} className="action-button" type="button">
+                  Export EPUB
                 </button>
                 {(novel.scrape_status === "pending" || novel.scrape_status === "failed") && (
                   <button
