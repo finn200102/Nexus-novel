@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { chapterService } from "../services/chapterService";
 import { novelService } from "../services/novelService";
-import { offlineReaderStore } from "../services/offlineReaderStore";
+import { chapterAudioStore, offlineReaderStore } from "../services/offlineReaderStore";
 import { OpenAICompatibleTtsConfig, ttsService } from "../services/ttsService";
 import "../styles/Reader.css";
 
@@ -87,9 +87,10 @@ const Reader: React.FC = () => {
     voice: localStorage.getItem("nexus-reader-tts-provider-voice") || "af_bella",
   }));
   const [offlineChapterCount, setOfflineChapterCount] = useState(0);
+  const [chapterAudioReady, setChapterAudioReady] = useState(false);
+  const [generatingAudio, setGeneratingAudio] = useState(false);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const providerAudioRef = useRef<HTMLAudioElement | null>(null);
-  const providerAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -100,6 +101,7 @@ const Reader: React.FC = () => {
         setChapter(chapterData);
         setProgress(savedProgress);
         setRestoredPosition(false);
+        void chapterAudioStore.get(novel_id, chapter_number).then((audio) => setChapterAudioReady(Boolean(audio))).catch(() => setChapterAudioReady(false));
         localStorage.setItem(`nexus-reader-chapter-${novel_id}-${chapter_number}`, JSON.stringify(chapterData));
         void offlineReaderStore.save(chapterData).then(() => offlineReaderStore.countForNovel(novel_id)).then(setOfflineChapterCount).catch(() => undefined);
 
@@ -173,7 +175,6 @@ const Reader: React.FC = () => {
     // navigation or when the reader unmounts.
     return () => {
       if (ttsAvailable) window.speechSynthesis.cancel();
-      providerAbortRef.current?.abort();
       providerAudioRef.current?.pause();
       providerAudioRef.current = null;
     };
@@ -264,30 +265,44 @@ const Reader: React.FC = () => {
 
   const stopTts = () => {
     if (ttsAvailable) window.speechSynthesis.cancel();
-    providerAbortRef.current?.abort();
     providerAudioRef.current?.pause();
     providerAudioRef.current = null;
     setIsSpeaking(false);
   };
 
-  const speakWithProvider = async () => {
-    if (!chapter) return;
-    const controller = new AbortController();
-    providerAbortRef.current = controller;
-    setIsSpeaking(true);
+  const generateChapterAudio = async () => {
+    if (!chapter || generatingAudio) return;
+    setGeneratingAudio(true);
     try {
-      const audioBlob = await ttsService.synthesize(`${chapter.title}. ${chapter.content}`, providerConfig, controller.signal);
-      if (controller.signal.aborted) return;
-      const audio = new Audio(URL.createObjectURL(audioBlob));
-      providerAudioRef.current = audio;
-      audio.playbackRate = ttsRate;
-      audio.onended = () => { URL.revokeObjectURL(audio.src); setIsSpeaking(false); };
-      audio.onerror = () => { URL.revokeObjectURL(audio.src); setIsSpeaking(false); };
-      await audio.play();
+      const audio = await ttsService.synthesize(`${chapter.title}. ${chapter.content}`, providerConfig);
+      await chapterAudioStore.save(novel_id, chapter.chapter_number, audio);
+      setChapterAudioReady(true);
     } catch (error) {
-      if (!controller.signal.aborted) console.error("Self-hosted TTS failed", error);
-      setIsSpeaking(false);
+      console.error("Chapter audio generation failed", error);
+    } finally {
+      setGeneratingAudio(false);
     }
+  };
+
+  const playChapterAudio = async () => {
+    if (!chapter) return;
+    const audioBlob = await chapterAudioStore.get(novel_id, chapter.chapter_number);
+    if (!audioBlob) { setChapterAudioReady(false); return; }
+    stopTts();
+    const audio = new Audio(URL.createObjectURL(audioBlob));
+    providerAudioRef.current = audio;
+    audio.playbackRate = ttsRate;
+    audio.onended = () => { URL.revokeObjectURL(audio.src); providerAudioRef.current = null; setIsSpeaking(false); };
+    audio.onerror = () => { URL.revokeObjectURL(audio.src); providerAudioRef.current = null; setIsSpeaking(false); };
+    setIsSpeaking(true);
+    await audio.play();
+  };
+
+  const deleteChapterAudio = async () => {
+    if (!chapter) return;
+    stopTts();
+    await chapterAudioStore.remove(novel_id, chapter.chapter_number);
+    setChapterAudioReady(false);
   };
 
   const toggleTts = () => {
@@ -297,7 +312,7 @@ const Reader: React.FC = () => {
       return;
     }
     if (providerAudioRef.current || isSpeaking) { stopTts(); return; }
-    if (ttsEngine === "openai_compatible") { void speakWithProvider(); return; }
+    if (ttsEngine === "openai_compatible") { return; }
     if (!ttsAvailable) return;
     const utterance = new SpeechSynthesisUtterance(`${chapter.title}. ${chapter.content}`);
     const selectedVoice = voices.find((voice) => voice.name === voiceName);
@@ -427,14 +442,11 @@ const Reader: React.FC = () => {
             </div>
             {ttsAvailable && (
               <div className="reader-tts-controls" aria-label="Text to speech controls">
-                <button type="button" onClick={toggleTts} title="Read this chapter aloud">
-                  {isSpeaking ? "Stop audio" : "Read aloud"}
-                </button>
                 <select aria-label="Text to speech engine" value={ttsEngine} onChange={(event) => setTtsEngine(event.target.value as "native" | "openai_compatible")}>
                   <option value="native">Browser voice</option>
                   <option value="openai_compatible">Self-hosted / API</option>
                 </select>
-                {ttsEngine === "openai_compatible" ? <details className="reader-tts-provider"><summary>Provider settings</summary><label>API base URL<input value={providerConfig.baseUrl} onChange={(event) => setProviderConfig((current) => ({ ...current, baseUrl: event.target.value }))} placeholder="http://localhost:8880/v1" /></label><label>API key <input type="password" value={providerConfig.apiKey} onChange={(event) => setProviderConfig((current) => ({ ...current, apiKey: event.target.value }))} /></label><label>Model<input value={providerConfig.model} onChange={(event) => setProviderConfig((current) => ({ ...current, model: event.target.value }))} /></label><label>Voice<input value={providerConfig.voice} onChange={(event) => setProviderConfig((current) => ({ ...current, voice: event.target.value }))} /></label><small>Stored only in this browser. The provider must allow this Nexus origin with CORS.</small></details> : <>
+                {ttsEngine === "openai_compatible" ? <><button type="button" onClick={() => void generateChapterAudio()} disabled={generatingAudio || chapterAudioReady}>{generatingAudio ? "Generating audio…" : chapterAudioReady ? "Chapter audio ready" : "Generate chapter audio"}</button>{chapterAudioReady && <><button type="button" onClick={() => void playChapterAudio()}>{isSpeaking ? "Playing audio" : "Play chapter audio"}</button><button type="button" onClick={stopTts} disabled={!isSpeaking}>Stop audio</button><button type="button" onClick={() => void deleteChapterAudio()}>Delete audio</button></>}<details className="reader-tts-provider"><summary>Provider settings</summary><label>API base URL<input value={providerConfig.baseUrl} onChange={(event) => setProviderConfig((current) => ({ ...current, baseUrl: event.target.value }))} placeholder="http://localhost:8880/v1" /></label><label>API key <input type="password" value={providerConfig.apiKey} onChange={(event) => setProviderConfig((current) => ({ ...current, apiKey: event.target.value }))} /></label><label>Model<input value={providerConfig.model} onChange={(event) => setProviderConfig((current) => ({ ...current, model: event.target.value }))} /></label><label>Voice<input value={providerConfig.voice} onChange={(event) => setProviderConfig((current) => ({ ...current, voice: event.target.value }))} /></label><small>Stored only in this browser. The provider must allow this Nexus origin with CORS.</small></details></> : <><button type="button" onClick={toggleTts} title="Read this chapter aloud">{isSpeaking ? "Stop audio" : "Read aloud"}</button>
                 <select aria-label="Text to speech voice" value={voiceName} onChange={(event) => setVoiceName(event.target.value)}>
                   <option value="">System voice</option>
                   {voices.map((voice) => <option key={`${voice.name}-${voice.lang}`} value={voice.name}>{voice.name} ({voice.lang})</option>)}

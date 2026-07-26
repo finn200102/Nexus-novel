@@ -13,16 +13,23 @@ interface StoredChapter extends OfflineChapter {
 
 const DATABASE_NAME = "nexus-reader";
 const STORE_NAME = "chapters";
+const AUDIO_STORE_NAME = "chapter_audio";
 const MAX_CACHED_CHAPTERS = 50;
 
 const chapterKey = (novelId: number, chapterNumber: number) => `${novelId}:${chapterNumber}`;
 
 const openDatabase = (): Promise<IDBDatabase> => new Promise((resolve, reject) => {
-  const request = indexedDB.open(DATABASE_NAME, 1);
+  const request = indexedDB.open(DATABASE_NAME, 2);
   request.onupgradeneeded = () => {
-    const store = request.result.createObjectStore(STORE_NAME, { keyPath: "cache_key" });
-    store.createIndex("cached_at", "cached_at");
-    store.createIndex("novel_id", "novel_id");
+    const database = request.result;
+    if (!database.objectStoreNames.contains(STORE_NAME)) {
+      const store = database.createObjectStore(STORE_NAME, { keyPath: "cache_key" });
+      store.createIndex("cached_at", "cached_at");
+      store.createIndex("novel_id", "novel_id");
+    }
+    if (!database.objectStoreNames.contains(AUDIO_STORE_NAME)) {
+      database.createObjectStore(AUDIO_STORE_NAME, { keyPath: "cache_key" });
+    }
   };
   request.onsuccess = () => resolve(request.result);
   request.onerror = () => reject(request.error);
@@ -34,6 +41,20 @@ const withStore = async <T>(mode: IDBTransactionMode, work: (store: IDBObjectSto
     return await new Promise<T>((resolve, reject) => {
       const transaction = database.transaction(STORE_NAME, mode);
       const request = work(transaction.objectStore(STORE_NAME));
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  } finally {
+    database.close();
+  }
+};
+
+const withAudioStore = async <T>(mode: IDBTransactionMode, work: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> => {
+  const database = await openDatabase();
+  try {
+    return await new Promise<T>((resolve, reject) => {
+      const transaction = database.transaction(AUDIO_STORE_NAME, mode);
+      const request = work(transaction.objectStore(AUDIO_STORE_NAME));
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
@@ -104,5 +125,27 @@ export const offlineReaderStore = {
     } finally {
       database.close();
     }
+  },
+};
+
+export const chapterAudioStore = {
+  async save(novelId: number, chapterNumber: number, audio: Blob): Promise<void> {
+    if (!("indexedDB" in window)) return;
+    await withAudioStore("readwrite", (store) => store.put({
+      cache_key: chapterKey(novelId, chapterNumber),
+      audio,
+      created_at: Date.now(),
+    }));
+  },
+
+  async get(novelId: number, chapterNumber: number): Promise<Blob | null> {
+    if (!("indexedDB" in window)) return null;
+    const value = await withAudioStore<{ audio?: Blob } | undefined>("readonly", (store) => store.get(chapterKey(novelId, chapterNumber)));
+    return value?.audio || null;
+  },
+
+  async remove(novelId: number, chapterNumber: number): Promise<void> {
+    if (!("indexedDB" in window)) return;
+    await withAudioStore("readwrite", (store) => store.delete(chapterKey(novelId, chapterNumber)));
   },
 };
