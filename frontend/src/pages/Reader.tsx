@@ -627,16 +627,6 @@ const Reader: React.FC = () => {
           </div>
         </header>
 
-        <div
-          ref={contentRef}
-          className="reader-content"
-          style={{ fontSize: `${1.05 * fontScale}rem` }}
-        >
-          {chapter.content.split("\n").map((paragraph, index) => (
-            <p key={index}>{paragraph}</p>
-          ))}
-        </div>
-
         <section className="reader-audio-panel" aria-label="Chapter audio">
           <div className="reader-audio-panel__header">
             <div>
@@ -680,6 +670,16 @@ const Reader: React.FC = () => {
           ) : <small>Browser text-to-speech is unavailable. Choose Self-hosted / API to generate chapter audio.</small>}
           {audioPlayerError && <p className="reader-audio-error" role="alert">{audioPlayerError}</p>}
         </section>
+
+        <div
+          ref={contentRef}
+          className="reader-content"
+          style={{ fontSize: `${1.05 * fontScale}rem` }}
+        >
+          {chapter.content.split("\n").map((paragraph, index) => (
+            <p key={index}>{paragraph}</p>
+          ))}
+        </div>
 
         <div className="reader-navigation">
           <button
