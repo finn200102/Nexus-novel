@@ -34,7 +34,7 @@ async def _request(method: str, path: str, *, json: dict | None = None, params: 
     # open for the generic 120-second client timeout. The metadata service has
     # its own source timeout; this shorter gateway timeout gives the browser a
     # deterministic, actionable response when a source is blocked or degraded.
-    timeout = 35.0 if path == "/catalog-scrapes/preview" else 30.0
+    timeout = 15.0 if path == "/catalog-scrapes/preview" else 30.0
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.request(method, f"{settings.METADATA_SERVER_URL}{path}", json=json, params=params)

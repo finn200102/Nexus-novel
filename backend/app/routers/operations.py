@@ -84,15 +84,15 @@ def _metadata_operations() -> tuple[OperationCounts, dict[str, int], int]:
     health: dict[str, int] = {}
     schedules = 0
     try:
-        job_response = _metadata_get("/api/jobs/?limit=200")
+        job_response = _metadata_get("/api/jobs/summary")
         if job_response.status_code == 200:
-            statuses = [item.get("status") for item in job_response.json().get("data", [])]
+            statuses = job_response.json()
             jobs = OperationCounts(
-                queued=sum(status == "queued" for status in statuses),
-                running=sum(status == "running" for status in statuses),
-                completed=sum(status == "completed" for status in statuses),
-                failed=sum(status == "failed" for status in statuses),
-                cancelled=sum(status == "cancelled" for status in statuses),
+                queued=int(statuses.get("queued", 0)),
+                running=int(statuses.get("running", 0)),
+                completed=int(statuses.get("completed", 0)),
+                failed=int(statuses.get("failed", 0)),
+                cancelled=int(statuses.get("cancelled", 0)),
             )
         health_response = _metadata_get("/api/jobs/source-health")
         if health_response.status_code == 200:
