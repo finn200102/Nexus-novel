@@ -4,7 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { chapterService } from "../services/chapterService";
 import { novelService } from "../services/novelService";
 import { ChapterAudioJob, chapterAudioJobStore, chapterAudioStore, offlineReaderStore } from "../services/offlineReaderStore";
-import { OpenAICompatibleTtsConfig, splitTextForSynthesis, TtsProviderPresetId, TTS_PROVIDER_PRESETS, TtsRequestError, ttsService } from "../services/ttsService";
+import { mergeAudioSegments, OpenAICompatibleTtsConfig, splitTextForSynthesis, TtsProviderPresetId, TTS_PROVIDER_PRESETS, TtsRequestError, ttsService } from "../services/ttsService";
 import "../styles/Reader.css";
 
 interface ChapterContent {
@@ -354,7 +354,7 @@ const Reader: React.FC = () => {
         await saveAudioJob(job);
       }
       const segments = await chapterAudioJobStore.segments(novel_id, chapter.chapter_number);
-      await chapterAudioStore.save(novel_id, chapter.chapter_number, new Blob(segments, { type: segments[0]?.type || "audio/mpeg" }));
+      await chapterAudioStore.save(novel_id, chapter.chapter_number, await mergeAudioSegments(segments));
       await chapterAudioJobStore.clearSegments(novel_id, chapter.chapter_number);
       job.status = "ready";
       job.error = undefined;
