@@ -72,6 +72,11 @@ const Reader: React.FC = () => {
   const [progress, setProgress] = useState<ReadingProgress | null>(null);
   const [annotations, setAnnotations] = useState<ReadingAnnotation[]>([]);
   const [restoredPosition, setRestoredPosition] = useState(false);
+  const [ttsAvailable] = useState(() => typeof window !== "undefined" && "speechSynthesis" in window);
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [voiceName, setVoiceName] = useState(() => localStorage.getItem("nexus-reader-tts-voice") || "");
+  const [ttsRate, setTtsRate] = useState(() => Number(localStorage.getItem("nexus-reader-tts-rate")) || 1);
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const contentRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -124,6 +129,30 @@ const Reader: React.FC = () => {
   useEffect(() => {
     localStorage.setItem("nexus-reader-theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    localStorage.setItem("nexus-reader-tts-voice", voiceName);
+  }, [voiceName]);
+
+  useEffect(() => {
+    localStorage.setItem("nexus-reader-tts-rate", String(ttsRate));
+  }, [ttsRate]);
+
+  useEffect(() => {
+    if (!ttsAvailable) return;
+    const refreshVoices = () => setVoices(window.speechSynthesis.getVoices());
+    refreshVoices();
+    window.speechSynthesis.addEventListener("voiceschanged", refreshVoices);
+    return () => window.speechSynthesis.removeEventListener("voiceschanged", refreshVoices);
+  }, [ttsAvailable]);
+
+  useEffect(() => {
+    // Never allow narration from the previous chapter to continue after
+    // navigation or when the reader unmounts.
+    return () => {
+      if (ttsAvailable) window.speechSynthesis.cancel();
+    };
+  }, [chapter?.id, ttsAvailable]);
 
   useEffect(() => {
     const content = contentRef.current;
@@ -201,6 +230,23 @@ const Reader: React.FC = () => {
 
   const decreaseFont = () => setFontScale((prev) => Math.max(0.85, prev - 0.1));
   const increaseFont = () => setFontScale((prev) => Math.min(1.3, prev + 0.1));
+
+  const toggleTts = () => {
+    if (!ttsAvailable || !chapter) return;
+    if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+      window.speechSynthesis.cancel();
+      setIsSpeaking(false);
+      return;
+    }
+    const utterance = new SpeechSynthesisUtterance(`${chapter.title}. ${chapter.content}`);
+    const selectedVoice = voices.find((voice) => voice.name === voiceName);
+    if (selectedVoice) utterance.voice = selectedVoice;
+    utterance.rate = ttsRate;
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
+    setIsSpeaking(true);
+    window.speechSynthesis.speak(utterance);
+  };
 
   const addAnnotation = async (annotationType: "bookmark" | "note") => {
     if (!chapter || !contentRef.current) return;
@@ -317,6 +363,23 @@ const Reader: React.FC = () => {
               <button type="button" onClick={() => void addAnnotation("note")} title="Add a private note">Note</button>
               <button type="button" onClick={exportReadingState} title="Export progress and annotations">Export</button>
             </div>
+            {ttsAvailable && (
+              <div className="reader-tts-controls" aria-label="Text to speech controls">
+                <button type="button" onClick={toggleTts} title="Read this chapter aloud">
+                  {isSpeaking ? "Stop audio" : "Read aloud"}
+                </button>
+                <select aria-label="Text to speech voice" value={voiceName} onChange={(event) => setVoiceName(event.target.value)}>
+                  <option value="">System voice</option>
+                  {voices.map((voice) => <option key={`${voice.name}-${voice.lang}`} value={voice.name}>{voice.name} ({voice.lang})</option>)}
+                </select>
+                <label>
+                  Speed
+                  <select aria-label="Text to speech speed" value={ttsRate} onChange={(event) => setTtsRate(Number(event.target.value))}>
+                    {[0.8, 1, 1.2, 1.4, 1.6].map((rate) => <option key={rate} value={rate}>{rate}×</option>)}
+                  </select>
+                </label>
+              </div>
+            )}
             <div className="reader-theme-controls">
               {themeOptions.map((option) => (
                 <button

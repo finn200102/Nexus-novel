@@ -247,6 +247,26 @@
   padding: 0.25rem;
 }
 
+.reader-tts-controls {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+}
+
+.reader-tts-controls select,
+.reader-tts-controls label {
+  max-width: 10rem;
+  color: inherit;
+  font: inherit;
+}
+
+.reader-tts-controls label {
+  display: flex;
+  align-items: center;
+  gap: .25rem;
+  font-size: .75rem;
+}
+
 .reader-type-controls button,
 .reader-theme-controls button {
   border: none;
