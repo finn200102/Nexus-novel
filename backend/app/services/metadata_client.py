@@ -197,6 +197,7 @@ async def list_novels_metadata(
     author: Optional[str] = None,
     title: Optional[str] = None,
     tag: Optional[str] = None,
+    fandom: Optional[str] = None,
     genre: Optional[str] = None,
     status: Optional[str] = None,
     min_word_count: Optional[int] = None,
@@ -218,6 +219,7 @@ async def list_novels_metadata(
         params["title"] = title
     for name, value in {
         "tag": tag,
+        "fandom": fandom,
         "genre": genre,
         "status": status,
         "min_word_count": min_word_count,
@@ -243,7 +245,7 @@ async def list_novels_metadata(
             f"{settings.METADATA_SERVER_URL}/novels/",
             params=params,
             headers=_get_headers(),
-            timeout=30.0,
+            timeout=15.0,
         )
         response.raise_for_status()
         data = response.json()

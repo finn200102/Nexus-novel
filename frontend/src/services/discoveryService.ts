@@ -30,6 +30,7 @@ export const discoveryService = {
       }
       const filterParams: Record<keyof DiscoveryFilters, string> = {
         tag: "tag",
+        fandom: "fandom",
         genre: "genre",
         status: "status",
         minWordCount: "min_word_count",

@@ -27,6 +27,7 @@ export interface PaginatedResponse<T> {
 
 export interface DiscoveryFilters {
   tag: string;
+  fandom: string;
   genre: string;
   status: string;
   minWordCount: string;

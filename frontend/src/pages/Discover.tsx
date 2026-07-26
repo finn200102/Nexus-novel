@@ -26,6 +26,7 @@ const ITEMS_PER_PAGE = 20;
 
 const EMPTY_FILTERS: DiscoveryFilters = {
   tag: "",
+  fandom: "",
   genre: "",
   status: "",
   minWordCount: "",
@@ -314,6 +315,10 @@ const Discover: React.FC = () => {
         </div>
         {filtersOpen && (
           <section id="discover-filters" className="discover-filters" aria-label="Discover filters">
+            <label>
+              Fandom / series
+              <input value={filters.fandom} onChange={(event) => updateFilter("fandom", event.target.value)} placeholder="e.g. Harry Potter" />
+            </label>
             <label>
               Tag
               <input value={filters.tag} onChange={(event) => updateFilter("tag", event.target.value)} placeholder="e.g. time loop" />
