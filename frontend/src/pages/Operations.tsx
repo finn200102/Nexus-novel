@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Activity, AlertTriangle, CheckCircle2, Clock3, Database, Download, RefreshCw, Server, XCircle } from "lucide-react";
 import { useLibraryContext } from "../context/LibraryContext";
 import { activityService, MetadataJob, OperationsSummary, RefreshSchedule, SourceHealth } from "../services/activityService";
+import { cancelPendingRequests, getUserFacingError, isRequestCancelled } from "../services/apiClient";
+import { RequestCoordinator, useAdaptivePolling } from "../services/requestResilience";
 import "../styles/operations.css";
 
 const Operations: React.FC = () => {
@@ -14,6 +16,8 @@ const Operations: React.FC = () => {
   const [sourceHealth, setSourceHealth] = useState<SourceHealth[]>([]);
   const [showFailureHistory, setShowFailureHistory] = useState(false);
   const [scheduleDraft, setScheduleDraft] = useState({ site: "", interval_minutes: 360, batch_size: 100 });
+  const coordinatorRef = React.useRef(new RequestCoordinator());
+  const hasSummaryRef = React.useRef(false);
 
   const load = useCallback(async () => {
     if (!activeLibrary) {
@@ -21,12 +25,19 @@ const Operations: React.FC = () => {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!hasSummaryRef.current) setLoading(true);
     try {
-      setSummary(await activityService.getOperationsSummary(activeLibrary.id));
+      const nextSummary = await coordinatorRef.current.run(
+        `operations-summary:${activeLibrary.id}`,
+        () => activityService.getOperationsSummary(activeLibrary.id)
+      );
+      setSummary(nextSummary);
+      hasSummaryRef.current = true;
       setError(null);
-    } catch {
-      setError("Operations data is unavailable. Check the Novel API and metadata server.");
+    } catch (requestError) {
+      if (!isRequestCancelled(requestError)) {
+        setError(getUserFacingError(requestError, "Operations data is unavailable. Check the Novel API and metadata server."));
+      }
     } finally {
       setLoading(false);
     }
@@ -34,34 +45,33 @@ const Operations: React.FC = () => {
 
   const loadControls = useCallback(async () => {
     try {
-      const [nextSchedules, nextJobs, nextHealth] = await Promise.all([
-        activityService.getRefreshSchedules(),
-        activityService.getMetadataJobs(showFailureHistory ? "archived" : "failed"),
-        activityService.getSourceHealth(),
-      ]);
+      const nextControls = await coordinatorRef.current.run(
+        `operations-controls:${showFailureHistory ? "archived" : "failed"}`,
+        () => Promise.all([
+          activityService.getRefreshSchedules(),
+          activityService.getMetadataJobs(showFailureHistory ? "archived" : "failed"),
+          activityService.getSourceHealth(),
+        ])
+      );
+      const [nextSchedules, nextJobs, nextHealth] = nextControls;
       setSchedules(nextSchedules);
       setFailedJobs(nextJobs);
       setSourceHealth(nextHealth);
-    } catch {
-      setError("Automation controls are unavailable while the metadata service is offline.");
+    } catch (requestError) {
+      if (!isRequestCancelled(requestError)) {
+        setError(getUserFacingError(requestError, "Automation controls are unavailable while the metadata service is offline."));
+      }
     }
   }, [showFailureHistory]);
 
   useEffect(() => {
     void load();
     void loadControls();
-    let stopped = false;
-    let timer: number | undefined;
-    let controlsTimer: number | undefined;
-    const schedule = () => {
-      if (stopped) return;
-      const delay = document.hidden ? 30000 : 10000;
-      timer = window.setTimeout(async () => { await load(); schedule(); }, delay);
-      controlsTimer = window.setTimeout(async () => { await loadControls(); }, document.hidden ? 60000 : 15000);
-    };
-    schedule();
-    return () => { stopped = true; if (timer) window.clearTimeout(timer); if (controlsTimer) window.clearTimeout(controlsTimer); };
+    return () => cancelPendingRequests("/operations/");
   }, [load, loadControls]);
+
+  useAdaptivePolling(load, Boolean(activeLibrary), { activeMs: 3000, visibleIdleMs: 15000, hiddenMs: 30000 });
+  useAdaptivePolling(loadControls, Boolean(activeLibrary), { activeMs: 15000, visibleIdleMs: 15000, hiddenMs: 30000 });
 
   const createSchedule = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -74,8 +84,8 @@ const Operations: React.FC = () => {
       });
       setScheduleDraft({ site: "", interval_minutes: 360, batch_size: 100 });
       await loadControls();
-    } catch {
-      setError("Could not create refresh schedule.");
+    } catch (requestError) {
+      setError(getUserFacingError(requestError, "Could not create refresh schedule."));
     }
   };
 
@@ -83,8 +93,8 @@ const Operations: React.FC = () => {
     try {
       await activityService.updateRefreshSchedule(schedule.id, { enabled: !schedule.enabled });
       await loadControls();
-    } catch {
-      setError("Could not update refresh schedule.");
+    } catch (requestError) {
+      setError(getUserFacingError(requestError, "Could not update refresh schedule."));
     }
   };
 
@@ -93,7 +103,7 @@ const Operations: React.FC = () => {
       await activityService.runRefreshSchedule(schedule.id);
       await loadControls();
       await load();
-    } catch { setError("Could not run refresh schedule."); }
+    } catch (requestError) { setError(getUserFacingError(requestError, "Could not run refresh schedule.")); }
   };
 
   const removeSchedule = async (schedule: RefreshSchedule) => {
@@ -101,8 +111,8 @@ const Operations: React.FC = () => {
     try {
       await activityService.deleteRefreshSchedule(schedule.id);
       await loadControls();
-    } catch {
-      setError("Could not delete refresh schedule.");
+    } catch (requestError) {
+      setError(getUserFacingError(requestError, "Could not delete refresh schedule."));
     }
   };
 
@@ -111,8 +121,8 @@ const Operations: React.FC = () => {
       await activityService.retryMetadataJob(job.id);
       await loadControls();
       await load();
-    } catch {
-      setError(`Could not retry job ${job.id}.`);
+    } catch (requestError) {
+      setError(getUserFacingError(requestError, `Could not retry job ${job.id}.`));
     }
   };
 
@@ -121,12 +131,12 @@ const Operations: React.FC = () => {
       await activityService.archiveMetadataJob(job.id);
       await loadControls();
       await load();
-    } catch { setError(`Could not archive job ${job.id}.`); }
+    } catch (requestError) { setError(getUserFacingError(requestError, `Could not archive job ${job.id}.`)); }
   };
 
   const archiveAllFailed = async () => {
     try { await activityService.archiveFailedMetadataJobs(); await loadControls(); await load(); }
-    catch { setError("Could not archive the failed metadata jobs."); }
+    catch (requestError) { setError(getUserFacingError(requestError, "Could not archive the failed metadata jobs.")); }
   };
 
   const resetSource = async (source: SourceHealth) => {
@@ -134,7 +144,7 @@ const Operations: React.FC = () => {
       await activityService.resetSourceHealth(source.site);
       await loadControls();
       await load();
-    } catch { setError(`Could not reset ${source.site} health.`); }
+    } catch (requestError) { setError(getUserFacingError(requestError, `Could not reset ${source.site} health.`)); }
   };
 
   const jobExplanation = (job: MetadataJob) => {

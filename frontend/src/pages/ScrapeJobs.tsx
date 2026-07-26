@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2, Clock3, Database, Play, RefreshCw, Search, Server, Sparkles, XCircle } from "lucide-react";
 import { catalogScrapeService, CatalogCandidate, CatalogDefinition, CatalogJob, CatalogPreview, CatalogQuery, TaxonomyValue } from "../services/catalogScrapeService";
 import { discoveryService } from "../services/discoveryService";
+import { cancelPendingRequests, getUserFacingError, isRequestCancelled } from "../services/apiClient";
+import { RequestCoordinator, useAdaptivePolling } from "../services/requestResilience";
 import { useLibraryContext } from "../context/LibraryContext";
 import "../styles/scrape-jobs.css";
 
@@ -25,49 +27,87 @@ const ScrapeJobs: React.FC = () => {
   const [taxonomy, setTaxonomy] = useState<TaxonomyValue[]>([]);
   const [selectedCandidates, setSelectedCandidates] = useState<string[]>([]);
   const previewSectionRef = useRef<HTMLElement>(null);
+  const coordinatorRef = useRef(new RequestCoordinator());
 
   const update = (key: keyof CatalogQuery, value: unknown) => setQuery((current) => ({ ...current, [key]: value }));
   const updateMode = (mode: string) => { update("mode", mode); if (mode === "crossover") update("crossover", true); setName(`${query.fandom_a || "Fandom"} — ${modes.find((item) => item.id === mode)?.label || "Catalog"}`); };
-  const loadDefinitions = async () => { try { setDefinitions(await catalogScrapeService.definitions()); } catch (err) { setError("Administrator access is required, or the catalog service is unavailable."); } };
-  useEffect(() => { void loadDefinitions(); void catalogScrapeService.capabilities().then(setCapabilities).catch(() => undefined); void catalogScrapeService.taxonomies("fanfiction", "fandom").then(setTaxonomy).catch(() => undefined); }, []);
+  const loadDefinitions = async () => {
+    try {
+      setDefinitions(await coordinatorRef.current.run("catalog-definitions", () => catalogScrapeService.definitions()));
+    } catch (requestError) {
+      if (!isRequestCancelled(requestError)) setError(getUserFacingError(requestError, "Administrator access is required, or the catalog service is unavailable."));
+    }
+  };
+  useEffect(() => {
+    void loadDefinitions();
+    void coordinatorRef.current.run("catalog-capabilities", () => catalogScrapeService.capabilities()).then(setCapabilities).catch(() => undefined);
+    void coordinatorRef.current.run("catalog-taxonomy:fanfiction:fandom", () => catalogScrapeService.taxonomies("fanfiction", "fandom")).then(setTaxonomy).catch(() => undefined);
+    return () => cancelPendingRequests("/catalog-scrapes");
+  }, []);
   const hasPendingChildImports = candidates.some((candidate) => candidate.candidate_status === "import_queued");
   useEffect(() => {
     if (!job || (["completed", "failed", "cancelled"].includes(job.status) && !hasPendingChildImports)) return;
 
     const refreshJob = async () => {
       try {
-        const [current, currentCandidates] = await Promise.all([
-          catalogScrapeService.job(job.id),
-          catalogScrapeService.candidates(job.id),
-        ]);
+        const [current, currentCandidates] = await coordinatorRef.current.run(
+          `catalog-job:${job.id}`,
+          () => Promise.all([
+            catalogScrapeService.job(job.id),
+            catalogScrapeService.candidates(job.id),
+          ])
+        );
         setJob(current);
         setCandidates(currentCandidates);
-      } catch {
+      } catch (requestError) {
+        if (!isRequestCancelled(requestError)) {
+          setError(getUserFacingError(requestError, "Catalog job status is temporarily unavailable. The last successful status remains visible."));
+        }
         // Keep the last successful snapshot visible while a background refresh fails.
       }
     };
 
     void refreshJob();
-    const timer = window.setInterval(() => void refreshJob(), 3000);
-    return () => window.clearInterval(timer);
+    return () => cancelPendingRequests(`/catalog-scrapes/jobs/${job.id}`);
   }, [job?.id, job?.status, hasPendingChildImports]);
+
+  useAdaptivePolling(async () => {
+    if (!job || ( ["completed", "failed", "cancelled"].includes(job.status) && !hasPendingChildImports)) return;
+    try {
+      const [current, currentCandidates] = await coordinatorRef.current.run(
+        `catalog-job:${job.id}`,
+        () => Promise.all([
+          catalogScrapeService.job(job.id),
+          catalogScrapeService.candidates(job.id),
+        ])
+      );
+      setJob(current);
+      setCandidates(currentCandidates);
+    } catch (requestError) {
+      if (!isRequestCancelled(requestError)) setError(getUserFacingError(requestError, "Catalog job status is temporarily unavailable. The last successful status remains visible."));
+    }
+  }, Boolean(job && (!["completed", "failed", "cancelled"].includes(job.status) || hasPendingChildImports)), {
+    activeMs: 3000,
+    visibleIdleMs: 15000,
+    hiddenMs: 30000,
+  });
 
   const runPreview = async () => {
     setPreviewing(true);
     setError(null);
     try {
-      setPreview(await catalogScrapeService.preview("fanfiction", query));
+      setPreview(await coordinatorRef.current.run(`catalog-preview:${JSON.stringify(query)}`, () => catalogScrapeService.preview("fanfiction", query)));
       window.requestAnimationFrame(() => previewSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
-    } catch (err: any) {
-      setError(err?.response?.data?.detail || "Could not preview FanFiction.net results.");
+    } catch (requestError) {
+      if (!isRequestCancelled(requestError)) setError(getUserFacingError(requestError, "Could not preview FanFiction.net results."));
     } finally {
       setPreviewing(false);
     }
   };
-  const createJob = async () => { setBusy(true); setError(null); try { const result = await catalogScrapeService.create({ name, site: "fanfiction", query, schedule_interval_minutes: schedule, enabled: true }); setJob(result.job); await loadDefinitions(); } catch (err: any) { setError(err?.response?.data?.detail || "Could not create catalog job."); } finally { setBusy(false); } };
-  const runDefinition = async (definition: CatalogDefinition) => { try { setJob(await catalogScrapeService.run(definition.id)); } catch { setError("Could not start the saved job."); } };
-  const toggleDefinition = async (definition: CatalogDefinition) => { try { if (definition.enabled) await catalogScrapeService.pause(definition.id); else await catalogScrapeService.resume(definition.id); await loadDefinitions(); } catch { setError("Could not update the saved job."); } };
-  const removeDefinition = async (definition: CatalogDefinition) => { try { await catalogScrapeService.remove(definition.id); await loadDefinitions(); } catch { setError("Could not delete the saved job."); } };
+  const createJob = async () => { setBusy(true); setError(null); try { const result = await catalogScrapeService.create({ name, site: "fanfiction", query, schedule_interval_minutes: schedule, enabled: true }); setJob(result.job); await loadDefinitions(); } catch (requestError) { setError(getUserFacingError(requestError, "Could not create catalog job.")); } finally { setBusy(false); } };
+  const runDefinition = async (definition: CatalogDefinition) => { try { setJob(await catalogScrapeService.run(definition.id)); } catch (requestError) { setError(getUserFacingError(requestError, "Could not start the saved job.")); } };
+  const toggleDefinition = async (definition: CatalogDefinition) => { try { if (definition.enabled) await catalogScrapeService.pause(definition.id); else await catalogScrapeService.resume(definition.id); await loadDefinitions(); } catch (requestError) { setError(getUserFacingError(requestError, "Could not update the saved job.")); } };
+  const removeDefinition = async (definition: CatalogDefinition) => { try { await catalogScrapeService.remove(definition.id); await loadDefinitions(); } catch (requestError) { setError(getUserFacingError(requestError, "Could not delete the saved job.")); } };
   const toggleCandidate = (sourceUrl: string) => setSelectedCandidates((current) => current.includes(sourceUrl) ? current.filter((url) => url !== sourceUrl) : [...current, sourceUrl]);
   const addSelectedToLibrary = async () => {
     if (!activeLibraryId || selectedCandidates.length === 0) { setError("Select a library and at least one candidate first."); return; }
@@ -75,7 +115,7 @@ const ScrapeJobs: React.FC = () => {
     try {
       await Promise.all(selectedCandidates.map((sourceUrl) => discoveryService.addToLibrary(activeLibraryId, sourceUrl)));
       setSelectedCandidates([]);
-    } catch { setError("One or more candidates could not be added to the library."); }
+    } catch (requestError) { setError(getUserFacingError(requestError, "One or more candidates could not be added to the library.")); }
     finally { setBusy(false); }
   };
   const filteredPreview = useMemo(() => preview?.preview || [], [preview]);

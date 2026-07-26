@@ -8,6 +8,8 @@ import { DiscoveredNovel, DiscoveryFilters } from "../types/discovery";
 import { Novel } from "../types/novel";
 import NovelCard from "../components/novel/NovelCard";
 import { NovelCardSkeleton } from "../components/common/Skeleton";
+import { cancelPendingRequests, getUserFacingError, isRequestCancelled } from "../services/apiClient";
+import { RequestCoordinator, useAdaptivePolling } from "../services/requestResilience";
 import CreateNovelForm from "../components/novel/CreateNovelForm";
 import defaultCoverImage from "../assets/cover.png";
 import "../styles/library.css";
@@ -58,16 +60,20 @@ const Discover: React.FC = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastRefreshAt, setLastRefreshAt] = useState<Date | null>(null);
   const [catalogStatus, setCatalogStatus] = useState<"unknown" | "online" | "offline">("unknown");
+  const coordinatorRef = React.useRef(new RequestCoordinator());
+  const hasSnapshotRef = React.useRef(false);
   const searchFromUrl = new URLSearchParams(window.location.search).get("q") || "";
 
   const currentSite = site || "all";
 
   useEffect(() => {
     setNovels([]);
+    hasSnapshotRef.current = false;
     setNextCursor(null);
     setHasMore(true);
     setSearch(searchFromUrl);
-    fetchNovels(currentSite, 1, searchFromUrl, appliedFilters);
+    void fetchNovels(currentSite, 1, searchFromUrl, appliedFilters);
+    return () => cancelPendingRequests("/discovery/novels/");
   }, [currentSite, searchFromUrl]);
 
   const fetchNovels = async (
@@ -76,27 +82,30 @@ const Discover: React.FC = () => {
     title = search,
     activeFilters = appliedFilters
   ) => {
+    const cursor = page > 1 ? nextCursor : null;
+    const key = `discover:${siteValue}:${page}:${title}:${cursor}:${JSON.stringify(activeFilters)}`;
+    const hasSnapshot = hasSnapshotRef.current;
     try {
-      if (page === 1) {
+      if (page === 1 && !hasSnapshot) {
         setLoading(true);
-      } else {
+      } else if (page > 1) {
         setLoadingMore(true);
       }
       setError(null);
 
-      const cursor = page > 1 ? nextCursor : null;
-      const response = await discoveryService.getNovelsBySite(
-        siteValue === "all" ? null : siteValue,
-        ITEMS_PER_PAGE,
-        cursor,
-        title,
-        activeFilters
-      );
+      const response = await coordinatorRef.current.run(key, () => discoveryService.getNovelsBySite(
+          siteValue === "all" ? null : siteValue,
+          ITEMS_PER_PAGE,
+          cursor,
+          title,
+          activeFilters
+        ));
 
       console.log("Fetched novels:", response.data.slice(0, 3).map(n => ({ id: n.id, title: n.title?.slice(0, 30), img_url: n.img_url })));
 
       if (page === 1) {
         setNovels(response.data);
+        hasSnapshotRef.current = true;
       } else {
         setNovels((prev) => [...prev, ...response.data]);
       }
@@ -107,8 +116,9 @@ const Discover: React.FC = () => {
         setLastRefreshAt(new Date());
       }
     } catch (err) {
+      if (isRequestCancelled(err)) return;
       console.error("Failed to fetch novels:", err);
-      setError("Failed to load novels. Please try again.");
+      setError(getUserFacingError(err, "Failed to load novels. Please try again."));
       setCatalogStatus("offline");
     } finally {
       setLoading(false);
@@ -136,9 +146,15 @@ const Discover: React.FC = () => {
 
   const handleLoadMore = () => {
     if (nextCursor !== null) {
-      fetchNovels(currentSite, 2);
+      void fetchNovels(currentSite, 2);
     }
   };
+
+  useAdaptivePolling(() => fetchNovels(currentSite, 1, searchFromUrl, appliedFilters), true, {
+    activeMs: 3000,
+    visibleIdleMs: 15000,
+    hiddenMs: 30000,
+  });
 
   const submitSearch = (event: React.FormEvent) => {
     event.preventDefault();
@@ -179,7 +195,7 @@ const Discover: React.FC = () => {
       addToast(`"${novel.title}" added to your library!`, "success");
     } catch (err) {
       console.error("Failed to add novel:", err);
-      addToast("Failed to add novel to library", "error");
+      addToast(getUserFacingError(err, "Failed to add novel to library"), "error");
     }
   };
 
