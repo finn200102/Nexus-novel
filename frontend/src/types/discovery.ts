@@ -43,3 +43,13 @@ export interface SiteInfo {
   id: string;
   name: string;
 }
+
+export interface FandomInfo {
+  id: number;
+  site: string;
+  media_type: string;
+  external_category_id: string | null;
+  display_name: string;
+  aliases: string[];
+  story_count: number | null;
+}

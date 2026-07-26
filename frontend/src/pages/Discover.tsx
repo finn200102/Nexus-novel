@@ -4,7 +4,7 @@ import { BookOpen, Plus, RefreshCw, Search, SlidersHorizontal, X } from "lucide-
 import { discoveryService } from "../services/discoveryService";
 import { useLibraryContext } from "../context/LibraryContext";
 import { useToast } from "../context/ToastContext";
-import { DiscoveredNovel, DiscoveryFilters } from "../types/discovery";
+import { DiscoveredNovel, DiscoveryFilters, FandomInfo } from "../types/discovery";
 import { Novel } from "../types/novel";
 import NovelCard from "../components/novel/NovelCard";
 import { NovelCardSkeleton } from "../components/common/Skeleton";
@@ -55,6 +55,7 @@ const Discover: React.FC = () => {
   const [search, setSearch] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filters, setFilters] = useState<DiscoveryFilters>(EMPTY_FILTERS);
+  const [fandomOptions, setFandomOptions] = useState<FandomInfo[]>([]);
   const [appliedFilters, setAppliedFilters] = useState<DiscoveryFilters>(EMPTY_FILTERS);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -65,6 +66,14 @@ const Discover: React.FC = () => {
   const searchFromUrl = new URLSearchParams(window.location.search).get("q") || "";
 
   const currentSite = site || "all";
+
+  useEffect(() => {
+    if (!filtersOpen) return;
+    const timer = window.setTimeout(() => {
+      void discoveryService.getFandoms(currentSite, filters.fandom).then(setFandomOptions).catch(() => setFandomOptions([]));
+    }, 180);
+    return () => window.clearTimeout(timer);
+  }, [currentSite, filters.fandom, filtersOpen]);
 
   useEffect(() => {
     setNovels([]);
@@ -335,7 +344,10 @@ const Discover: React.FC = () => {
           <section id="discover-filters" className="discover-filters" aria-label="Discover filters">
             <label>
               Fandom / series
-              <input value={filters.fandom} onChange={(event) => updateFilter("fandom", event.target.value)} placeholder="e.g. Harry Potter" />
+              <input list="discover-fandoms" value={filters.fandom} onChange={(event) => updateFilter("fandom", event.target.value)} placeholder="Search imported source fandoms" />
+              <datalist id="discover-fandoms">
+                {fandomOptions.map((fandom) => <option key={fandom.id} value={fandom.display_name}>{fandom.media_type}{fandom.story_count ? ` · ${fandom.story_count.toLocaleString()} stories` : ""}</option>)}
+              </datalist>
             </label>
             <label>
               Tag

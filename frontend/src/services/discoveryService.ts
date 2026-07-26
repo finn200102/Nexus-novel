@@ -5,6 +5,7 @@ import {
   DiscoveryFilters,
   PaginatedResponse,
   SiteInfo,
+  FandomInfo,
 } from "../types/discovery";
 
 export const discoveryService = {
@@ -85,6 +86,13 @@ export const discoveryService = {
       }
       throw error;
     }
+  },
+
+  async getFandoms(site?: string, query?: string): Promise<FandomInfo[]> {
+    const response = await apiClient.get<FandomInfo[]>("/discovery/fandoms/", {
+      params: { site: site && site !== "all" ? site : undefined, q: query || undefined, limit: 100 },
+    });
+    return response.data;
   },
 
   async addToLibrary(libraryId: number, sourceUrl: string): Promise<unknown> {

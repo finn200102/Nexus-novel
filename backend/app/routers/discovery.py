@@ -80,3 +80,17 @@ async def get_supported_sites(
             {"id": "webnovel", "name": "WebNovel"},
         ]
     }
+
+
+@router.get("/fandoms/")
+async def get_fandoms(
+    site: Optional[str] = Query(None, description="Restrict to a source site"),
+    media_type: Optional[str] = Query(None, description="Restrict to a source archive category"),
+    q: Optional[str] = Query(None, description="Search canonical fandom names"),
+    limit: int = Query(100, ge=1, le=250),
+    current_user: User = Depends(get_current_user),
+):
+    """Expose persisted source fandoms without making the browser call metadata directly."""
+    return await metadata_client.list_fandoms_metadata(
+        site=site, media_type=media_type, query=q, limit=limit
+    )

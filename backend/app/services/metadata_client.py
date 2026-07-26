@@ -275,6 +275,32 @@ async def list_novels_metadata(
     return data
 
 
+async def list_fandoms_metadata(
+    *,
+    site: Optional[str] = None,
+    media_type: Optional[str] = None,
+    query: Optional[str] = None,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    """Return the source-aware fandom taxonomy for searchable UI controls."""
+    params: dict[str, Any] = {"limit": limit}
+    if site:
+        params["site"] = site
+    if media_type:
+        params["media_type"] = media_type
+    if query:
+        params["q"] = query
+    cache_key = f"fandoms:{tuple(sorted(params.items()))}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    response = await _request("GET", "/fandoms", timeout=INTERACTIVE_TIMEOUT, params=params)
+    data: list[dict[str, Any]] = response.json()
+    cache.set(cache_key, data, ttl=600)
+    return data
+
+
 def invalidate_novel_cache(novel_id: int):
     logger.debug("Invalidating novel cache", novel_id=novel_id)
     cache.invalidate(f"novel:{novel_id}")
