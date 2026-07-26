@@ -151,8 +151,10 @@ const Discover: React.FC = () => {
   };
 
   useAdaptivePolling(() => fetchNovels(currentSite, 1, searchFromUrl, appliedFilters), true, {
-    activeMs: 3000,
-    visibleIdleMs: 15000,
+    // Discover has no active job to monitor; refreshing it aggressively only
+    // creates avoidable load while a source worker is busy elsewhere.
+    activeMs: 15000,
+    visibleIdleMs: 30000,
     hiddenMs: 30000,
   });
 

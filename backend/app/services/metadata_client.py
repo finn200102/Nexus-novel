@@ -10,6 +10,9 @@ from app.logging_config import get_logger, get_request_id
 logger = get_logger("metadata_client")
 
 CACHE_TTL = 300
+CACHE_MAX_ENTRIES = 512
+INTERACTIVE_TIMEOUT = httpx.Timeout(15.0, connect=3.0)
+BACKGROUND_TIMEOUT = httpx.Timeout(20.0, connect=3.0)
 
 
 @dataclass
@@ -19,18 +22,37 @@ class CacheEntry:
 
 
 class MetadataCache:
-    def __init__(self, ttl: int = CACHE_TTL):
+    """Small bounded read cache for metadata calls.
+
+    Nexus runs as a single self-hosted process in the default deployment.  A
+    bounded local cache prevents dashboard polling from repeatedly crossing the
+    Novel/metadata service boundary while still letting writes invalidate data
+    immediately.
+    """
+
+    def __init__(self, ttl: int = CACHE_TTL, max_entries: int = CACHE_MAX_ENTRIES):
         self._cache: dict[str, CacheEntry] = {}
         self._ttl = ttl
+        self._max_entries = max(1, max_entries)
 
     def get(self, key: str) -> Optional[Any]:
         entry = self._cache.get(key)
         if entry and entry.expires_at > time.time():
             return entry.data
+        if entry:
+            self._cache.pop(key, None)
         return None
 
-    def set(self, key: str, data: Any):
-        self._cache[key] = CacheEntry(data=data, expires_at=time.time() + self._ttl)
+    def set(self, key: str, data: Any, *, ttl: int | None = None):
+        now = time.time()
+        if key not in self._cache and len(self._cache) >= self._max_entries:
+            expired = [name for name, entry in self._cache.items() if entry.expires_at <= now]
+            for name in expired:
+                self._cache.pop(name, None)
+            if len(self._cache) >= self._max_entries:
+                oldest = min(self._cache, key=lambda name: self._cache[name].expires_at)
+                self._cache.pop(oldest, None)
+        self._cache[key] = CacheEntry(data=data, expires_at=now + (ttl if ttl is not None else self._ttl))
 
     def invalidate(self, key: str):
         self._cache.pop(key, None)
@@ -40,6 +62,50 @@ class MetadataCache:
 
 
 cache = MetadataCache()
+_client: httpx.AsyncClient | None = None
+_client_lock = asyncio.Lock()
+
+
+async def start() -> None:
+    """Create the pooled metadata client during application startup."""
+    global _client
+    async with _client_lock:
+        if _client is None or _client.is_closed:
+            _client = httpx.AsyncClient(
+                base_url=settings.METADATA_SERVER_URL.rstrip("/"),
+                limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+            )
+
+
+async def close() -> None:
+    """Release pooled connections during graceful application shutdown."""
+    global _client
+    async with _client_lock:
+        if _client is not None:
+            await _client.aclose()
+            _client = None
+
+
+async def _get_client() -> httpx.AsyncClient:
+    if _client is None or _client.is_closed:
+        await start()
+    assert _client is not None
+    return _client
+
+
+async def _request(method: str, path: str, *, timeout: httpx.Timeout, **kwargs: Any) -> httpx.Response:
+    """Perform one bounded metadata request with request-id propagation."""
+    client = await _get_client()
+    try:
+        response = await client.request(method, path, headers=_get_headers(), timeout=timeout, **kwargs)
+        response.raise_for_status()
+        return response
+    except httpx.TimeoutException as exc:
+        logger.warning("metadata_request.timeout", method=method, path=path)
+        raise RuntimeError("Metadata service did not respond before the request timeout") from exc
+    except httpx.HTTPError as exc:
+        logger.warning("metadata_request.failed", method=method, path=path, error=str(exc))
+        raise RuntimeError("Metadata service request failed") from exc
 
 
 def _get_headers() -> dict:
@@ -58,24 +124,15 @@ async def scrape_novel_by_url(url: str, site: str) -> dict:
 
     logger.info("Calling metadata server to scrape novel", url=url, site=site)
 
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.post(
-                f"{settings.METADATA_SERVER_URL}/scrape/by-url",
-                json={"url": url, "site": site},
-                headers=_get_headers(),
-                timeout=30.0,
-            )
-            response.raise_for_status()
-            data = response.json()
-            cache.set(cache_key, data)
-            logger.info(
-                "Successfully scraped novel", url=url, novel_id=data.get("novel_id")
-            )
-            return data
-        except httpx.HTTPError as e:
-            logger.error("Failed to scrape novel", url=url, error=str(e))
-            return {"success": False, "novel_id": None, "message": str(e)}
+    try:
+        response = await _request("POST", "/scrape/by-url", timeout=INTERACTIVE_TIMEOUT, json={"url": url, "site": site})
+        data = response.json()
+        cache.set(cache_key, data, ttl=30)
+        logger.info("Successfully scraped novel", url=url, novel_id=data.get("novel_id"))
+        return data
+    except RuntimeError as exc:
+        logger.error("Failed to scrape novel", url=url, error=str(exc))
+        return {"success": False, "novel_id": None, "message": str(exc)}
 
 
 async def wait_for_scrape_complete(
@@ -113,34 +170,22 @@ async def get_novel_metadata(novel_id: int) -> dict:
 
     logger.info("Fetching novel metadata from server", novel_id=novel_id)
 
-    async with httpx.AsyncClient() as client:
-        response = await client.get(
-            f"{settings.METADATA_SERVER_URL}/novels/{novel_id}",
-            headers=_get_headers(),
-            timeout=30.0,
-        )
-        response.raise_for_status()
-        data = response.json()
-        cache.set(cache_key, data)
-        logger.info("Successfully fetched novel metadata", novel_id=novel_id)
-        return data
+    response = await _request("GET", f"/novels/{novel_id}", timeout=INTERACTIVE_TIMEOUT)
+    data = response.json()
+    cache.set(cache_key, data)
+    logger.info("Successfully fetched novel metadata", novel_id=novel_id)
+    return data
 
 
 async def refresh_novel_metadata(novel_id: int) -> dict:
     logger.info("Refreshing novel metadata", novel_id=novel_id)
     cache.invalidate(f"novel:{novel_id}")
 
-    async with httpx.AsyncClient() as client:
-        response = await client.put(
-            f"{settings.METADATA_SERVER_URL}/novels/{novel_id}",
-            headers=_get_headers(),
-            timeout=120.0,
-        )
-        response.raise_for_status()
-        data = response.json()
-        cache.set(f"novel:{novel_id}", data)
-        logger.info("Successfully refreshed novel metadata", novel_id=novel_id)
-        return data
+    response = await _request("PUT", f"/novels/{novel_id}", timeout=BACKGROUND_TIMEOUT)
+    data = response.json()
+    cache.set(f"novel:{novel_id}", data)
+    logger.info("Successfully refreshed novel metadata", novel_id=novel_id)
+    return data
 
 
 async def get_chapters_from_metadata(
@@ -156,21 +201,12 @@ async def get_chapters_from_metadata(
         "Fetching chapters from metadata server", novel_id=novel_id, limit=limit
     )
 
-    async with httpx.AsyncClient() as client:
-        response = await client.get(
-            f"{settings.METADATA_SERVER_URL}/chapters/novel/{novel_id}",
-            params={"limit": limit},
-            headers=_get_headers(),
-            timeout=30.0,
-        )
-        response.raise_for_status()
-        data: dict[str, Any] = response.json()
-        chapters: list[dict[str, Any]] = data.get("data", [])
-        cache.set(cache_key, chapters)
-        logger.info(
-            "Successfully fetched chapters", novel_id=novel_id, count=len(chapters)
-        )
-        return chapters
+    response = await _request("GET", f"/chapters/novel/{novel_id}", timeout=INTERACTIVE_TIMEOUT, params={"limit": limit})
+    data: dict[str, Any] = response.json()
+    chapters: list[dict[str, Any]] = data.get("data", [])
+    cache.set(cache_key, chapters)
+    logger.info("Successfully fetched chapters", novel_id=novel_id, count=len(chapters))
+    return chapters
 
 
 async def get_author_metadata(author_id: int, include_novels: bool = False) -> dict:
@@ -179,17 +215,10 @@ async def get_author_metadata(author_id: int, include_novels: bool = False) -> d
     if cached:
         return cached
 
-    async with httpx.AsyncClient() as client:
-        response = await client.get(
-            f"{settings.METADATA_SERVER_URL}/authors/{author_id}",
-            params={"include_novels": include_novels},
-            headers=_get_headers(),
-            timeout=30.0,
-        )
-        response.raise_for_status()
-        data = response.json()
-        cache.set(cache_key, data)
-        return data
+    response = await _request("GET", f"/authors/{author_id}", timeout=INTERACTIVE_TIMEOUT, params={"include_novels": include_novels})
+    data = response.json()
+    cache.set(cache_key, data)
+    return data
 
 
 async def list_novels_metadata(
@@ -240,17 +269,10 @@ async def list_novels_metadata(
     if cached:
         return cached
 
-    async with httpx.AsyncClient() as client:
-        response = await client.get(
-            f"{settings.METADATA_SERVER_URL}/novels/",
-            params=params,
-            headers=_get_headers(),
-            timeout=15.0,
-        )
-        response.raise_for_status()
-        data = response.json()
-        cache.set(cache_key, data)
-        return data
+    response = await _request("GET", "/novels/", timeout=INTERACTIVE_TIMEOUT, params=params)
+    data = response.json()
+    cache.set(cache_key, data, ttl=30)
+    return data
 
 
 def invalidate_novel_cache(novel_id: int):
@@ -273,14 +295,7 @@ async def search_novel_by_url(url: str) -> dict:
     if cached:
         return cached
 
-    async with httpx.AsyncClient() as client:
-        response = await client.get(
-            f"{settings.METADATA_SERVER_URL}/novels/",
-            params={"title": title, "limit": 5},
-            headers=_get_headers(),
-            timeout=30.0,
-        )
-        response.raise_for_status()
-        data = response.json()
-        cache.set(cache_key, data)
-        return data
+    response = await _request("GET", "/novels/", timeout=INTERACTIVE_TIMEOUT, params={"title": title, "limit": 5})
+    data = response.json()
+    cache.set(cache_key, data, ttl=30)
+    return data

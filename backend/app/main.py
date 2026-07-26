@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -20,6 +22,7 @@ from app.models.download_job import ChapterDownloadJob
 from app.models.reading_progress import ReadingProgress
 from app.models.reading_annotation import ReadingAnnotation
 from app.database_migrations import ensure_runtime_schema
+from app.services import metadata_client
 
 Base.metadata.create_all(bind=engine)
 ensure_runtime_schema(engine)
@@ -36,7 +39,16 @@ from app.exceptions import NexusNovelException
 setup_logging()
 logger = get_logger(__name__)
 
-app = FastAPI(title="Your API", description="API description", version="0.1.0")
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    await metadata_client.start()
+    try:
+        yield
+    finally:
+        await metadata_client.close()
+
+
+app = FastAPI(title="Nexus Novel API", description="Nexus reader and library API", version="0.1.0", lifespan=lifespan)
 
 origins = [
     "http://localhost",
