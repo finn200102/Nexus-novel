@@ -21,6 +21,7 @@ router = APIRouter(prefix="/operations", tags=["operations"])
 
 _METADATA_SNAPSHOT_TTL = 5.0
 _metadata_snapshot: tuple[float, OperationCounts, dict[str, int], int] | None = None
+_metadata_status_snapshot: tuple[float, ServiceStatus] | None = None
 
 
 class RefreshScheduleCreate(BaseModel):
@@ -37,12 +38,12 @@ class RefreshScheduleUpdate(BaseModel):
 
 
 def _metadata_get(path: str):
-    return httpx.get(f"{settings.METADATA_SERVER_URL}{path}", timeout=3.0)
+    return httpx.get(f"{settings.METADATA_SERVER_URL}{path}", timeout=httpx.Timeout(3.0, connect=1.0))
 
 
 def _metadata_proxy(method: str, path: str, **kwargs):
     try:
-        response = httpx.request(method, f"{settings.METADATA_SERVER_URL}{path}", timeout=3.0, **kwargs)
+        response = httpx.request(method, f"{settings.METADATA_SERVER_URL}{path}", timeout=httpx.Timeout(3.0, connect=1.0), **kwargs)
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=503, detail=f"Metadata service unavailable: {exc}") from exc
     if response.status_code >= 400:
@@ -57,14 +58,21 @@ def _metadata_proxy(method: str, path: str, **kwargs):
 
 
 def _metadata_status() -> ServiceStatus:
+    global _metadata_status_snapshot
+    now = time.monotonic()
+    if _metadata_status_snapshot and now - _metadata_status_snapshot[0] < 5.0:
+        return _metadata_status_snapshot[1]
     checked_at = datetime.now(UTC)
     try:
         response = _metadata_get("/ready")
         if response.status_code == 200:
-            return ServiceStatus(status="online", detail="Metadata API and database ready", checked_at=checked_at)
-        return ServiceStatus(status="degraded", detail=f"Readiness returned HTTP {response.status_code}", checked_at=checked_at)
+            value = ServiceStatus(status="online", detail="Metadata API and database ready", checked_at=checked_at)
+        else:
+            value = ServiceStatus(status="degraded", detail=f"Readiness returned HTTP {response.status_code}", checked_at=checked_at)
     except httpx.HTTPError as exc:
-        return ServiceStatus(status="offline", detail=str(exc), checked_at=checked_at)
+        value = ServiceStatus(status="offline", detail="Metadata service did not respond before the timeout", checked_at=checked_at)
+    _metadata_status_snapshot = (now, value)
+    return value
 
 
 def _metadata_operations() -> tuple[OperationCounts, dict[str, int], int]:
@@ -238,6 +246,11 @@ def cancel_metadata_job(job_id: str, current_user: User = Depends(get_current_us
 @router.post("/metadata-jobs/{job_id}/archive")
 def archive_metadata_job(job_id: str, current_user: User = Depends(get_current_user)):
     return _metadata_proxy("POST", f"/api/jobs/{job_id}/archive")
+
+
+@router.post("/metadata-jobs/archive-failed")
+def archive_failed_metadata_jobs(current_user: User = Depends(get_current_user)):
+    return _metadata_proxy("POST", "/api/jobs/archive-failed")
 
 
 @router.get("/source-health")

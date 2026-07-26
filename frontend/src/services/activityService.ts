@@ -115,6 +115,10 @@ export const activityService = {
     const response = await apiClient.post(`/operations/metadata-jobs/${id}/archive`);
     return response.data;
   },
+  async archiveFailedMetadataJobs(): Promise<{ archived: number }> {
+    const response = await apiClient.post("/operations/metadata-jobs/archive-failed");
+    return response.data;
+  },
   async getSourceHealth(): Promise<SourceHealth[]> {
     const response = await apiClient.get("/operations/source-health");
     return response.data;

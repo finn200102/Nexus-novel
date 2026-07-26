@@ -12,6 +12,7 @@ const Operations: React.FC = () => {
   const [schedules, setSchedules] = useState<RefreshSchedule[]>([]);
   const [failedJobs, setFailedJobs] = useState<MetadataJob[]>([]);
   const [sourceHealth, setSourceHealth] = useState<SourceHealth[]>([]);
+  const [showFailureHistory, setShowFailureHistory] = useState(false);
   const [scheduleDraft, setScheduleDraft] = useState({ site: "", interval_minutes: 360, batch_size: 100 });
 
   const load = useCallback(async () => {
@@ -35,7 +36,7 @@ const Operations: React.FC = () => {
     try {
       const [nextSchedules, nextJobs, nextHealth] = await Promise.all([
         activityService.getRefreshSchedules(),
-        activityService.getMetadataJobs("failed"),
+        activityService.getMetadataJobs(showFailureHistory ? "archived" : "failed"),
         activityService.getSourceHealth(),
       ]);
       setSchedules(nextSchedules);
@@ -44,14 +45,22 @@ const Operations: React.FC = () => {
     } catch {
       setError("Automation controls are unavailable while the metadata service is offline.");
     }
-  }, []);
+  }, [showFailureHistory]);
 
   useEffect(() => {
-    load();
+    void load();
     void loadControls();
-    const timer = window.setInterval(load, 10000);
-    const controlsTimer = window.setInterval(loadControls, 15000);
-    return () => { window.clearInterval(timer); window.clearInterval(controlsTimer); };
+    let stopped = false;
+    let timer: number | undefined;
+    let controlsTimer: number | undefined;
+    const schedule = () => {
+      if (stopped) return;
+      const delay = document.hidden ? 30000 : 10000;
+      timer = window.setTimeout(async () => { await load(); schedule(); }, delay);
+      controlsTimer = window.setTimeout(async () => { await loadControls(); }, document.hidden ? 60000 : 15000);
+    };
+    schedule();
+    return () => { stopped = true; if (timer) window.clearTimeout(timer); if (controlsTimer) window.clearTimeout(controlsTimer); };
   }, [load, loadControls]);
 
   const createSchedule = async (event: React.FormEvent) => {
@@ -115,6 +124,11 @@ const Operations: React.FC = () => {
     } catch { setError(`Could not archive job ${job.id}.`); }
   };
 
+  const archiveAllFailed = async () => {
+    try { await activityService.archiveFailedMetadataJobs(); await loadControls(); await load(); }
+    catch { setError("Could not archive the failed metadata jobs."); }
+  };
+
   const resetSource = async (source: SourceHealth) => {
     try {
       await activityService.resetSourceHealth(source.site);
@@ -164,8 +178,8 @@ const Operations: React.FC = () => {
         <div className="operations-control-list">{schedules.map((schedule) => <div className="operations-control-row" key={schedule.id}><div><strong>{schedule.site || "All sources"}</strong><small>Every {schedule.interval_minutes}m · batch {schedule.batch_size}</small></div><div className="operations-control-actions"><button type="button" className="operations-action" onClick={() => void runSchedule(schedule)}>Run now</button><button type="button" className="operations-action operations-action--quiet" onClick={() => void toggleSchedule(schedule)}>{schedule.enabled ? "Pause" : "Enable"}</button><button type="button" className="operations-action operations-action--danger" onClick={() => void removeSchedule(schedule)}>Delete</button></div></div>)}</div>
       </article>
       <article className="operations-panel">
-        <header><h2>Failed metadata jobs</h2><span>{failedJobs.length} need attention</span></header>
-        {failedJobs.length ? <div className="operations-control-list">{failedJobs.slice(0, 8).map((job) => <div className="operations-control-row" key={job.id}><div><strong>{job.job_type} · {job.site}</strong><small>{jobExplanation(job)} · {attemptLabel(job)}</small></div><div className="operations-control-actions"><button type="button" className="operations-action" disabled={!job.retryable} onClick={() => void retryJob(job)}>{job.retryable ? "Retry" : "Not retryable"}</button><button type="button" className="operations-action operations-action--quiet" onClick={() => void archiveJob(job)}>Archive</button></div></div>)}</div> : <p className="operations-empty">No failed metadata jobs.</p>}
+        <header><h2>{showFailureHistory ? "Archived metadata jobs" : "Failed metadata jobs"}</h2><div className="operations-panel__actions"><span>{failedJobs.length} {showFailureHistory ? "archived" : "need attention"}</span><button type="button" className="operations-action operations-action--quiet" onClick={() => setShowFailureHistory((value) => !value)}>{showFailureHistory ? "Show active" : "History"}</button>{!showFailureHistory && failedJobs.length > 0 && <button type="button" className="operations-action operations-action--quiet" onClick={() => void archiveAllFailed()}>Archive all</button>}</div></header>
+        {failedJobs.length ? <div className="operations-control-list">{failedJobs.slice(0, 8).map((job) => <div className="operations-control-row" key={job.id}><div><strong>{job.job_type} · {job.site}</strong><small>{jobExplanation(job)} · {attemptLabel(job)}</small></div><div className="operations-control-actions">{!showFailureHistory && <button type="button" className="operations-action" disabled={!job.retryable} onClick={() => void retryJob(job)}>{job.retryable ? "Retry" : "Not retryable"}</button>}{!showFailureHistory && <button type="button" className="operations-action operations-action--quiet" onClick={() => void archiveJob(job)}>Archive</button>}</div></div>)}</div> : <p className="operations-empty">{showFailureHistory ? "No archived metadata jobs." : "No failed metadata jobs."}</p>}
       </article>
     </section>
     <section className="operations-panel">

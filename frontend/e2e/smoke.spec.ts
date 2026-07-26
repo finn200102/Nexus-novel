@@ -1,0 +1,21 @@
+import { test, expect } from "./fixtures";
+
+test.describe("Nexus smoke workflows", () => {
+  test("signs in and loads the library", async ({ signedInPage }) => {
+    await signedInPage.goto("/library");
+    await expect(signedInPage.getByRole("heading", { name: /library/i })).toBeVisible();
+  });
+
+  test("metadata outage leaves a usable error state", async ({ signedInPage }) => {
+    await signedInPage.route("**/api/operations/summary**", (route) => route.abort("timedout"));
+    await signedInPage.goto("/operations");
+    await expect(signedInPage.getByText(/operations data is unavailable|unavailable/i)).toBeVisible({ timeout: 15_000 });
+  });
+
+  test("catalog page renders capability-driven controls", async ({ signedInPage }) => {
+    await signedInPage.goto("/scrape-jobs");
+    await expect(signedInPage.getByRole("heading", { name: "Scrape Jobs" })).toBeVisible();
+    await expect(signedInPage.getByRole("button", { name: /custom url list/i })).toBeVisible();
+    await expect(signedInPage.getByRole("button", { name: /crossover list/i })).toBeVisible();
+  });
+});
