@@ -8,6 +8,7 @@ export default defineConfig({
   reporter: [["html", { outputFolder: "playwright-report", open: "never" }], ["line"]],
   use: {
     baseURL: process.env.NEXUS_E2E_BASE_URL || "http://localhost:8180",
+    channel: process.env.NEXUS_E2E_CHANNEL || "chrome",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
