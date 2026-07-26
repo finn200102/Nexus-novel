@@ -1,7 +1,7 @@
 import apiClient from "./apiClient";
 
 export interface CatalogQuery {
-  mode: string; media: string; fandom_a: string; fandom_b: string; crossover: boolean;
+  mode: string; media: string; fandom_a: string; fandom_a_id?: number | null; fandom_b: string; crossover: boolean;
   include_genres: string[]; exclude_genres: string[]; rating_min: string; rating_max: string;
   language: string; status: string; min_words: number | null; max_words: number | null;
   min_reviews: number; min_favorites: number; min_follows: number; time_field: string;
