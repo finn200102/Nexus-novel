@@ -8,6 +8,7 @@ import React, {
 } from "react";
 import { libraryService } from "../services/libraryService";
 import { Library } from "../types/library";
+import { useAuth } from "./AuthContext";
 
 interface LibraryContextValue {
   libraries: Library[];
@@ -36,6 +37,7 @@ const getStoredLibraryId = (): number | null => {
 export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [libraries, setLibraries] = useState<Library[]>([]);
   const [activeLibraryId, setActiveLibraryId] = useState<number | null>(
     () => getStoredLibraryId()
@@ -81,8 +83,20 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [ensureActiveLibrary]);
 
   useEffect(() => {
-    refreshLibraries();
-  }, []);
+    if (authLoading) {
+      return;
+    }
+
+    if (!isAuthenticated) {
+      setLibraries([]);
+      setActiveLibraryId(null);
+      setError(null);
+      setIsLoading(false);
+      return;
+    }
+
+    void refreshLibraries();
+  }, [authLoading, isAuthenticated, refreshLibraries]);
 
   useEffect(() => {
     if (typeof window === "undefined") {

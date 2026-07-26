@@ -27,7 +27,27 @@ const ScrapeJobs: React.FC = () => {
   const updateMode = (mode: string) => { update("mode", mode); if (mode === "crossover") update("crossover", true); setName(`${query.fandom_a || "Fandom"} — ${modes.find((item) => item.id === mode)?.label || "Catalog"}`); };
   const loadDefinitions = async () => { try { setDefinitions(await catalogScrapeService.definitions()); } catch (err) { setError("Administrator access is required, or the catalog service is unavailable."); } };
   useEffect(() => { void loadDefinitions(); void catalogScrapeService.capabilities().then(setCapabilities).catch(() => undefined); void catalogScrapeService.taxonomies("fanfiction", "fandom").then(setTaxonomy).catch(() => undefined); }, []);
-  useEffect(() => { if (!job || job.status === "completed" || job.status === "failed" || job.status === "cancelled") return; const timer = window.setInterval(async () => { try { const current = await catalogScrapeService.job(job.id); setJob(current); if (current.status === "completed") setCandidates(await catalogScrapeService.candidates(job.id)); } catch { /* keep the last visible state */ } }, 3000); return () => window.clearInterval(timer); }, [job?.id, job?.status]);
+  const hasPendingChildImports = candidates.some((candidate) => candidate.candidate_status === "import_queued");
+  useEffect(() => {
+    if (!job || (["completed", "failed", "cancelled"].includes(job.status) && !hasPendingChildImports)) return;
+
+    const refreshJob = async () => {
+      try {
+        const [current, currentCandidates] = await Promise.all([
+          catalogScrapeService.job(job.id),
+          catalogScrapeService.candidates(job.id),
+        ]);
+        setJob(current);
+        setCandidates(currentCandidates);
+      } catch {
+        // Keep the last successful snapshot visible while a background refresh fails.
+      }
+    };
+
+    void refreshJob();
+    const timer = window.setInterval(() => void refreshJob(), 3000);
+    return () => window.clearInterval(timer);
+  }, [job?.id, job?.status, hasPendingChildImports]);
 
   const runPreview = async () => { setBusy(true); setError(null); try { setPreview(await catalogScrapeService.preview("fanfiction", query)); } catch (err: any) { setError(err?.response?.data?.detail || "Could not preview FanFiction.net results."); } finally { setBusy(false); } };
   const createJob = async () => { setBusy(true); setError(null); try { const result = await catalogScrapeService.create({ name, site: "fanfiction", query, schedule_interval_minutes: schedule, enabled: true }); setJob(result.job); await loadDefinitions(); } catch (err: any) { setError(err?.response?.data?.detail || "Could not create catalog job."); } finally { setBusy(false); } };

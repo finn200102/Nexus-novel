@@ -43,7 +43,10 @@ async def _request(method: str, path: str, *, json: dict | None = None, params: 
     except httpx.RequestError as exc:
         raise HTTPException(status_code=502, detail="Metadata server is unavailable. Check the metadata service and retry.") from exc
     if response.status_code >= 400:
-        detail = response.text
+        try:
+            detail = response.json().get("detail", response.text)
+        except (ValueError, AttributeError):
+            detail = response.text
         raise HTTPException(status_code=response.status_code, detail=detail)
     return response.json()
 
