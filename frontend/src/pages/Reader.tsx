@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { chapterService } from "../services/chapterService";
 import { novelService } from "../services/novelService";
 import { offlineReaderStore } from "../services/offlineReaderStore";
+import { OpenAICompatibleTtsConfig, ttsService } from "../services/ttsService";
 import "../styles/Reader.css";
 
 interface ChapterContent {
@@ -78,8 +79,17 @@ const Reader: React.FC = () => {
   const [voiceName, setVoiceName] = useState(() => localStorage.getItem("nexus-reader-tts-voice") || "");
   const [ttsRate, setTtsRate] = useState(() => Number(localStorage.getItem("nexus-reader-tts-rate")) || 1);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [ttsEngine, setTtsEngine] = useState<"native" | "openai_compatible">(() => (localStorage.getItem("nexus-reader-tts-engine") as "native" | "openai_compatible") || "native");
+  const [providerConfig, setProviderConfig] = useState<OpenAICompatibleTtsConfig>(() => ({
+    baseUrl: localStorage.getItem("nexus-reader-tts-url") || "http://localhost:8880/v1",
+    apiKey: localStorage.getItem("nexus-reader-tts-key") || "",
+    model: localStorage.getItem("nexus-reader-tts-model") || "kokoro",
+    voice: localStorage.getItem("nexus-reader-tts-provider-voice") || "af_bella",
+  }));
   const [offlineChapterCount, setOfflineChapterCount] = useState(0);
   const contentRef = useRef<HTMLDivElement | null>(null);
+  const providerAudioRef = useRef<HTMLAudioElement | null>(null);
+  const providerAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -143,6 +153,14 @@ const Reader: React.FC = () => {
   }, [ttsRate]);
 
   useEffect(() => {
+    localStorage.setItem("nexus-reader-tts-engine", ttsEngine);
+    localStorage.setItem("nexus-reader-tts-url", providerConfig.baseUrl);
+    localStorage.setItem("nexus-reader-tts-key", providerConfig.apiKey);
+    localStorage.setItem("nexus-reader-tts-model", providerConfig.model);
+    localStorage.setItem("nexus-reader-tts-provider-voice", providerConfig.voice);
+  }, [providerConfig, ttsEngine]);
+
+  useEffect(() => {
     if (!ttsAvailable) return;
     const refreshVoices = () => setVoices(window.speechSynthesis.getVoices());
     refreshVoices();
@@ -155,6 +173,9 @@ const Reader: React.FC = () => {
     // navigation or when the reader unmounts.
     return () => {
       if (ttsAvailable) window.speechSynthesis.cancel();
+      providerAbortRef.current?.abort();
+      providerAudioRef.current?.pause();
+      providerAudioRef.current = null;
     };
   }, [chapter?.id, ttsAvailable]);
 
@@ -241,13 +262,43 @@ const Reader: React.FC = () => {
     setOfflineChapterCount(await offlineReaderStore.countForNovel(novel_id));
   };
 
-  const toggleTts = () => {
-    if (!ttsAvailable || !chapter) return;
-    if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
-      window.speechSynthesis.cancel();
+  const stopTts = () => {
+    if (ttsAvailable) window.speechSynthesis.cancel();
+    providerAbortRef.current?.abort();
+    providerAudioRef.current?.pause();
+    providerAudioRef.current = null;
+    setIsSpeaking(false);
+  };
+
+  const speakWithProvider = async () => {
+    if (!chapter) return;
+    const controller = new AbortController();
+    providerAbortRef.current = controller;
+    setIsSpeaking(true);
+    try {
+      const audioBlob = await ttsService.synthesize(`${chapter.title}. ${chapter.content}`, providerConfig, controller.signal);
+      if (controller.signal.aborted) return;
+      const audio = new Audio(URL.createObjectURL(audioBlob));
+      providerAudioRef.current = audio;
+      audio.playbackRate = ttsRate;
+      audio.onended = () => { URL.revokeObjectURL(audio.src); setIsSpeaking(false); };
+      audio.onerror = () => { URL.revokeObjectURL(audio.src); setIsSpeaking(false); };
+      await audio.play();
+    } catch (error) {
+      if (!controller.signal.aborted) console.error("Self-hosted TTS failed", error);
       setIsSpeaking(false);
+    }
+  };
+
+  const toggleTts = () => {
+    if (!chapter) return;
+    if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+      stopTts();
       return;
     }
+    if (providerAudioRef.current || isSpeaking) { stopTts(); return; }
+    if (ttsEngine === "openai_compatible") { void speakWithProvider(); return; }
+    if (!ttsAvailable) return;
     const utterance = new SpeechSynthesisUtterance(`${chapter.title}. ${chapter.content}`);
     const selectedVoice = voices.find((voice) => voice.name === voiceName);
     if (selectedVoice) utterance.voice = selectedVoice;
@@ -379,6 +430,11 @@ const Reader: React.FC = () => {
                 <button type="button" onClick={toggleTts} title="Read this chapter aloud">
                   {isSpeaking ? "Stop audio" : "Read aloud"}
                 </button>
+                <select aria-label="Text to speech engine" value={ttsEngine} onChange={(event) => setTtsEngine(event.target.value as "native" | "openai_compatible")}>
+                  <option value="native">Browser voice</option>
+                  <option value="openai_compatible">Self-hosted / API</option>
+                </select>
+                {ttsEngine === "openai_compatible" ? <details className="reader-tts-provider"><summary>Provider settings</summary><label>API base URL<input value={providerConfig.baseUrl} onChange={(event) => setProviderConfig((current) => ({ ...current, baseUrl: event.target.value }))} placeholder="http://localhost:8880/v1" /></label><label>API key <input type="password" value={providerConfig.apiKey} onChange={(event) => setProviderConfig((current) => ({ ...current, apiKey: event.target.value }))} /></label><label>Model<input value={providerConfig.model} onChange={(event) => setProviderConfig((current) => ({ ...current, model: event.target.value }))} /></label><label>Voice<input value={providerConfig.voice} onChange={(event) => setProviderConfig((current) => ({ ...current, voice: event.target.value }))} /></label><small>Stored only in this browser. The provider must allow this Nexus origin with CORS.</small></details> : <>
                 <select aria-label="Text to speech voice" value={voiceName} onChange={(event) => setVoiceName(event.target.value)}>
                   <option value="">System voice</option>
                   {voices.map((voice) => <option key={`${voice.name}-${voice.lang}`} value={voice.name}>{voice.name} ({voice.lang})</option>)}
@@ -386,9 +442,10 @@ const Reader: React.FC = () => {
                 <label>
                   Speed
                   <select aria-label="Text to speech speed" value={ttsRate} onChange={(event) => setTtsRate(Number(event.target.value))}>
-                    {[0.8, 1, 1.2, 1.4, 1.6].map((rate) => <option key={rate} value={rate}>{rate}×</option>)}
-                  </select>
+                  {[0.8, 1, 1.2, 1.4, 1.6].map((rate) => <option key={rate} value={rate}>{rate}×</option>)}
+                </select>
                 </label>
+                </>}
               </div>
             )}
             <div className="reader-theme-controls">
