@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
+import axios from "axios";
 import { useNavigate, useParams } from "react-router-dom";
 import { chapterService } from "../services/chapterService";
 import { novelService } from "../services/novelService";
-import { chapterAudioStore, offlineReaderStore } from "../services/offlineReaderStore";
-import { OpenAICompatibleTtsConfig, ttsService } from "../services/ttsService";
+import { ChapterAudioJob, chapterAudioJobStore, chapterAudioStore, offlineReaderStore } from "../services/offlineReaderStore";
+import { OpenAICompatibleTtsConfig, splitTextForSynthesis, TtsProviderPresetId, TTS_PROVIDER_PRESETS, TtsRequestError, ttsService } from "../services/ttsService";
 import "../styles/Reader.css";
 
 interface ChapterContent {
@@ -50,6 +51,12 @@ const themeOptions: { value: "night" | "dusk" | "paper"; label: string }[] = [
   { value: "paper", label: "Paper" },
 ];
 
+const formatAudioTime = (seconds: number) => {
+  if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
+  const wholeSeconds = Math.floor(seconds);
+  return `${Math.floor(wholeSeconds / 60)}:${String(wholeSeconds % 60).padStart(2, "0")}`;
+};
+
 const Reader: React.FC = () => {
   const { libraryId, novelId, chapterNumber } = useParams<{
     libraryId: string;
@@ -80,6 +87,7 @@ const Reader: React.FC = () => {
   const [ttsRate, setTtsRate] = useState(() => Number(localStorage.getItem("nexus-reader-tts-rate")) || 1);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [ttsEngine, setTtsEngine] = useState<"native" | "openai_compatible">(() => (localStorage.getItem("nexus-reader-tts-engine") as "native" | "openai_compatible") || "native");
+  const [ttsPreset, setTtsPreset] = useState<TtsProviderPresetId>(() => (localStorage.getItem("nexus-reader-tts-preset") as TtsProviderPresetId) || "kokoro_mps");
   const [providerConfig, setProviderConfig] = useState<OpenAICompatibleTtsConfig>(() => ({
     baseUrl: localStorage.getItem("nexus-reader-tts-url") || "http://localhost:8880/v1",
     apiKey: localStorage.getItem("nexus-reader-tts-key") || "",
@@ -88,9 +96,15 @@ const Reader: React.FC = () => {
   }));
   const [offlineChapterCount, setOfflineChapterCount] = useState(0);
   const [chapterAudioReady, setChapterAudioReady] = useState(false);
-  const [generatingAudio, setGeneratingAudio] = useState(false);
+  const [audioJob, setAudioJob] = useState<ChapterAudioJob | null>(null);
+  const [audioPlayerError, setAudioPlayerError] = useState<string | null>(null);
+  const [audioCurrentTime, setAudioCurrentTime] = useState(0);
+  const [audioDuration, setAudioDuration] = useState(0);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const providerAudioRef = useRef<HTMLAudioElement | null>(null);
+  const audioControllerRef = useRef<AbortController | null>(null);
+  const audioObjectUrlRef = useRef<string | null>(null);
+  const audioJobRunningRef = useRef(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -101,7 +115,18 @@ const Reader: React.FC = () => {
         setChapter(chapterData);
         setProgress(savedProgress);
         setRestoredPosition(false);
-        void chapterAudioStore.get(novel_id, chapter_number).then((audio) => setChapterAudioReady(Boolean(audio))).catch(() => setChapterAudioReady(false));
+        void Promise.all([
+          chapterAudioStore.get(novel_id, chapter_number),
+          chapterAudioJobStore.get(novel_id, chapter_number),
+        ]).then(([audio, job]) => {
+          setChapterAudioReady(Boolean(audio));
+          setAudioJob(job);
+          setAudioCurrentTime(Number(localStorage.getItem(`nexus-reader-audio-position-${novel_id}-${chapter_number}`)) || 0);
+          setAudioPlayerError(null);
+        }).catch(() => {
+          setChapterAudioReady(false);
+          setAudioJob(null);
+        });
         localStorage.setItem(`nexus-reader-chapter-${novel_id}-${chapter_number}`, JSON.stringify(chapterData));
         void offlineReaderStore.save(chapterData).then(() => offlineReaderStore.countForNovel(novel_id)).then(setOfflineChapterCount).catch(() => undefined);
 
@@ -121,7 +146,10 @@ const Reader: React.FC = () => {
           setProgress(null);
           setError("Offline mode: showing the last cached copy.");
         } else {
-          setError("Failed to load content. Please try again later.");
+          const detail = axios.isAxiosError(err) ? String(err.response?.data?.detail || "") : "";
+          setError(detail === "Chapter content is not downloaded"
+            ? "This chapter has not been downloaded yet. Queue it from the novel page, then return here to read or generate audio."
+            : "Failed to load content. Please try again later.");
         }
         console.error("Error fetching data:", err);
       } finally {
@@ -152,15 +180,17 @@ const Reader: React.FC = () => {
 
   useEffect(() => {
     localStorage.setItem("nexus-reader-tts-rate", String(ttsRate));
+    if (providerAudioRef.current) providerAudioRef.current.playbackRate = ttsRate;
   }, [ttsRate]);
 
   useEffect(() => {
     localStorage.setItem("nexus-reader-tts-engine", ttsEngine);
+    localStorage.setItem("nexus-reader-tts-preset", ttsPreset);
     localStorage.setItem("nexus-reader-tts-url", providerConfig.baseUrl);
     localStorage.setItem("nexus-reader-tts-key", providerConfig.apiKey);
     localStorage.setItem("nexus-reader-tts-model", providerConfig.model);
     localStorage.setItem("nexus-reader-tts-provider-voice", providerConfig.voice);
-  }, [providerConfig, ttsEngine]);
+  }, [providerConfig, ttsEngine, ttsPreset]);
 
   useEffect(() => {
     if (!ttsAvailable) return;
@@ -175,8 +205,11 @@ const Reader: React.FC = () => {
     // navigation or when the reader unmounts.
     return () => {
       if (ttsAvailable) window.speechSynthesis.cancel();
+      audioControllerRef.current?.abort();
       providerAudioRef.current?.pause();
+      if (audioObjectUrlRef.current) URL.revokeObjectURL(audioObjectUrlRef.current);
       providerAudioRef.current = null;
+      audioObjectUrlRef.current = null;
     };
   }, [chapter?.id, ttsAvailable]);
 
@@ -266,43 +299,186 @@ const Reader: React.FC = () => {
   const stopTts = () => {
     if (ttsAvailable) window.speechSynthesis.cancel();
     providerAudioRef.current?.pause();
-    providerAudioRef.current = null;
     setIsSpeaking(false);
   };
 
+  const audioPositionKey = () => `nexus-reader-audio-position-${novel_id}-${chapter_number}`;
+
+  const saveAudioJob = async (job: ChapterAudioJob) => {
+    await chapterAudioJobStore.save(job);
+    setAudioJob({ ...job, updated_at: Date.now() });
+  };
+
   const generateChapterAudio = async () => {
-    if (!chapter || generatingAudio) return;
-    setGeneratingAudio(true);
+    if (!chapter || audioJob?.status === "generating" || audioJobRunningRef.current) return;
+    audioJobRunningRef.current = true;
+    const controller = new AbortController();
+    audioControllerRef.current = controller;
+    setAudioPlayerError(null);
+    let job: ChapterAudioJob | null = null;
     try {
-      const audio = await ttsService.synthesize(`${chapter.title}. ${chapter.content}`, providerConfig);
-      await chapterAudioStore.save(novel_id, chapter.chapter_number, audio);
+      const existing = await chapterAudioJobStore.get(novel_id, chapter.chapter_number);
+      const chunks = existing?.chunks?.length
+        ? existing.chunks
+        : splitTextForSynthesis(`${chapter.title}. ${chapter.content}`);
+      if (!chunks.length) {
+        setAudioPlayerError("This chapter has no text to turn into audio.");
+        return;
+      }
+      job = {
+        cache_key: `${novel_id}:${chapter.chapter_number}`,
+        novel_id,
+        chapter_number: chapter.chapter_number,
+        chunks,
+        completed_chunks: existing?.status === "failed" || existing?.status === "cancelled" || existing?.status === "queued"
+          ? existing.completed_chunks : 0,
+        provider: existing?.provider || {
+          base_url: providerConfig.baseUrl,
+          model: providerConfig.model,
+          voice: providerConfig.voice,
+        },
+        status: "generating",
+        created_at: existing?.created_at || Date.now(),
+        updated_at: Date.now(),
+      };
+      await saveAudioJob(job);
+      for (let index = job.completed_chunks; index < job.chunks.length; index += 1) {
+        const audio = await ttsService.synthesize(job.chunks[index], {
+          ...providerConfig,
+          baseUrl: job.provider?.base_url || providerConfig.baseUrl,
+          model: job.provider?.model || providerConfig.model,
+          voice: job.provider?.voice || providerConfig.voice,
+        }, controller.signal);
+        await chapterAudioJobStore.saveSegment(novel_id, chapter.chapter_number, index, audio);
+        job.completed_chunks = index + 1;
+        await saveAudioJob(job);
+      }
+      const segments = await chapterAudioJobStore.segments(novel_id, chapter.chapter_number);
+      await chapterAudioStore.save(novel_id, chapter.chapter_number, new Blob(segments, { type: segments[0]?.type || "audio/mpeg" }));
+      await chapterAudioJobStore.clearSegments(novel_id, chapter.chapter_number);
+      job.status = "ready";
+      job.error = undefined;
+      await saveAudioJob(job);
       setChapterAudioReady(true);
     } catch (error) {
-      console.error("Chapter audio generation failed", error);
+      if (!job) {
+        setAudioPlayerError("Could not start the audio job. Please retry.");
+        return;
+      }
+      if (error instanceof DOMException && error.name === "AbortError") {
+        job.status = "cancelled";
+        job.error = "Generation cancelled. You can resume from the last completed part.";
+      } else {
+        const providerError = error instanceof TtsRequestError ? error : null;
+        job.status = "failed";
+        job.error = providerError?.message || "Audio generation failed. Retry to continue from the last completed part.";
+      }
+      await saveAudioJob(job);
+      setAudioPlayerError(job.error || "Audio generation failed.");
     } finally {
-      setGeneratingAudio(false);
+      if (audioControllerRef.current === controller) audioControllerRef.current = null;
+      audioJobRunningRef.current = false;
     }
+  };
+
+  const cancelAudioGeneration = () => audioControllerRef.current?.abort();
+
+  const loadChapterAudioPlayer = async (): Promise<HTMLAudioElement | null> => {
+    if (!chapter) return null;
+    if (providerAudioRef.current) return providerAudioRef.current;
+    const audioBlob = await chapterAudioStore.get(novel_id, chapter.chapter_number);
+    if (!audioBlob) {
+      setChapterAudioReady(false);
+      return null;
+    }
+    const audio = new Audio();
+    const url = URL.createObjectURL(audioBlob);
+    audioObjectUrlRef.current = url;
+    audio.src = url;
+    audio.preload = "metadata";
+    audio.playbackRate = ttsRate;
+    audio.onloadedmetadata = () => {
+      setAudioDuration(Number.isFinite(audio.duration) ? audio.duration : 0);
+      const saved = Number(localStorage.getItem(audioPositionKey())) || 0;
+      audio.currentTime = Math.min(saved, Number.isFinite(audio.duration) ? audio.duration : saved);
+      setAudioCurrentTime(audio.currentTime);
+    };
+    audio.ontimeupdate = () => {
+      setAudioCurrentTime(audio.currentTime);
+      localStorage.setItem(audioPositionKey(), String(audio.currentTime));
+    };
+    audio.onended = () => {
+      localStorage.setItem(audioPositionKey(), "0");
+      setAudioCurrentTime(0);
+      setIsSpeaking(false);
+    };
+    audio.onerror = () => {
+      setAudioPlayerError("The saved chapter audio could not be played. Generate it again to repair it.");
+      setIsSpeaking(false);
+    };
+    providerAudioRef.current = audio;
+    return audio;
   };
 
   const playChapterAudio = async () => {
     if (!chapter) return;
-    const audioBlob = await chapterAudioStore.get(novel_id, chapter.chapter_number);
-    if (!audioBlob) { setChapterAudioReady(false); return; }
-    stopTts();
-    const audio = new Audio(URL.createObjectURL(audioBlob));
-    providerAudioRef.current = audio;
-    audio.playbackRate = ttsRate;
-    audio.onended = () => { URL.revokeObjectURL(audio.src); providerAudioRef.current = null; setIsSpeaking(false); };
-    audio.onerror = () => { URL.revokeObjectURL(audio.src); providerAudioRef.current = null; setIsSpeaking(false); };
-    setIsSpeaking(true);
-    await audio.play();
+    const audio = await loadChapterAudioPlayer();
+    if (!audio) return;
+    if (isSpeaking) {
+      audio.pause();
+      setIsSpeaking(false);
+      return;
+    }
+    try {
+      audio.playbackRate = ttsRate;
+      await audio.play();
+      setIsSpeaking(true);
+      setAudioPlayerError(null);
+    } catch {
+      setAudioPlayerError("Your browser could not start saved chapter audio.");
+    }
+  };
+
+  const seekChapterAudio = async (seconds: number) => {
+    const audio = await loadChapterAudioPlayer();
+    if (!audio) return;
+    const duration = Number.isFinite(audio.duration) ? audio.duration : audioDuration;
+    audio.currentTime = Math.max(0, Math.min(duration || Number.MAX_SAFE_INTEGER, audio.currentTime + seconds));
+    setAudioCurrentTime(audio.currentTime);
+    localStorage.setItem(audioPositionKey(), String(audio.currentTime));
+  };
+
+  const setChapterAudioPosition = async (position: number) => {
+    const audio = await loadChapterAudioPlayer();
+    if (!audio) return;
+    const duration = Number.isFinite(audio.duration) ? audio.duration : audioDuration;
+    audio.currentTime = Math.max(0, Math.min(duration || Number.MAX_SAFE_INTEGER, position));
+    setAudioCurrentTime(audio.currentTime);
+    localStorage.setItem(audioPositionKey(), String(audio.currentTime));
   };
 
   const deleteChapterAudio = async () => {
     if (!chapter) return;
     stopTts();
+    if (audioObjectUrlRef.current) URL.revokeObjectURL(audioObjectUrlRef.current);
+    providerAudioRef.current = null;
+    audioObjectUrlRef.current = null;
     await chapterAudioStore.remove(novel_id, chapter.chapter_number);
+    await chapterAudioJobStore.remove(novel_id, chapter.chapter_number);
     setChapterAudioReady(false);
+    setAudioJob(null);
+    setAudioDuration(0);
+    setAudioCurrentTime(0);
+    localStorage.removeItem(audioPositionKey());
+  };
+
+  const applyTtsPreset = (presetId: TtsProviderPresetId) => {
+    setTtsPreset(presetId);
+    if (presetId === "custom") return;
+    const preset = TTS_PROVIDER_PRESETS.find((item) => item.id === presetId);
+    if (!preset) return;
+    setTtsEngine("openai_compatible");
+    setProviderConfig((current) => ({ ...preset.config, apiKey: current.apiKey }));
   };
 
   const toggleTts = () => {
@@ -375,6 +551,16 @@ const Reader: React.FC = () => {
     return <div className="reader-not-found">Content not found</div>;
 
   const readerClass = `reader-shell reader-shell--${theme}`;
+  const audioProgress = audioJob?.chunks.length ? Math.round((audioJob.completed_chunks / audioJob.chunks.length) * 100) : 0;
+  const audioJobLabel = audioJob?.status === "generating"
+    ? `Generating ${audioJob.completed_chunks}/${audioJob.chunks.length} parts`
+    : audioJob?.status === "queued"
+      ? `Queued · ${audioJob.completed_chunks}/${audioJob.chunks.length} parts saved`
+      : audioJob?.status === "failed"
+        ? `Failed at part ${audioJob.completed_chunks + 1}/${audioJob.chunks.length}`
+        : audioJob?.status === "cancelled"
+          ? `Paused at ${audioJob.completed_chunks}/${audioJob.chunks.length} parts`
+          : chapterAudioReady ? "Ready to play" : "Not generated";
 
   return (
     <div className={readerClass}>
@@ -426,51 +612,17 @@ const Reader: React.FC = () => {
             <span>Chapter {chapter.chapter_number}</span>
           </div>
           <div className="reader-toolbar__controls">
-            <div className="reader-type-controls">
-              <button type="button" onClick={decreaseFont}>
-                A-
-              </button>
-              <button type="button" onClick={increaseFont}>
-                A+
-              </button>
-            </div>
-            <div className="reader-type-controls">
-              <button type="button" onClick={() => void addAnnotation("bookmark")} title="Bookmark current position">Bookmark</button>
-              <button type="button" onClick={() => void addAnnotation("note")} title="Add a private note">Note</button>
-              <button type="button" onClick={exportReadingState} title="Export progress and annotations">Export</button>
-              <button type="button" onClick={() => void keepChapterOffline()} title="Keep this downloaded chapter available in this browser">Keep offline ({offlineChapterCount})</button>
-            </div>
-            {ttsAvailable && (
-              <div className="reader-tts-controls" aria-label="Text to speech controls">
-                <select aria-label="Text to speech engine" value={ttsEngine} onChange={(event) => setTtsEngine(event.target.value as "native" | "openai_compatible")}>
-                  <option value="native">Browser voice</option>
-                  <option value="openai_compatible">Self-hosted / API</option>
-                </select>
-                {ttsEngine === "openai_compatible" ? <><button type="button" onClick={() => void generateChapterAudio()} disabled={generatingAudio || chapterAudioReady}>{generatingAudio ? "Generating audio…" : chapterAudioReady ? "Chapter audio ready" : "Generate chapter audio"}</button>{chapterAudioReady && <><button type="button" onClick={() => void playChapterAudio()}>{isSpeaking ? "Playing audio" : "Play chapter audio"}</button><button type="button" onClick={stopTts} disabled={!isSpeaking}>Stop audio</button><button type="button" onClick={() => void deleteChapterAudio()}>Delete audio</button></>}<details className="reader-tts-provider"><summary>Provider settings</summary><label>API base URL<input value={providerConfig.baseUrl} onChange={(event) => setProviderConfig((current) => ({ ...current, baseUrl: event.target.value }))} placeholder="http://localhost:8880/v1" /></label><label>API key <input type="password" value={providerConfig.apiKey} onChange={(event) => setProviderConfig((current) => ({ ...current, apiKey: event.target.value }))} /></label><label>Model<input value={providerConfig.model} onChange={(event) => setProviderConfig((current) => ({ ...current, model: event.target.value }))} /></label><label>Voice<input value={providerConfig.voice} onChange={(event) => setProviderConfig((current) => ({ ...current, voice: event.target.value }))} /></label><small>Stored only in this browser. The provider must allow this Nexus origin with CORS.</small></details></> : <><button type="button" onClick={toggleTts} title="Read this chapter aloud">{isSpeaking ? "Stop audio" : "Read aloud"}</button>
-                <select aria-label="Text to speech voice" value={voiceName} onChange={(event) => setVoiceName(event.target.value)}>
-                  <option value="">System voice</option>
-                  {voices.map((voice) => <option key={`${voice.name}-${voice.lang}`} value={voice.name}>{voice.name} ({voice.lang})</option>)}
-                </select>
-                <label>
-                  Speed
-                  <select aria-label="Text to speech speed" value={ttsRate} onChange={(event) => setTtsRate(Number(event.target.value))}>
-                  {[0.8, 1, 1.2, 1.4, 1.6].map((rate) => <option key={rate} value={rate}>{rate}×</option>)}
-                </select>
-                </label>
-                </>}
+            <div className="reader-toolbar__actions" aria-label="Reader actions">
+              <div className="reader-type-controls" aria-label="Text size">
+                <button type="button" onClick={decreaseFont} aria-label="Decrease text size">A−</button>
+                <button type="button" onClick={increaseFont} aria-label="Increase text size">A+</button>
               </div>
-            )}
-            <div className="reader-theme-controls">
-              {themeOptions.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  className={theme === option.value ? "is-active" : ""}
-                  onClick={() => setTheme(option.value)}
-                >
-                  {option.label}
-                </button>
-              ))}
+              <div className="reader-type-controls" aria-label="Chapter actions">
+                <button type="button" onClick={() => void addAnnotation("bookmark")}>Bookmark</button>
+                <button type="button" onClick={() => void addAnnotation("note")}>Note</button>
+                <button type="button" onClick={exportReadingState}>Export</button>
+                <button type="button" onClick={() => void keepChapterOffline()}>Offline {offlineChapterCount}</button>
+              </div>
             </div>
           </div>
         </header>
@@ -484,6 +636,50 @@ const Reader: React.FC = () => {
             <p key={index}>{paragraph}</p>
           ))}
         </div>
+
+        <section className="reader-audio-panel" aria-label="Chapter audio">
+          <div className="reader-audio-panel__header">
+            <div>
+              <strong>Chapter audio</strong>
+              <span className={`reader-audio-status reader-audio-status--${audioJob?.status || "idle"}`}>{audioJobLabel}</span>
+            </div>
+            {audioJob?.provider && <small>{audioJob.provider.model} · {audioJob.provider.voice}</small>}
+          </div>
+          {ttsEngine === "openai_compatible" ? (
+            <>
+              {(audioJob?.status === "generating" || audioJob?.status === "queued" || audioJob?.status === "failed" || audioJob?.status === "cancelled") && (
+                <div className="reader-audio-progress" aria-live="polite">
+                  <div><span>{audioJobLabel}</span><strong>{audioProgress}%</strong></div>
+                  <progress value={audioJob?.completed_chunks || 0} max={audioJob?.chunks.length || 1} />
+                  {audioJob?.error && <small>{audioJob.error}</small>}
+                </div>
+              )}
+              {chapterAudioReady ? (
+                <div className="reader-audio-player">
+                  <button type="button" className="reader-audio-player__primary" onClick={() => void playChapterAudio()}>{isSpeaking ? "Pause" : audioCurrentTime > 0 ? "Resume" : "Play"}</button>
+                  <button type="button" onClick={() => void seekChapterAudio(-15)} aria-label="Back 15 seconds">−15</button>
+                  <button type="button" onClick={() => void seekChapterAudio(15)} aria-label="Forward 15 seconds">+15</button>
+                  <label className="reader-audio-scrubber" aria-label="Audio progress"><span>{formatAudioTime(audioCurrentTime)}</span><input type="range" min="0" max={Math.max(audioDuration, 1)} step="0.1" value={Math.min(audioCurrentTime, Math.max(audioDuration, 1))} onChange={(event) => void setChapterAudioPosition(Number(event.target.value))} /><span>{formatAudioTime(audioDuration)}</span></label>
+                  <label>Speed <select aria-label="Chapter audio speed" value={ttsRate} onChange={(event) => setTtsRate(Number(event.target.value))}>{[0.8, 1, 1.2, 1.4, 1.6].map((rate) => <option key={rate} value={rate}>{rate}×</option>)}</select></label>
+                  <button type="button" onClick={() => void deleteChapterAudio()}>Delete</button>
+                </div>
+              ) : (
+                <div className="reader-audio-actions">
+                  <button type="button" className="reader-audio-player__primary" onClick={() => void generateChapterAudio()} disabled={audioJob?.status === "generating"}>{audioJob?.status === "generating" ? "Generating…" : audioJob?.completed_chunks ? "Resume generation" : "Generate chapter audio"}</button>
+                  {audioJob?.status === "generating" && <button type="button" onClick={cancelAudioGeneration}>Pause generation</button>}
+                  {(audioJob?.status === "failed" || audioJob?.status === "cancelled") && <button type="button" onClick={() => void generateChapterAudio()}>Retry</button>}
+                </div>
+              )}
+            </>
+          ) : ttsAvailable ? (
+            <div className="reader-audio-actions">
+              <button type="button" className="reader-audio-player__primary" onClick={toggleTts}>{isSpeaking ? "Stop reading" : "Read aloud"}</button>
+              <select aria-label="Text to speech voice" value={voiceName} onChange={(event) => setVoiceName(event.target.value)}><option value="">System voice</option>{voices.map((voice) => <option key={`${voice.name}-${voice.lang}`} value={voice.name}>{voice.name} ({voice.lang})</option>)}</select>
+              <label>Speed <select aria-label="Text to speech speed" value={ttsRate} onChange={(event) => setTtsRate(Number(event.target.value))}>{[0.8, 1, 1.2, 1.4, 1.6].map((rate) => <option key={rate} value={rate}>{rate}×</option>)}</select></label>
+            </div>
+          ) : <small>Browser text-to-speech is unavailable. Choose Self-hosted / API to generate chapter audio.</small>}
+          {audioPlayerError && <p className="reader-audio-error" role="alert">{audioPlayerError}</p>}
+        </section>
 
         <div className="reader-navigation">
           <button
@@ -501,21 +697,40 @@ const Reader: React.FC = () => {
             Next
           </button>
         </div>
+      </article>
+      <aside className="reader-inspector" aria-label="Reader settings and notes">
+        <section className="reader-inspector__section">
+          <header><strong>Reader</strong></header>
+          <label>Theme</label>
+          <div className="reader-theme-controls">
+            {themeOptions.map((option) => <button key={option.value} type="button" className={theme === option.value ? "is-active" : ""} onClick={() => setTheme(option.value)}>{option.label}</button>)}
+          </div>
+        </section>
+        <section className="reader-inspector__section">
+          <header><strong>TTS settings</strong></header>
+          <label htmlFor="reader-tts-provider">Provider</label>
+          <select id="reader-tts-provider" value={ttsEngine === "native" ? "native" : ttsPreset} onChange={(event) => {
+            if (event.target.value === "native") setTtsEngine("native");
+            else applyTtsPreset(event.target.value as TtsProviderPresetId);
+          }}>
+            <option value="native">Browser voice</option>
+            {TTS_PROVIDER_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
+          </select>
+          {ttsEngine === "openai_compatible" && <small>{TTS_PROVIDER_PRESETS.find((preset) => preset.id === ttsPreset)?.description}</small>}
+          <label htmlFor="reader-tts-speed">Playback speed <span>{ttsRate}×</span></label>
+          <input id="reader-tts-speed" type="range" min="0.8" max="1.6" step="0.2" value={ttsRate} onChange={(event) => setTtsRate(Number(event.target.value))} />
+          <details className="reader-tts-provider"><summary>Connection & voice</summary><label>API base URL<input value={providerConfig.baseUrl} onChange={(event) => { setTtsPreset("custom"); setProviderConfig((current) => ({ ...current, baseUrl: event.target.value })); }} /></label><label>API key<input type="password" value={providerConfig.apiKey} onChange={(event) => setProviderConfig((current) => ({ ...current, apiKey: event.target.value }))} /></label><label>Model<input value={providerConfig.model} onChange={(event) => { setTtsPreset("custom"); setProviderConfig((current) => ({ ...current, model: event.target.value })); }} /></label><label>Voice<input value={providerConfig.voice} onChange={(event) => { setTtsPreset("custom"); setProviderConfig((current) => ({ ...current, voice: event.target.value })); }} /></label></details>
+        </section>
         <section className="reader-annotations" aria-label="Bookmarks and notes">
-          <header>
-            <strong>Bookmarks & notes</strong>
-            <span>{annotations.length}</span>
-          </header>
+          <header><strong>Bookmarks & notes</strong><span>{annotations.length}</span></header>
           {annotations.filter((annotation) => annotation.chapter_number === chapter.chapter_number).slice(0, 8).map((annotation) => (
             <div className="reader-annotation" key={annotation.id}>
-              <button type="button" onClick={() => { if (contentRef.current) contentRef.current.scrollTop = (annotation.percent / 100) * contentRef.current.scrollHeight; }}>
-                {annotation.annotation_type === "bookmark" ? "🔖" : "📝"} {annotation.note || annotation.quote || `At ${Math.round(annotation.percent)}%`}
-              </button>
+              <button type="button" onClick={() => { if (contentRef.current) contentRef.current.scrollTop = (annotation.percent / 100) * contentRef.current.scrollHeight; }}>{annotation.annotation_type === "bookmark" ? "🔖" : "📝"} {annotation.note || annotation.quote || `At ${Math.round(annotation.percent)}%`}</button>
               <button type="button" onClick={() => void removeAnnotation(annotation.id)} aria-label="Delete annotation">×</button>
             </div>
           ))}
         </section>
-      </article>
+      </aside>
     </div>
   );
 };
