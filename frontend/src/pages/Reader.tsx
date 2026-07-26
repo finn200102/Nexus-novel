@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { chapterService } from "../services/chapterService";
 import { novelService } from "../services/novelService";
+import { offlineReaderStore } from "../services/offlineReaderStore";
 import "../styles/Reader.css";
 
 interface ChapterContent {
@@ -77,6 +78,7 @@ const Reader: React.FC = () => {
   const [voiceName, setVoiceName] = useState(() => localStorage.getItem("nexus-reader-tts-voice") || "");
   const [ttsRate, setTtsRate] = useState(() => Number(localStorage.getItem("nexus-reader-tts-rate")) || 1);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [offlineChapterCount, setOfflineChapterCount] = useState(0);
   const contentRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -89,6 +91,7 @@ const Reader: React.FC = () => {
         setProgress(savedProgress);
         setRestoredPosition(false);
         localStorage.setItem(`nexus-reader-chapter-${novel_id}-${chapter_number}`, JSON.stringify(chapterData));
+        void offlineReaderStore.save(chapterData).then(() => offlineReaderStore.countForNovel(novel_id)).then(setOfflineChapterCount).catch(() => undefined);
 
         if (chapterData && chapterData.novel_id) {
           const novelData = await novelService.getNovelById(
@@ -99,9 +102,10 @@ const Reader: React.FC = () => {
         }
         setError(null);
       } catch (err) {
+        const offlineChapter = await offlineReaderStore.get(novel_id, chapter_number).catch(() => null);
         const cached = localStorage.getItem(`nexus-reader-chapter-${novel_id}-${chapter_number}`);
-        if (cached) {
-          setChapter(JSON.parse(cached));
+        if (offlineChapter || cached) {
+          setChapter(offlineChapter || JSON.parse(cached!));
           setProgress(null);
           setError("Offline mode: showing the last cached copy.");
         } else {
@@ -230,6 +234,12 @@ const Reader: React.FC = () => {
 
   const decreaseFont = () => setFontScale((prev) => Math.max(0.85, prev - 0.1));
   const increaseFont = () => setFontScale((prev) => Math.min(1.3, prev + 0.1));
+
+  const keepChapterOffline = async () => {
+    if (!chapter) return;
+    await offlineReaderStore.save(chapter);
+    setOfflineChapterCount(await offlineReaderStore.countForNovel(novel_id));
+  };
 
   const toggleTts = () => {
     if (!ttsAvailable || !chapter) return;
@@ -362,6 +372,7 @@ const Reader: React.FC = () => {
               <button type="button" onClick={() => void addAnnotation("bookmark")} title="Bookmark current position">Bookmark</button>
               <button type="button" onClick={() => void addAnnotation("note")} title="Add a private note">Note</button>
               <button type="button" onClick={exportReadingState} title="Export progress and annotations">Export</button>
+              <button type="button" onClick={() => void keepChapterOffline()} title="Keep this downloaded chapter available in this browser">Keep offline ({offlineChapterCount})</button>
             </div>
             {ttsAvailable && (
               <div className="reader-tts-controls" aria-label="Text to speech controls">
