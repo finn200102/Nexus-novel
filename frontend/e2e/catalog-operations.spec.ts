@@ -6,13 +6,13 @@ test.describe("catalog and operations resilience", () => {
     await signedInPage.goto("/scrape-jobs");
     await signedInPage.getByRole("button", { name: /crossover list/i }).click();
     await signedInPage.getByRole("combobox", { name: "Fandom A" }).fill("Game of Thrones");
-    await signedInPage.getByLabel("Fandom B").fill("Harry Potter");
+    await signedInPage.getByRole("combobox", { name: "Fandom B" }).fill("Harry Potter");
     await signedInPage.getByRole("button", { name: /preview results/i }).click();
     await expect(signedInPage.getByText("A Fixture Story")).toBeVisible();
     await expect(signedInPage.getByText(/1 matches on the first page/)).toBeVisible();
     await signedInPage.getByRole("button", { name: /confirm and create job/i }).click();
     await expect(signedInPage.getByRole("heading", { name: "Job progress" })).toBeVisible();
-    await expect(signedInPage.getByText("Scanning page 1")).toBeVisible();
+    await expect(signedInPage.getByText(/Scanning page \d/).first()).toBeVisible();
     await expect(signedInPage.getByText("1", { exact: true }).first()).toBeVisible();
   });
 

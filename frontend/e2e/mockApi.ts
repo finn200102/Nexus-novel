@@ -16,7 +16,9 @@ const json = (route: Route, body: unknown, status = 200) =>
 
 const pathAndQuery = (route: Route) => {
   const url = new URL(route.request().url());
-  return `${url.pathname}${url.search}`;
+  // Local Vite tests use the host API directly; Compose uses nginx's /api
+  // prefix. Exercise the same logical routes in both cases.
+  return `${url.pathname.replace(/^\/api(?=\/|$)/, "")}${url.search}`;
 };
 
 export async function installMockApi(page: Page, options: MockApiOptions = {}) {

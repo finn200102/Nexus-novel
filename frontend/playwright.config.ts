@@ -13,6 +13,10 @@ export default defineConfig({
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
+    // The production PWA service worker can intercept fetches before the test
+    // fixture router sees them. Acceptance tests must use their deterministic
+    // API fixtures rather than a persisted browser cache.
+    serviceWorkers: "block",
     navigationTimeout: 15_000,
     actionTimeout: 10_000,
   },

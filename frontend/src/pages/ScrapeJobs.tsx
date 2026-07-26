@@ -96,7 +96,13 @@ const ScrapeJobs: React.FC = () => {
     setPreviewing(true);
     setError(null);
     try {
-      setPreview(await coordinatorRef.current.run(`catalog-preview:${JSON.stringify(query)}`, () => catalogScrapeService.preview("fanfiction", query)));
+      // Catalog workers own retry/backoff. Retrying a browser preview turns one
+      // bounded source timeout into a long, apparently stuck UI operation.
+      setPreview(await coordinatorRef.current.run(
+        `catalog-preview:${JSON.stringify(query)}`,
+        () => catalogScrapeService.preview("fanfiction", query),
+        0,
+      ));
       window.requestAnimationFrame(() => previewSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
     } catch (requestError) {
       if (!isRequestCancelled(requestError)) setError(getUserFacingError(requestError, "Could not preview FanFiction.net results."));

@@ -78,7 +78,10 @@ apiClient.interceptors.response.use(
         if (pending.controller.signal === error.config.signal) pendingRequests.delete(controller);
       }
     }
-    if (error.response && error.response.status === 401) {
+    // Login and signup deliberately return 401 for bad credentials. Redirecting
+    // from those forms unmounts the form before it can show its useful error.
+    const isAuthenticationRequest = /\/auth\/(login|signup)$/.test(error.config?.url || "");
+    if (error.response && error.response.status === 401 && !isAuthenticationRequest) {
       // Token expired or invalid
       localStorage.removeItem("token");
       // Redirect to login

@@ -16,7 +16,12 @@ export interface TaxonomyValue { display_value: string; source_value: string; st
 export const catalogScrapeService = {
   async capabilities() { return (await apiClient.get("/catalog-scrapes/capabilities")).data; },
   async taxonomies(site: string, type: string): Promise<TaxonomyValue[]> { return (await apiClient.get(`/catalog-scrapes/taxonomies/${site}/${type}`)).data; },
-  async preview(site: string, query: CatalogQuery): Promise<CatalogPreview> { return (await apiClient.post("/catalog-scrapes/preview", { site, query })).data; },
+  // A preview is an interactive, disposable request.  The server gives its
+  // source request a 12 second budget, so never let the browser wait behind a
+  // longer general API timeout or an automatic retry cycle.
+  async preview(site: string, query: CatalogQuery): Promise<CatalogPreview> {
+    return (await apiClient.post("/catalog-scrapes/preview", { site, query }, { timeout: 13_500 })).data;
+  },
   async create(input: { name: string; site: string; query: CatalogQuery; schedule_interval_minutes?: number | null; enabled: boolean }) { return (await apiClient.post("/catalog-scrapes", input)).data as { definition: CatalogDefinition; job: CatalogJob }; },
   async definitions(): Promise<CatalogDefinition[]> { return (await apiClient.get("/catalog-scrapes")).data; },
   async run(id: number): Promise<CatalogJob> { return (await apiClient.post(`/catalog-scrapes/${id}/run`)).data; },
