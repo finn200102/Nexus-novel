@@ -48,6 +48,10 @@ export const chapterService = {
       throw error;
     }
   },
+  async queueChapterDownloads(libraryId: number, novelId: number, count: number) {
+    const response = await apiClient.post(`/chapter/queue/${libraryId}/${novelId}`, { count });
+    return response.data;
+  },
 
   async getChapterContentByNumber(
     chapterNumber: number,
