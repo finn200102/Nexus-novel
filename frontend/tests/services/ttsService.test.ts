@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { splitTextForSynthesis } from "../../src/services/ttsService";
+import { splitTextForSynthesis, TTS_PROVIDER_PRESETS } from "../../src/services/ttsService";
 
 describe("splitTextForSynthesis", () => {
   it("keeps ordinary sentences together while bounding provider request sizes", () => {
@@ -17,5 +17,16 @@ describe("splitTextForSynthesis", () => {
 
   it("returns no jobs for empty chapter text", () => {
     expect(splitTextForSynthesis("  \n ")).toEqual([]);
+  });
+
+  it("exposes the supported local narrator presets without hiding Qwen's experimental state", () => {
+    expect(TTS_PROVIDER_PRESETS.map((provider) => provider.id)).toEqual([
+      "kokoro_mps",
+      "qwen3_mlx_4bit",
+      "chatterbox_turbo_mlx",
+      "spark_tts_mlx",
+      "custom",
+    ]);
+    expect(TTS_PROVIDER_PRESETS.find((provider) => provider.id === "qwen3_mlx_4bit")?.label).toContain("experimental");
   });
 });

@@ -96,6 +96,7 @@ export interface ChapterAudioProviderSnapshot {
   base_url: string;
   model: string;
   voice: string;
+  language_code?: string;
 }
 
 export interface ChapterAudioJob {

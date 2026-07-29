@@ -3,9 +3,11 @@ export interface OpenAICompatibleTtsConfig {
   apiKey: string;
   model: string;
   voice: string;
+  /** Non-standard provider hint, used by Qwen3-TTS to avoid auto-language failures. */
+  languageCode?: string;
 }
 
-export type TtsProviderPresetId = "kokoro_mps" | "qwen3_mlx_4bit" | "custom";
+export type TtsProviderPresetId = "kokoro_mps" | "qwen3_mlx_4bit" | "chatterbox_turbo_mlx" | "spark_tts_mlx" | "custom";
 
 export interface TtsProviderPreset {
   id: TtsProviderPresetId;
@@ -23,13 +25,26 @@ export const TTS_PROVIDER_PRESETS: TtsProviderPreset[] = [
   },
   {
     id: "qwen3_mlx_4bit",
-    label: "Qwen3‑TTS 1.7B · quality local",
-    description: "MLX 4-bit on port 8890. Higher-fidelity voices; uses more unified memory.",
+    label: "Qwen3‑TTS 1.7B · experimental",
+    description: "MLX 4-bit on port 8890. Keep this experimental until its local service passes the audio check.",
     config: {
       baseUrl: "http://localhost:8890/v1",
       model: "mlx-community/Qwen3-TTS-12Hz-1.7B-CustomVoice-4bit",
       voice: "vivian",
+      languageCode: "English",
     },
+  },
+  {
+    id: "chatterbox_turbo_mlx",
+    label: "Chatterbox Turbo · expressive local",
+    description: "MLX 4-bit on port 8891. A quality-focused English narrator with expressive delivery.",
+    config: { baseUrl: "http://localhost:8891/v1", model: "mlx-community/chatterbox-turbo-4bit", voice: "default", languageCode: "en" },
+  },
+  {
+    id: "spark_tts_mlx",
+    label: "Spark‑TTS 0.5B · compact local",
+    description: "MLX 4-bit on port 8892. Compact English/Chinese model with controllable speaking style.",
+    config: { baseUrl: "http://localhost:8892/v1", model: "mlx-community/Spark-TTS-0.5B-4-6bit", voice: "female", languageCode: "en" },
   },
   {
     id: "custom",
@@ -71,6 +86,7 @@ export const ttsService = {
         voice: config.voice.trim() || "af_bella",
         input: text,
         response_format: "mp3",
+        ...(config.languageCode?.trim() ? { lang_code: config.languageCode.trim() } : {}),
       }),
       });
     } catch (error) {

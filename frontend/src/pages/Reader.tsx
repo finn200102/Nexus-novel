@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { useNavigate, useParams } from "react-router-dom";
+import { Pause, Play, RotateCcw, SkipBack, SkipForward, Trash2, Volume2, WandSparkles } from "lucide-react";
 import { chapterService } from "../services/chapterService";
 import { novelService } from "../services/novelService";
 import { ChapterAudioJob, chapterAudioJobStore, chapterAudioStore, offlineReaderStore } from "../services/offlineReaderStore";
@@ -93,6 +94,7 @@ const Reader: React.FC = () => {
     apiKey: localStorage.getItem("nexus-reader-tts-key") || "",
     model: localStorage.getItem("nexus-reader-tts-model") || "kokoro",
     voice: localStorage.getItem("nexus-reader-tts-provider-voice") || "af_bella",
+    languageCode: localStorage.getItem("nexus-reader-tts-language") || undefined,
   }));
   const [offlineChapterCount, setOfflineChapterCount] = useState(0);
   const [chapterAudioReady, setChapterAudioReady] = useState(false);
@@ -190,6 +192,8 @@ const Reader: React.FC = () => {
     localStorage.setItem("nexus-reader-tts-key", providerConfig.apiKey);
     localStorage.setItem("nexus-reader-tts-model", providerConfig.model);
     localStorage.setItem("nexus-reader-tts-provider-voice", providerConfig.voice);
+    if (providerConfig.languageCode) localStorage.setItem("nexus-reader-tts-language", providerConfig.languageCode);
+    else localStorage.removeItem("nexus-reader-tts-language");
   }, [providerConfig, ttsEngine, ttsPreset]);
 
   useEffect(() => {
@@ -336,6 +340,7 @@ const Reader: React.FC = () => {
           base_url: providerConfig.baseUrl,
           model: providerConfig.model,
           voice: providerConfig.voice,
+          language_code: providerConfig.languageCode,
         },
         status: "generating",
         created_at: existing?.created_at || Date.now(),
@@ -348,6 +353,7 @@ const Reader: React.FC = () => {
           baseUrl: job.provider?.base_url || providerConfig.baseUrl,
           model: job.provider?.model || providerConfig.model,
           voice: job.provider?.voice || providerConfig.voice,
+          languageCode: job.provider?.language_code || providerConfig.languageCode,
         }, controller.signal);
         await chapterAudioJobStore.saveSegment(novel_id, chapter.chapter_number, index, audio);
         job.completed_chunks = index + 1;
@@ -630,10 +636,11 @@ const Reader: React.FC = () => {
         <section className="reader-audio-panel" aria-label="Chapter audio">
           <div className="reader-audio-panel__header">
             <div>
+              <span className="reader-audio-panel__eyebrow"><Volume2 size={14} /> AUDIOBOOK</span>
               <strong>Chapter audio</strong>
               <span className={`reader-audio-status reader-audio-status--${audioJob?.status || "idle"}`}>{audioJobLabel}</span>
             </div>
-            {audioJob?.provider && <small>{audioJob.provider.model} · {audioJob.provider.voice}</small>}
+            {audioJob?.provider && <small className="reader-audio-provider">{audioJob.provider.model} · {audioJob.provider.voice}</small>}
           </div>
           {ttsEngine === "openai_compatible" ? (
             <>
@@ -646,18 +653,19 @@ const Reader: React.FC = () => {
               )}
               {chapterAudioReady ? (
                 <div className="reader-audio-player">
-                  <button type="button" className="reader-audio-player__primary" onClick={() => void playChapterAudio()}>{isSpeaking ? "Pause" : audioCurrentTime > 0 ? "Resume" : "Play"}</button>
-                  <button type="button" onClick={() => void seekChapterAudio(-15)} aria-label="Back 15 seconds">−15</button>
-                  <button type="button" onClick={() => void seekChapterAudio(15)} aria-label="Forward 15 seconds">+15</button>
+                  <div className="reader-audio-player__transport">
+                    <button type="button" onClick={() => void seekChapterAudio(-15)} aria-label="Back 15 seconds"><SkipBack size={17} /><span>15</span></button>
+                    <button type="button" className="reader-audio-player__primary" onClick={() => void playChapterAudio()} aria-label={isSpeaking ? "Pause chapter audio" : "Play chapter audio"}>{isSpeaking ? <Pause size={21} fill="currentColor" /> : <Play size={21} fill="currentColor" />}</button>
+                    <button type="button" onClick={() => void seekChapterAudio(15)} aria-label="Forward 15 seconds"><SkipForward size={17} /><span>15</span></button>
+                  </div>
                   <label className="reader-audio-scrubber" aria-label="Audio progress"><span>{formatAudioTime(audioCurrentTime)}</span><input type="range" min="0" max={Math.max(audioDuration, 1)} step="0.1" value={Math.min(audioCurrentTime, Math.max(audioDuration, 1))} onChange={(event) => void setChapterAudioPosition(Number(event.target.value))} /><span>{formatAudioTime(audioDuration)}</span></label>
-                  <label>Speed <select aria-label="Chapter audio speed" value={ttsRate} onChange={(event) => setTtsRate(Number(event.target.value))}>{[0.8, 1, 1.2, 1.4, 1.6].map((rate) => <option key={rate} value={rate}>{rate}×</option>)}</select></label>
-                  <button type="button" onClick={() => void deleteChapterAudio()}>Delete</button>
+                  <div className="reader-audio-player__settings"><label>Speed <select aria-label="Chapter audio speed" value={ttsRate} onChange={(event) => setTtsRate(Number(event.target.value))}>{[0.8, 1, 1.2, 1.4, 1.6].map((rate) => <option key={rate} value={rate}>{rate}×</option>)}</select></label><button type="button" className="reader-audio-player__delete" onClick={() => void deleteChapterAudio()} aria-label="Delete chapter audio"><Trash2 size={16} /></button></div>
                 </div>
               ) : (
                 <div className="reader-audio-actions">
-                  <button type="button" className="reader-audio-player__primary" onClick={() => void generateChapterAudio()} disabled={audioJob?.status === "generating"}>{audioJob?.status === "generating" ? "Generating…" : audioJob?.completed_chunks ? "Resume generation" : "Generate chapter audio"}</button>
-                  {audioJob?.status === "generating" && <button type="button" onClick={cancelAudioGeneration}>Pause generation</button>}
-                  {(audioJob?.status === "failed" || audioJob?.status === "cancelled") && <button type="button" onClick={() => void generateChapterAudio()}>Retry</button>}
+                  <button type="button" className="reader-audio-player__primary" onClick={() => void generateChapterAudio()} disabled={audioJob?.status === "generating"}>{audioJob?.status === "generating" ? "Generating…" : <><WandSparkles size={17} /> {audioJob?.completed_chunks ? "Resume generation" : "Generate chapter audio"}</>}</button>
+                  {audioJob?.status === "generating" && <button type="button" onClick={cancelAudioGeneration}><Pause size={16} /> Pause generation</button>}
+                  {(audioJob?.status === "failed" || audioJob?.status === "cancelled") && <button type="button" onClick={() => void generateChapterAudio()}><RotateCcw size={16} /> Retry</button>}
                 </div>
               )}
             </>
@@ -717,9 +725,10 @@ const Reader: React.FC = () => {
             {TTS_PROVIDER_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
           </select>
           {ttsEngine === "openai_compatible" && <small>{TTS_PROVIDER_PRESETS.find((preset) => preset.id === ttsPreset)?.description}</small>}
+          {ttsEngine === "openai_compatible" && !chapterAudioReady && <button type="button" className="reader-tts-generate" onClick={() => void generateChapterAudio()} disabled={audioJob?.status === "generating"}><WandSparkles size={16} /> {audioJob?.status === "generating" ? "Generating chapter…" : "Generate chapter audio"}</button>}
           <label htmlFor="reader-tts-speed">Playback speed <span>{ttsRate}×</span></label>
           <input id="reader-tts-speed" type="range" min="0.8" max="1.6" step="0.2" value={ttsRate} onChange={(event) => setTtsRate(Number(event.target.value))} />
-          <details className="reader-tts-provider"><summary>Connection & voice</summary><label>API base URL<input value={providerConfig.baseUrl} onChange={(event) => { setTtsPreset("custom"); setProviderConfig((current) => ({ ...current, baseUrl: event.target.value })); }} /></label><label>API key<input type="password" value={providerConfig.apiKey} onChange={(event) => setProviderConfig((current) => ({ ...current, apiKey: event.target.value }))} /></label><label>Model<input value={providerConfig.model} onChange={(event) => { setTtsPreset("custom"); setProviderConfig((current) => ({ ...current, model: event.target.value })); }} /></label><label>Voice<input value={providerConfig.voice} onChange={(event) => { setTtsPreset("custom"); setProviderConfig((current) => ({ ...current, voice: event.target.value })); }} /></label></details>
+          <details className="reader-tts-provider"><summary>Connection & voice</summary><label>API base URL<input value={providerConfig.baseUrl} onChange={(event) => { setTtsPreset("custom"); setProviderConfig((current) => ({ ...current, baseUrl: event.target.value })); }} /></label><label>API key<input type="password" value={providerConfig.apiKey} onChange={(event) => setProviderConfig((current) => ({ ...current, apiKey: event.target.value }))} /></label><label>Model<input value={providerConfig.model} onChange={(event) => { setTtsPreset("custom"); setProviderConfig((current) => ({ ...current, model: event.target.value })); }} /></label><label>Voice<input value={providerConfig.voice} onChange={(event) => { setTtsPreset("custom"); setProviderConfig((current) => ({ ...current, voice: event.target.value })); }} /></label><label>Language code<input placeholder="en" value={providerConfig.languageCode || ""} onChange={(event) => { setTtsPreset("custom"); setProviderConfig((current) => ({ ...current, languageCode: event.target.value })); }} /></label></details>
         </section>
         <section className="reader-annotations" aria-label="Bookmarks and notes">
           <header><strong>Bookmarks & notes</strong><span>{annotations.length}</span></header>
