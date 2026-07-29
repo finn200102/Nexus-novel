@@ -7,7 +7,7 @@ import logging
 import time
 from uuid import uuid4
 
-from config.database import engine, Base
+from config.database import engine, Base, SessionLocal
 from app.routers import auth, novel, library, chapter, discovery, follow, download, activity, operations, catalog_scrape, audio
 from app.models.author import Author
 from app.models.chapter import Chapter
@@ -39,6 +39,31 @@ from app.exceptions import NexusNovelException
 
 setup_logging()
 logger = get_logger(__name__)
+
+
+def ensure_local_admin() -> None:
+    """Keep the documented local test account able to administer Nexus.
+
+    Production deployments can override the username or disable this bootstrap
+    by setting ``NEXUS_BOOTSTRAP_ADMIN_USERNAME`` to an empty value.
+    """
+    import os
+
+    username = os.getenv("NEXUS_BOOTSTRAP_ADMIN_USERNAME", "user").strip()
+    if not username:
+        return
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.username == username).first()
+        if user and not user.is_admin:
+            user.is_admin = True
+            db.commit()
+            logger.info("bootstrap_admin_promoted", username=username)
+    finally:
+        db.close()
+
+
+ensure_local_admin()
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):

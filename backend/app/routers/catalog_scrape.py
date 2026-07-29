@@ -56,6 +56,11 @@ async def capabilities(_: User = Depends(require_admin)):
     return await _request("GET", "/catalog-scrapes/capabilities")
 
 
+@router.get("/capabilities/{site}")
+async def source_capabilities(site: str, _: User = Depends(require_admin)):
+    return await _request("GET", f"/catalog-scrapes/capabilities/{site}")
+
+
 @router.post("/preview")
 async def preview(request: CatalogRequest, _: User = Depends(require_admin)):
     return await _request("POST", "/catalog-scrapes/preview", json=request.model_dump())
