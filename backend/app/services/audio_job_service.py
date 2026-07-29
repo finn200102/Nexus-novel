@@ -101,9 +101,45 @@ def claim_audio_job(db: Session, job_id: int) -> ChapterAudioJob | None:
 
 
 def _job_directory(job: ChapterAudioJob) -> Path:
-    root = Path(os.getenv("DOWNLOAD_PATH", "/data/downloads")) / "audio" / str(job.user_id) / str(job.novel_id) / str(job.chapter_id)
+    root = Path(os.getenv("DOWNLOAD_PATH", "/data/downloads")) / "audio" / str(job.user_id) / str(job.novel_id) / str(job.chapter_id) / str(job.id)
     root.mkdir(parents=True, exist_ok=True)
     return root
+
+
+def delete_audio_job(db: Session, job: ChapterAudioJob) -> None:
+    """Remove a completed/cancelled audio job and only its owned audio files."""
+    if job.status in ACTIVE_AUDIO_STATUSES:
+        raise ValueError("Pause the audio generation before deleting it")
+
+    chapter_id = job.chapter_id
+    paths = [Path(path) for path in [job.audio_path, *[
+        part.audio_path for part in db.query(ChapterAudioPart).filter(ChapterAudioPart.job_id == job.id).all()
+    ]] if path]
+    db.query(ChapterAudioPart).filter(ChapterAudioPart.job_id == job.id).delete(synchronize_session=False)
+    db.delete(job)
+    db.flush()
+
+    # Remove only file paths attached to this job. This keeps a regenerated
+    # chapter's newer audio intact even if an older job is later deleted.
+    for path in paths:
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        try:
+            path.parent.rmdir()
+        except OSError:
+            pass
+
+    remaining = db.query(ChapterAudioJob).filter(
+        ChapterAudioJob.chapter_id == chapter_id,
+        ChapterAudioJob.status == "completed",
+        ChapterAudioJob.audio_path.isnot(None),
+    ).first()
+    chapter = db.query(Chapter).filter(Chapter.id == chapter_id).first()
+    if chapter and not remaining:
+        chapter.audio_status = AudioStatus.MISSING
+    db.commit()
 
 
 def _write_wav_parts(parts: list[Path], final_path: Path) -> int:

@@ -33,5 +33,6 @@ export const audioService = {
   async list(chapterId: number): Promise<ServerAudioJob[]> { return (await apiClient.get(`/audio/jobs?chapter_id=${chapterId}`)).data; },
   async retry(id: number): Promise<ServerAudioJob> { return (await apiClient.post(`/audio/jobs/${id}/retry`)).data; },
   async cancel(id: number): Promise<ServerAudioJob> { return (await apiClient.post(`/audio/jobs/${id}/cancel`)).data; },
+  async remove(id: number): Promise<void> { await apiClient.delete(`/audio/jobs/${id}`); },
   async audio(id: number): Promise<Blob> { return (await apiClient.get(`/audio/jobs/${id}/audio`, { responseType: "blob" })).data; },
 };

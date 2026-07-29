@@ -14,7 +14,7 @@ from app.models.library import Library
 from app.models.novel import Novel
 from app.models.user import User
 from app.schemas.audio import AudioJobCreate, AudioJobResponse, ProviderCapability, ProviderCheckRequest, ProviderPreviewRequest
-from app.services.audio_job_service import ACTIVE_AUDIO_STATUSES, PROVIDER_CAPABILITIES, queue_audio_job, speech_url
+from app.services.audio_job_service import ACTIVE_AUDIO_STATUSES, PROVIDER_CAPABILITIES, delete_audio_job, queue_audio_job, speech_url
 from config.database import get_db
 
 router = APIRouter(prefix="/audio", tags=["audio"])
@@ -45,7 +45,7 @@ def check_provider(request: ProviderCheckRequest):
         with httpx.Client(timeout=httpx.Timeout(5.0, connect=3.0)) as client:
             response = client.get(request.base_url.rstrip("/").removesuffix("/v1") + "/v1/models")
             response.raise_for_status()
-        return {"status": "ready", "model": request.model, "voice": request.voice}
+        return {"status": "ready", "model": request.model, "voice": request.voice, "response_format": "wav"}
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=503, detail=f"Audio provider is unavailable: {exc}") from exc
 
@@ -56,6 +56,8 @@ def preview_provider(request: ProviderPreviewRequest):
         with httpx.Client(timeout=httpx.Timeout(30.0, connect=5.0)) as client:
             response = client.post(speech_url(request.base_url), json={"model": request.model, "voice": request.voice, "input": request.text, "response_format": "wav", **({"lang_code": request.language_code} if request.language_code else {})})
             response.raise_for_status()
+        if not response.content.startswith(b"RIFF"):
+            raise HTTPException(status_code=422, detail="Audio provider returned data that is not a WAV preview")
         return {"status": "ready", "bytes": len(response.content)}
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=503, detail=f"Audio preview failed: {exc}") from exc
@@ -109,6 +111,15 @@ def cancel_job(job_id: int, db: Session = Depends(get_db), current_user: User = 
     job.status, job.cancelled_at = "cancelled", datetime.utcnow()
     db.commit(); db.refresh(job)
     return _response(job)
+
+
+@router.delete("/jobs/{job_id}", status_code=204)
+def delete_job(job_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    job = _owned_job(db, job_id, current_user)
+    try:
+        delete_audio_job(db, job)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.get("/jobs/{job_id}/audio")

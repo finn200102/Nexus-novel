@@ -417,6 +417,7 @@
 .reader-audio-player__transport .reader-audio-player__primary { width: 3rem; height: 3rem; padding: 0; border-radius: 50%; box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent-primary) 16%, transparent), 0 6px 16px color-mix(in srgb, var(--accent-primary) 25%, transparent); }
 .reader-audio-player__settings { display: inline-flex; align-items: center; gap: .55rem; }
 .reader-audio-player__delete { color: var(--text-muted) !important; padding: .45rem !important; }
+.reader-audio-player__settings select { max-width: 4.25rem; }
 
 .reader-audio-player > span {
   color: var(--text-muted);
@@ -451,6 +452,10 @@
 }
 
 .reader-audio-error { margin: 0; color: var(--status-error); }
+
+.reader-tts-provider__diagnostics { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; margin-top: .7rem; }
+.reader-tts-provider__diagnostics button { padding: .42rem .62rem; font-size: .78rem; }
+.reader-tts-provider__diagnostics small { flex-basis: 100%; color: var(--text-muted); line-height: 1.35; }
 
 .reader-tts-controls select,
 .reader-tts-controls label {
