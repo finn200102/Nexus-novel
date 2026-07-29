@@ -6,6 +6,7 @@ import { chapterService } from "../services/chapterService";
 import { novelService } from "../services/novelService";
 import { ChapterAudioJob, chapterAudioJobStore, chapterAudioStore, offlineReaderStore } from "../services/offlineReaderStore";
 import { mergeAudioSegments, OpenAICompatibleTtsConfig, splitTextForSynthesis, TtsProviderPresetId, TTS_PROVIDER_PRESETS, TtsRequestError, ttsService } from "../services/ttsService";
+import { audioService, ServerAudioJob } from "../services/audioService";
 import "../styles/Reader.css";
 
 interface ChapterContent {
@@ -96,9 +97,11 @@ const Reader: React.FC = () => {
     voice: localStorage.getItem("nexus-reader-tts-provider-voice") || "af_bella",
     languageCode: localStorage.getItem("nexus-reader-tts-language") || undefined,
   }));
+  const [ttsExecutionMode, setTtsExecutionMode] = useState<"browser" | "server">(() => (localStorage.getItem("nexus-reader-tts-execution") as "browser" | "server") || "browser");
   const [offlineChapterCount, setOfflineChapterCount] = useState(0);
   const [chapterAudioReady, setChapterAudioReady] = useState(false);
   const [audioJob, setAudioJob] = useState<ChapterAudioJob | null>(null);
+  const [serverAudioJob, setServerAudioJob] = useState<ServerAudioJob | null>(null);
   const [audioPlayerError, setAudioPlayerError] = useState<string | null>(null);
   const [audioCurrentTime, setAudioCurrentTime] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
@@ -192,9 +195,10 @@ const Reader: React.FC = () => {
     localStorage.setItem("nexus-reader-tts-key", providerConfig.apiKey);
     localStorage.setItem("nexus-reader-tts-model", providerConfig.model);
     localStorage.setItem("nexus-reader-tts-provider-voice", providerConfig.voice);
+    localStorage.setItem("nexus-reader-tts-execution", ttsExecutionMode);
     if (providerConfig.languageCode) localStorage.setItem("nexus-reader-tts-language", providerConfig.languageCode);
     else localStorage.removeItem("nexus-reader-tts-language");
-  }, [providerConfig, ttsEngine, ttsPreset]);
+  }, [providerConfig, ttsEngine, ttsPreset, ttsExecutionMode]);
 
   useEffect(() => {
     if (!ttsAvailable) return;
@@ -313,8 +317,35 @@ const Reader: React.FC = () => {
     setAudioJob({ ...job, updated_at: Date.now() });
   };
 
+  const generateServerAudio = async () => {
+    if (!chapter) return;
+    try {
+      const job = await audioService.create({
+        library_id,
+        novel_id,
+        chapter_number: chapter.chapter_number,
+        provider: {
+          id: ttsPreset,
+          base_url: providerConfig.baseUrl,
+          model: providerConfig.model,
+          voice: providerConfig.voice,
+          language_code: providerConfig.languageCode,
+          execution_mode: "server",
+        },
+      });
+      setServerAudioJob(job);
+      setAudioPlayerError(null);
+    } catch (error) {
+      setAudioPlayerError(error instanceof Error ? error.message : "Could not start the server audio job.");
+    }
+  };
+
   const generateChapterAudio = async () => {
     if (!chapter || audioJob?.status === "generating" || audioJobRunningRef.current) return;
+    if (ttsExecutionMode === "server") {
+      await generateServerAudio();
+      return;
+    }
     audioJobRunningRef.current = true;
     const controller = new AbortController();
     audioControllerRef.current = controller;
@@ -322,9 +353,26 @@ const Reader: React.FC = () => {
     let job: ChapterAudioJob | null = null;
     try {
       const existing = await chapterAudioJobStore.get(novel_id, chapter.chapter_number);
+      const activeProvider = existing?.provider || {
+        base_url: providerConfig.baseUrl,
+        model: providerConfig.model,
+        voice: providerConfig.voice,
+        language_code: providerConfig.languageCode,
+      };
+      const completedChunks = existing?.status === "failed" || existing?.status === "cancelled" || existing?.status === "queued"
+        ? existing.completed_chunks : 0;
+      const isSparkProvider = activeProvider.model.includes("Spark-TTS");
+      // Spark-TTS is happiest with short passages.  Preserve completed parts,
+      // but re-chunk only the pending long passages on resume so a recoverable
+      // job becomes more reliable without discarding any local audio.
       const chunks = existing?.chunks?.length
-        ? existing.chunks
-        : splitTextForSynthesis(`${chapter.title}. ${chapter.content}`);
+        ? (isSparkProvider
+          ? [
+              ...existing.chunks.slice(0, completedChunks),
+              ...existing.chunks.slice(completedChunks).flatMap((chunk) => splitTextForSynthesis(chunk, 380)),
+            ]
+          : existing.chunks)
+        : splitTextForSynthesis(`${chapter.title}. ${chapter.content}`, isSparkProvider ? 380 : 1_100);
       if (!chunks.length) {
         setAudioPlayerError("This chapter has no text to turn into audio.");
         return;
@@ -334,14 +382,8 @@ const Reader: React.FC = () => {
         novel_id,
         chapter_number: chapter.chapter_number,
         chunks,
-        completed_chunks: existing?.status === "failed" || existing?.status === "cancelled" || existing?.status === "queued"
-          ? existing.completed_chunks : 0,
-        provider: existing?.provider || {
-          base_url: providerConfig.baseUrl,
-          model: providerConfig.model,
-          voice: providerConfig.voice,
-          language_code: providerConfig.languageCode,
-        },
+        completed_chunks: completedChunks,
+        provider: activeProvider,
         status: "generating",
         created_at: existing?.created_at || Date.now(),
         updated_at: Date.now(),
@@ -389,10 +431,32 @@ const Reader: React.FC = () => {
 
   const cancelAudioGeneration = () => audioControllerRef.current?.abort();
 
+  useEffect(() => {
+    if (!chapter) return;
+    let active = true;
+    audioService.list(chapter.id).then((jobs) => {
+      if (active && jobs[0]) setServerAudioJob(jobs[0]);
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [chapter?.id]);
+
+  useEffect(() => {
+    if (!serverAudioJob || !["queued", "processing", "retry_wait"].includes(serverAudioJob.status)) return;
+    const timer = window.setInterval(() => {
+      audioService.get(serverAudioJob.id).then((job) => {
+        setServerAudioJob(job);
+        if (job.audio_ready) setChapterAudioReady(true);
+      }).catch(() => undefined);
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [serverAudioJob?.id, serverAudioJob?.status]);
+
   const loadChapterAudioPlayer = async (): Promise<HTMLAudioElement | null> => {
     if (!chapter) return null;
     if (providerAudioRef.current) return providerAudioRef.current;
-    const audioBlob = await chapterAudioStore.get(novel_id, chapter.chapter_number);
+    const audioBlob = serverAudioJob?.audio_ready
+      ? await audioService.audio(serverAudioJob.id)
+      : await chapterAudioStore.get(novel_id, chapter.chapter_number);
     if (!audioBlob) {
       setChapterAudioReady(false);
       return null;
@@ -484,6 +548,7 @@ const Reader: React.FC = () => {
     const preset = TTS_PROVIDER_PRESETS.find((item) => item.id === presetId);
     if (!preset) return;
     setTtsEngine("openai_compatible");
+    setTtsExecutionMode("browser");
     setProviderConfig((current) => ({ ...preset.config, apiKey: current.apiKey }));
   };
 
@@ -728,7 +793,7 @@ const Reader: React.FC = () => {
           {ttsEngine === "openai_compatible" && !chapterAudioReady && <button type="button" className="reader-tts-generate" onClick={() => void generateChapterAudio()} disabled={audioJob?.status === "generating"}><WandSparkles size={16} /> {audioJob?.status === "generating" ? "Generating chapter…" : "Generate chapter audio"}</button>}
           <label htmlFor="reader-tts-speed">Playback speed <span>{ttsRate}×</span></label>
           <input id="reader-tts-speed" type="range" min="0.8" max="1.6" step="0.2" value={ttsRate} onChange={(event) => setTtsRate(Number(event.target.value))} />
-          <details className="reader-tts-provider"><summary>Connection & voice</summary><label>API base URL<input value={providerConfig.baseUrl} onChange={(event) => { setTtsPreset("custom"); setProviderConfig((current) => ({ ...current, baseUrl: event.target.value })); }} /></label><label>API key<input type="password" value={providerConfig.apiKey} onChange={(event) => setProviderConfig((current) => ({ ...current, apiKey: event.target.value }))} /></label><label>Model<input value={providerConfig.model} onChange={(event) => { setTtsPreset("custom"); setProviderConfig((current) => ({ ...current, model: event.target.value })); }} /></label><label>Voice<input value={providerConfig.voice} onChange={(event) => { setTtsPreset("custom"); setProviderConfig((current) => ({ ...current, voice: event.target.value })); }} /></label><label>Language code<input placeholder="en" value={providerConfig.languageCode || ""} onChange={(event) => { setTtsPreset("custom"); setProviderConfig((current) => ({ ...current, languageCode: event.target.value })); }} /></label></details>
+          <details className="reader-tts-provider"><summary>Connection & voice</summary><label>Generation location<select value={ttsExecutionMode} onChange={(event) => setTtsExecutionMode(event.target.value as "browser" | "server")}><option value="browser">This browser (local-only)</option><option value="server">Nexus server (durable)</option></select></label><small>{ttsExecutionMode === "server" ? "The Nexus server must be able to reach this endpoint. The job survives closing the reader." : "Use this for localhost or BYO endpoints that only this browser can reach."}</small><label>API base URL<input value={providerConfig.baseUrl} onChange={(event) => { setTtsPreset("custom"); setProviderConfig((current) => ({ ...current, baseUrl: event.target.value })); }} /></label><label>API key<input type="password" value={providerConfig.apiKey} onChange={(event) => setProviderConfig((current) => ({ ...current, apiKey: event.target.value }))} /></label><label>Model<input value={providerConfig.model} onChange={(event) => { setTtsPreset("custom"); setProviderConfig((current) => ({ ...current, model: event.target.value })); }} /></label><label>Voice<input value={providerConfig.voice} onChange={(event) => { setTtsPreset("custom"); setProviderConfig((current) => ({ ...current, voice: event.target.value })); }} /></label><label>Language code<input placeholder="en" value={providerConfig.languageCode || ""} onChange={(event) => { setTtsPreset("custom"); setProviderConfig((current) => ({ ...current, languageCode: event.target.value })); }} /></label></details>
         </section>
         <section className="reader-annotations" aria-label="Bookmarks and notes">
           <header><strong>Bookmarks & notes</strong><span>{annotations.length}</span></header>

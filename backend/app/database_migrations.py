@@ -173,3 +173,47 @@ def ensure_runtime_schema(engine) -> None:
                 note TEXT NULL
             )
         """))
+        connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS chapter_audio_jobs (
+                id INTEGER PRIMARY KEY,
+                created_at TIMESTAMP,
+                updated_at TIMESTAMP,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                library_id INTEGER NOT NULL REFERENCES libraries(id) ON DELETE CASCADE,
+                novel_id INTEGER NOT NULL REFERENCES novels(id) ON DELETE CASCADE,
+                chapter_id INTEGER NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
+                status VARCHAR(20) NOT NULL DEFAULT 'queued',
+                provider_id VARCHAR(80) NOT NULL,
+                provider_url VARCHAR(1000) NOT NULL,
+                provider_model VARCHAR(255) NOT NULL,
+                provider_voice VARCHAR(255) NOT NULL,
+                provider_language VARCHAR(64),
+                total_parts INTEGER NOT NULL DEFAULT 0,
+                completed_parts INTEGER NOT NULL DEFAULT 0,
+                attempt_count INTEGER NOT NULL DEFAULT 0,
+                max_attempts INTEGER NOT NULL DEFAULT 3,
+                next_attempt_at TIMESTAMP,
+                started_at TIMESTAMP,
+                finished_at TIMESTAMP,
+                cancelled_at TIMESTAMP,
+                error_code VARCHAR(80),
+                error TEXT,
+                audio_path VARCHAR(1000),
+                audio_bytes INTEGER
+            )
+        """))
+        connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS chapter_audio_parts (
+                id INTEGER PRIMARY KEY,
+                created_at TIMESTAMP,
+                updated_at TIMESTAMP,
+                job_id INTEGER NOT NULL REFERENCES chapter_audio_jobs(id) ON DELETE CASCADE,
+                part_index INTEGER NOT NULL,
+                text TEXT NOT NULL,
+                status VARCHAR(20) NOT NULL DEFAULT 'queued',
+                audio_path VARCHAR(1000),
+                error TEXT,
+                CONSTRAINT uq_audio_job_part UNIQUE (job_id, part_index)
+            )
+        """))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_audio_jobs_queue ON chapter_audio_jobs (status, next_attempt_at, created_at)"))

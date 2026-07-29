@@ -7,9 +7,11 @@ from sqlalchemy import or_
 
 from config.database import SessionLocal
 from app.models.download_job import ChapterDownloadJob
+from app.models.audio_job import ChapterAudioJob
 from app.models.follow import UserNovelFollow
 from app.models.update_event import NovelUpdateEvent
 from app.routers.chapter import run_queued_download
+from app.services.audio_job_service import process_audio_job
 
 
 def release_due_notifications(db) -> int:
@@ -80,6 +82,30 @@ def process_downloads() -> int:
     return len(ids)
 
 
+def process_audio_jobs() -> int:
+    db = SessionLocal()
+    try:
+        now = datetime.now(UTC).replace(tzinfo=None)
+        jobs = (
+            db.query(ChapterAudioJob)
+            .filter(
+                or_(
+                    ChapterAudioJob.status == "queued",
+                    (ChapterAudioJob.status == "retry_wait") & (ChapterAudioJob.next_attempt_at <= now),
+                )
+            )
+            .order_by(ChapterAudioJob.created_at.asc())
+            .limit(2)
+            .all()
+        )
+        ids = [job.id for job in jobs]
+    finally:
+        db.close()
+    for job_id in ids:
+        process_audio_job(job_id, SessionLocal)
+    return len(ids)
+
+
 async def run() -> None:
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -89,6 +115,7 @@ async def run() -> None:
         # The downloader is synchronous internally and bridges to async source
         # clients with asyncio.run(). Keep it off this worker's event loop.
         await asyncio.to_thread(process_downloads)
+        await asyncio.to_thread(process_audio_jobs)
         db = SessionLocal()
         try:
             release_due_notifications(db)
