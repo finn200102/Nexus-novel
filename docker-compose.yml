@@ -31,6 +31,25 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
+  worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["/app/backend/.venv/bin/python", "-m", "app.worker"]
+    environment:
+      DATABASE_URL: postgresql://nexus:${NEXUS_NOVEL_DB_PASSWORD:-nexus}@postgres:5432/nexus_novel
+      DOWNLOAD_PATH: /data/downloads
+      SECRET_KEY: ${NEXUS_NOVEL_SECRET_KEY:?Set NEXUS_NOVEL_SECRET_KEY in .env}
+      METADATA_SERVER_URL: ${METADATA_SERVER_URL:-http://host.docker.internal:8004}
+      FLARESOLVERR_URL: ${FLARESOLVERR_URL:-http://host.docker.internal:8191/v1}
+    volumes:
+      - nexus_novel_downloads:/data/downloads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
   frontend:
     build:
       context: .
