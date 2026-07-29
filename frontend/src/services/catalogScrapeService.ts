@@ -15,8 +15,8 @@ export interface TaxonomyValue { display_value: string; source_value: string; st
 
 export const catalogScrapeService = {
   async capabilities() { return (await apiClient.get("/catalog-scrapes/capabilities")).data; },
-  async taxonomies(site: string, type: string, query?: string): Promise<TaxonomyValue[]> {
-    return (await apiClient.get(`/catalog-scrapes/taxonomies/${site}/${type}`, { params: { query, limit: 50 } })).data;
+  async taxonomies(site: string, type: string, query?: string, offset = 0): Promise<TaxonomyValue[]> {
+    return (await apiClient.get(`/catalog-scrapes/taxonomies/${site}/${type}`, { params: { query, limit: 50, offset } })).data;
   },
   // A preview is an interactive, disposable request.  The server gives its
   // source request a 12 second budget, so never let the browser wait behind a

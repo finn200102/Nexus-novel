@@ -124,5 +124,16 @@ async def cancel_job(job_id: str, _: User = Depends(require_admin)):
 
 
 @router.get("/taxonomies/{site}/{taxonomy_type}")
-async def taxonomies(site: str, taxonomy_type: str, _: User = Depends(require_admin)):
-    return await _request("GET", f"/catalog-scrapes/taxonomies/{site}/{taxonomy_type}")
+async def taxonomies(
+    site: str,
+    taxonomy_type: str,
+    query: str | None = Query(default=None, max_length=120),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    _: User = Depends(require_admin),
+):
+    return await _request(
+        "GET",
+        f"/catalog-scrapes/taxonomies/{site}/{taxonomy_type}",
+        params={"query": query, "limit": limit, "offset": offset},
+    )
