@@ -320,6 +320,11 @@ const Reader: React.FC = () => {
   const generateServerAudio = async () => {
     if (!chapter) return;
     try {
+      if (serverAudioJob && ["failed", "cancelled", "retry_wait"].includes(serverAudioJob.status)) {
+        setServerAudioJob(await audioService.retry(serverAudioJob.id));
+        setAudioPlayerError(null);
+        return;
+      }
       const job = await audioService.create({
         library_id,
         novel_id,
@@ -429,7 +434,14 @@ const Reader: React.FC = () => {
     }
   };
 
-  const cancelAudioGeneration = () => audioControllerRef.current?.abort();
+  const cancelAudioGeneration = async () => {
+    if (ttsExecutionMode === "server" && serverAudioJob && ["queued", "processing", "retry_wait"].includes(serverAudioJob.status)) {
+      try { setServerAudioJob(await audioService.cancel(serverAudioJob.id)); }
+      catch (error) { setAudioPlayerError(error instanceof Error ? error.message : "Could not pause the server audio job."); }
+      return;
+    }
+    audioControllerRef.current?.abort();
+  };
 
   useEffect(() => {
     if (!chapter) return;
@@ -622,8 +634,22 @@ const Reader: React.FC = () => {
     return <div className="reader-not-found">Content not found</div>;
 
   const readerClass = `reader-shell reader-shell--${theme}`;
-  const audioProgress = audioJob?.chunks.length ? Math.round((audioJob.completed_chunks / audioJob.chunks.length) * 100) : 0;
-  const audioJobLabel = audioJob?.status === "generating"
+  const audioProgress = ttsExecutionMode === "server"
+    ? (serverAudioJob?.total_parts ? Math.round((serverAudioJob.completed_parts / serverAudioJob.total_parts) * 100) : 0)
+    : (audioJob?.chunks.length ? Math.round((audioJob.completed_chunks / audioJob.chunks.length) * 100) : 0);
+  const audioJobLabel = ttsExecutionMode === "server"
+    ? serverAudioJob?.status === "processing"
+      ? `Generating ${serverAudioJob.completed_parts}/${serverAudioJob.total_parts} parts on Nexus`
+      : serverAudioJob?.status === "queued"
+        ? "Queued on Nexus server"
+        : serverAudioJob?.status === "retry_wait"
+          ? `Retry scheduled · ${serverAudioJob.completed_parts}/${serverAudioJob.total_parts} parts saved`
+          : serverAudioJob?.status === "failed"
+            ? `Failed at part ${serverAudioJob.completed_parts + 1}/${serverAudioJob.total_parts}`
+            : serverAudioJob?.status === "cancelled"
+              ? `Paused at ${serverAudioJob.completed_parts}/${serverAudioJob.total_parts} parts`
+              : chapterAudioReady ? "Ready to play" : "Not generated"
+    : audioJob?.status === "generating"
     ? `Generating ${audioJob.completed_chunks}/${audioJob.chunks.length} parts`
     : audioJob?.status === "queued"
       ? `Queued · ${audioJob.completed_chunks}/${audioJob.chunks.length} parts saved`
@@ -703,17 +729,17 @@ const Reader: React.FC = () => {
             <div>
               <span className="reader-audio-panel__eyebrow"><Volume2 size={14} /> AUDIOBOOK</span>
               <strong>Chapter audio</strong>
-              <span className={`reader-audio-status reader-audio-status--${audioJob?.status || "idle"}`}>{audioJobLabel}</span>
+              <span className={`reader-audio-status reader-audio-status--${ttsExecutionMode === "server" ? serverAudioJob?.status || "idle" : audioJob?.status || "idle"}`}>{audioJobLabel}</span>
             </div>
-            {audioJob?.provider && <small className="reader-audio-provider">{audioJob.provider.model} · {audioJob.provider.voice}</small>}
+            {ttsExecutionMode === "server" && serverAudioJob ? <small className="reader-audio-provider">{serverAudioJob.provider_model} · {serverAudioJob.provider_voice} · durable</small> : audioJob?.provider && <small className="reader-audio-provider">{audioJob.provider.model} · {audioJob.provider.voice} · local-only</small>}
           </div>
           {ttsEngine === "openai_compatible" ? (
             <>
-              {(audioJob?.status === "generating" || audioJob?.status === "queued" || audioJob?.status === "failed" || audioJob?.status === "cancelled") && (
+              {((ttsExecutionMode === "server" && serverAudioJob && ["queued", "processing", "retry_wait", "failed", "cancelled"].includes(serverAudioJob.status)) || (ttsExecutionMode !== "server" && (audioJob?.status === "generating" || audioJob?.status === "queued" || audioJob?.status === "failed" || audioJob?.status === "cancelled"))) && (
                 <div className="reader-audio-progress" aria-live="polite">
                   <div><span>{audioJobLabel}</span><strong>{audioProgress}%</strong></div>
-                  <progress value={audioJob?.completed_chunks || 0} max={audioJob?.chunks.length || 1} />
-                  {audioJob?.error && <small>{audioJob.error}</small>}
+                  <progress value={ttsExecutionMode === "server" ? serverAudioJob?.completed_parts || 0 : audioJob?.completed_chunks || 0} max={ttsExecutionMode === "server" ? serverAudioJob?.total_parts || 1 : audioJob?.chunks.length || 1} />
+                  {(ttsExecutionMode === "server" ? serverAudioJob?.error : audioJob?.error) && <small>{ttsExecutionMode === "server" ? serverAudioJob?.error : audioJob?.error}</small>}
                 </div>
               )}
               {chapterAudioReady ? (
@@ -728,9 +754,9 @@ const Reader: React.FC = () => {
                 </div>
               ) : (
                 <div className="reader-audio-actions">
-                  <button type="button" className="reader-audio-player__primary" onClick={() => void generateChapterAudio()} disabled={audioJob?.status === "generating"}>{audioJob?.status === "generating" ? "Generating…" : <><WandSparkles size={17} /> {audioJob?.completed_chunks ? "Resume generation" : "Generate chapter audio"}</>}</button>
-                  {audioJob?.status === "generating" && <button type="button" onClick={cancelAudioGeneration}><Pause size={16} /> Pause generation</button>}
-                  {(audioJob?.status === "failed" || audioJob?.status === "cancelled") && <button type="button" onClick={() => void generateChapterAudio()}><RotateCcw size={16} /> Retry</button>}
+                  <button type="button" className="reader-audio-player__primary" onClick={() => void generateChapterAudio()} disabled={ttsExecutionMode === "server" ? ["queued", "processing"].includes(serverAudioJob?.status || "") : audioJob?.status === "generating"}>{(ttsExecutionMode === "server" ? ["queued", "processing"].includes(serverAudioJob?.status || "") : audioJob?.status === "generating") ? "Generating…" : <><WandSparkles size={17} /> {(ttsExecutionMode === "server" ? serverAudioJob?.completed_parts : audioJob?.completed_chunks) ? "Resume generation" : "Generate chapter audio"}</>}</button>
+                  {(ttsExecutionMode === "server" ? ["queued", "processing", "retry_wait"].includes(serverAudioJob?.status || "") : audioJob?.status === "generating") && <button type="button" onClick={() => void cancelAudioGeneration()}><Pause size={16} /> Pause generation</button>}
+                  {(ttsExecutionMode === "server" ? ["failed", "cancelled", "retry_wait"].includes(serverAudioJob?.status || "") : audioJob?.status === "failed" || audioJob?.status === "cancelled") && <button type="button" onClick={() => void generateChapterAudio()}><RotateCcw size={16} /> Retry</button>}
                 </div>
               )}
             </>
