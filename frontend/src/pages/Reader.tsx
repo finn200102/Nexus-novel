@@ -595,7 +595,7 @@ const Reader: React.FC = () => {
       return;
     }
     try {
-      const request = { base_url: providerConfig.baseUrl, model: providerConfig.model, voice: providerConfig.voice, language_code: providerConfig.languageCode };
+      const request = { id: ttsPreset, execution_mode: "server" as const, base_url: providerConfig.baseUrl, model: providerConfig.model, voice: providerConfig.voice, language_code: providerConfig.languageCode };
       const result = preview ? await audioService.preview(request) : await audioService.check(request);
       setProviderDiagnostic(preview ? `Preview succeeded (${result.bytes} bytes of valid WAV audio).` : "Provider is reachable from the Nexus server.");
     } catch (error) {

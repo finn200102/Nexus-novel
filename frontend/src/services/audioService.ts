@@ -24,8 +24,14 @@ export type AudioProviderConfig = {
 
 export const audioService = {
   async providers() { return (await apiClient.get("/audio/providers")).data; },
-  async check(provider: Omit<AudioProviderConfig, "id" | "execution_mode">) { return (await apiClient.post("/audio/providers/check", provider)).data; },
-  async preview(provider: Omit<AudioProviderConfig, "id" | "execution_mode">) { return (await apiClient.post("/audio/providers/preview", provider)).data; },
+  async check(provider: AudioProviderConfig) {
+    const { id, execution_mode: _executionMode, ...request } = provider;
+    return (await apiClient.post(`/audio/providers/${id}/check`, { provider_id: id, ...request })).data;
+  },
+  async preview(provider: AudioProviderConfig) {
+    const { id, execution_mode: _executionMode, ...request } = provider;
+    return (await apiClient.post(`/audio/providers/${id}/preview`, { provider_id: id, ...request })).data;
+  },
   async create(input: { library_id: number; novel_id: number; chapter_number: number; provider: AudioProviderConfig }): Promise<ServerAudioJob> {
     return (await apiClient.post("/audio/jobs", input)).data;
   },

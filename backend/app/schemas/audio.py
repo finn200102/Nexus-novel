@@ -40,6 +40,7 @@ class AudioJobResponse(BaseModel):
 
 
 class ProviderCheckRequest(BaseModel):
+    provider_id: str = "custom"
     base_url: str
     model: str
     voice: str
@@ -57,4 +58,5 @@ class ProviderCapability(BaseModel):
     safe_segment_size: int
     experimental: bool
     supports_preview: bool = True
+    supports_voice_preview: bool = True
     response_formats: list[str] = ["mp3", "wav"]

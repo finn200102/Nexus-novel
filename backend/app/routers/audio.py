@@ -14,7 +14,7 @@ from app.models.library import Library
 from app.models.novel import Novel
 from app.models.user import User
 from app.schemas.audio import AudioJobCreate, AudioJobResponse, ProviderCapability, ProviderCheckRequest, ProviderPreviewRequest
-from app.services.audio_job_service import ACTIVE_AUDIO_STATUSES, PROVIDER_CAPABILITIES, delete_audio_job, queue_audio_job, speech_url
+from app.services.audio_job_service import ACTIVE_AUDIO_STATUSES, PROVIDER_CAPABILITIES, capability_for, delete_audio_job, queue_audio_job, speech_url
 from config.database import get_db
 
 router = APIRouter(prefix="/audio", tags=["audio"])
@@ -39,28 +39,53 @@ def providers():
     return PROVIDER_CAPABILITIES
 
 
-@router.post("/providers/check")
-def check_provider(request: ProviderCheckRequest):
+def _check_provider(request: ProviderCheckRequest, provider_id: str | None = None):
+    capability = capability_for(provider_id or request.provider_id)
     try:
         with httpx.Client(timeout=httpx.Timeout(5.0, connect=3.0)) as client:
             response = client.get(request.base_url.rstrip("/").removesuffix("/v1") + "/v1/models")
             response.raise_for_status()
-        return {"status": "ready", "model": request.model, "voice": request.voice, "response_format": "wav"}
+        return {
+            "status": "ready", "provider_id": capability["id"], "model": request.model,
+            "voice": request.voice, "response_formats": capability.get("response_formats", ["wav"]),
+            "safe_segment_size": capability["safe_segment_size"], "execution_mode": capability["execution_mode"],
+        }
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=503, detail=f"Audio provider is unavailable: {exc}") from exc
 
 
 @router.post("/providers/preview")
-def preview_provider(request: ProviderPreviewRequest):
+def _preview_provider(request: ProviderPreviewRequest, provider_id: str | None = None):
+    capability = capability_for(provider_id or request.provider_id)
     try:
         with httpx.Client(timeout=httpx.Timeout(30.0, connect=5.0)) as client:
             response = client.post(speech_url(request.base_url), json={"model": request.model, "voice": request.voice, "input": request.text, "response_format": "wav", **({"lang_code": request.language_code} if request.language_code else {})})
             response.raise_for_status()
         if not response.content.startswith(b"RIFF"):
             raise HTTPException(status_code=422, detail="Audio provider returned data that is not a WAV preview")
-        return {"status": "ready", "bytes": len(response.content)}
+        return {"status": "ready", "provider_id": capability["id"], "bytes": len(response.content), "response_format": "wav"}
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=503, detail=f"Audio preview failed: {exc}") from exc
+
+
+@router.post("/providers/check")
+def check_provider(request: ProviderCheckRequest):
+    return _check_provider(request)
+
+
+@router.post("/providers/{provider_id}/check")
+def check_named_provider(provider_id: str, request: ProviderCheckRequest):
+    return _check_provider(request, provider_id)
+
+
+@router.post("/providers/preview")
+def preview_provider(request: ProviderPreviewRequest):
+    return _preview_provider(request)
+
+
+@router.post("/providers/{provider_id}/preview")
+def preview_named_provider(provider_id: str, request: ProviderPreviewRequest):
+    return _preview_provider(request, provider_id)
 
 
 @router.post("/jobs", response_model=AudioJobResponse, status_code=202)

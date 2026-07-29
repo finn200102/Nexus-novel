@@ -17,11 +17,11 @@ from app.models.chapter import AudioStatus, Chapter
 
 ACTIVE_AUDIO_STATUSES = ("queued", "processing", "retry_wait")
 PROVIDER_CAPABILITIES = [
-    {"id": "kokoro_mps", "label": "Kokoro · fast local", "execution_mode": "browser", "safe_segment_size": 1100, "experimental": False},
-    {"id": "chatterbox_turbo_mlx", "label": "Chatterbox Turbo · expressive local", "execution_mode": "browser", "safe_segment_size": 900, "experimental": False},
-    {"id": "qwen3_mlx_4bit", "label": "Qwen3-TTS 1.7B · experimental", "execution_mode": "browser", "safe_segment_size": 350, "experimental": True},
-    {"id": "spark_tts_mlx", "label": "Spark-TTS 0.5B · experimental", "execution_mode": "browser", "safe_segment_size": 380, "experimental": True},
-    {"id": "custom", "label": "Custom OpenAI-compatible API", "execution_mode": "server", "safe_segment_size": 900, "experimental": False},
+    {"id": "kokoro_mps", "label": "Kokoro · fast local", "execution_mode": "browser", "safe_segment_size": 1100, "experimental": False, "response_formats": ["wav"]},
+    {"id": "chatterbox_turbo_mlx", "label": "Chatterbox Turbo · expressive local", "execution_mode": "browser", "safe_segment_size": 900, "experimental": False, "response_formats": ["wav"]},
+    {"id": "qwen3_mlx_4bit", "label": "Qwen3-TTS 1.7B · experimental", "execution_mode": "browser", "safe_segment_size": 350, "experimental": True, "response_formats": ["wav"]},
+    {"id": "spark_tts_mlx", "label": "Spark-TTS 0.5B · experimental", "execution_mode": "browser", "safe_segment_size": 380, "experimental": True, "response_formats": ["wav"]},
+    {"id": "custom", "label": "Custom OpenAI-compatible API", "execution_mode": "server", "safe_segment_size": 900, "experimental": False, "response_formats": ["wav", "mp3"]},
 ]
 
 
