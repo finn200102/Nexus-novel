@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Activity, AlertTriangle, CheckCircle2, Clock3, Database, Download, RefreshCw, Server, XCircle } from "lucide-react";
 import { useLibraryContext } from "../context/LibraryContext";
-import { activityService, MetadataJob, OperationsSummary, RefreshSchedule, SourceHealth } from "../services/activityService";
+import { activityService, MetadataJob, OperationsSummary, RefreshSchedule, SourceHealth, SourcePolicySummary } from "../services/activityService";
 import { cancelPendingRequests, getUserFacingError, isRequestCancelled } from "../services/apiClient";
 import { RequestCoordinator, useAdaptivePolling } from "../services/requestResilience";
 import "../styles/operations.css";
@@ -14,6 +14,7 @@ const Operations: React.FC = () => {
   const [schedules, setSchedules] = useState<RefreshSchedule[]>([]);
   const [failedJobs, setFailedJobs] = useState<MetadataJob[]>([]);
   const [sourceHealth, setSourceHealth] = useState<SourceHealth[]>([]);
+  const [sourcePolicy, setSourcePolicy] = useState<SourcePolicySummary | null>(null);
   const [showFailureHistory, setShowFailureHistory] = useState(false);
   const [scheduleDraft, setScheduleDraft] = useState({ site: "", interval_minutes: 360, batch_size: 100 });
   const coordinatorRef = React.useRef(new RequestCoordinator());
@@ -51,12 +52,14 @@ const Operations: React.FC = () => {
           activityService.getRefreshSchedules(),
           activityService.getMetadataJobs(showFailureHistory ? "archived" : "failed"),
           activityService.getSourceHealth(),
+          activityService.getSourcePolicy(),
         ])
       );
-      const [nextSchedules, nextJobs, nextHealth] = nextControls;
+      const [nextSchedules, nextJobs, nextHealth, nextPolicy] = nextControls;
       setSchedules(nextSchedules);
       setFailedJobs(nextJobs);
       setSourceHealth(nextHealth);
+      setSourcePolicy(nextPolicy);
     } catch (requestError) {
       if (!isRequestCancelled(requestError)) {
         setError(getUserFacingError(requestError, "Automation controls are unavailable while the metadata service is offline."));
@@ -195,6 +198,10 @@ const Operations: React.FC = () => {
     <section className="operations-panel">
       <header><h2>Source health</h2><span>{sourceHealth.length} tracked</span></header>
       {sourceHealth.length ? <div className="operations-control-list">{sourceHealth.map((source) => <div className="operations-control-row" key={source.site}><div><strong>{source.site} · {source.status}</strong><small>{source.failure_count} failures{source.last_error ? ` · ${source.last_error}` : ""}</small></div><button type="button" className="operations-action operations-action--quiet" onClick={() => void resetSource(source)}>Reset circuit</button></div>)}</div> : <p className="operations-empty">No source health records.</p>}
+    </section>
+    <section className="operations-panel">
+      <header><h2>Source policy</h2><span>Last {sourcePolicy?.hours || 24} hours · privacy-safe metadata only</span></header>
+      {sourcePolicy?.sources.length ? <div className="operations-control-list">{sourcePolicy.sources.map((source) => <div className="operations-control-row" key={source.site}><div><strong>{source.site} · {source.circuit_state}</strong><small>{source.requests} requests · {source.cache_hit_percent}% cache hit · {source.average_latency_ms}ms average · queue work {source.average_job_duration_seconds}s{source.last_error_category ? ` · last ${source.last_error_category}` : ""}</small></div><span className="operations-policy-retention">{source.retention_days}d retention</span></div>)}</div> : <p className="operations-empty">No source requests have been recorded yet. Metadata is recorded after the first gateway request.</p>}
     </section>
     <section className="operations-notice"><CheckCircle2 size={17} /><p><strong>Automation is event-driven.</strong> Source refreshes create update events and eligible downloads. Paused, completed, dropped, and ignored stories are excluded from automatic actions.</p></section>
     {summary?.source_failures ? <section className="operations-alert operations-alert--warning"><XCircle size={17} /> {summary.source_failures} source failure event(s) need attention in the Activity feed.</section> : null}

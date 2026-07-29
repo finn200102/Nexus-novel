@@ -169,177 +169,18 @@ def download_chapter_background(
             )
             return
 
-        site_story_id = novel.story_id or novel.site_story_id
         metadata_id = novel.metadata_id
-        site_name = get_site_name_from_url(novel.url)
-
-        logger.info(
-            "Starting story_id resolution",
-            extra={
-                "novel_id": novel_id,
-                "current_story_id": site_story_id,
-                "metadata_id": metadata_id,
-            },
-        )
-
-        if not site_story_id and metadata_id:
-            logger.info(
-                "story_id is null, trying to fetch from metadata",
-                extra={"novel_id": novel_id},
-            )
-
-            try:
-                metadata_client.cache.invalidate(f"novel:{int(metadata_id)}")
-                metadata_data = asyncio.run(
-                    metadata_client.get_novel_metadata(int(metadata_id))
-                )
-                fetched_story_id = (
-                    metadata_data.get("story_id") if metadata_data else None
-                )
-                logger.info(
-                    "get_novel_metadata response",
-                    extra={
-                        "metadata_id": metadata_id,
-                        "has_data": bool(metadata_data),
-                        "story_id": fetched_story_id,
-                    },
-                )
-
-                if fetched_story_id:
-                    site_story_id = fetched_story_id
-                    logger.info(
-                        "Got story_id from get_novel_metadata",
-                        extra={"novel_id": novel_id, "story_id": site_story_id},
-                    )
-                    novel_services.update_novel(
-                        db,
-                        novel.id,
-                        {
-                            "story_id": fetched_story_id,
-                            "site_story_id": fetched_story_id,
-                        },
-                    )
-                else:
-                    logger.warning(
-                        "get_novel_metadata returned null story_id, trying chapters endpoint",
-                        extra={"metadata_id": metadata_id},
-                    )
-            except Exception as e:
-                logger.error(
-                    "Failed to get story_id from metadata",
-                    extra={"metadata_id": metadata_id, "error": str(e)},
-                )
-
-        if not site_story_id and metadata_id:
-            logger.info(
-                "Trying to get story_id from chapters metadata",
-                extra={"novel_id": novel_id},
-            )
-            try:
-                metadata_client.invalidate_novel_cache(int(metadata_id))
-                chapters_data = asyncio.run(
-                    metadata_client.get_chapters_from_metadata(int(metadata_id))
-                )
-                chapter_count = len(chapters_data) if chapters_data else 0
-                first_story_id = (
-                    chapters_data[0].get("story_id") if chapters_data else None
-                )
-                logger.info(
-                    "get_chapters_from_metadata response",
-                    extra={
-                        "metadata_id": metadata_id,
-                        "chapter_count": chapter_count,
-                        "first_story_id": first_story_id,
-                    },
-                )
-
-                if chapters_data and len(chapters_data) > 0:
-                    fetched_story_id = chapters_data[0].get("story_id")
-                    if fetched_story_id:
-                        site_story_id = fetched_story_id
-                        logger.info(
-                            "Got story_id from chapters metadata",
-                            extra={"novel_id": novel_id, "story_id": site_story_id},
-                        )
-                        novel_services.update_novel(
-                            db,
-                            novel.id,
-                            {
-                                "story_id": fetched_story_id,
-                                "site_story_id": fetched_story_id,
-                            },
-                        )
-                    else:
-                        logger.warning(
-                            "No story_id found in chapters metadata either",
-                            extra={"metadata_id": metadata_id},
-                        )
-            except Exception as e:
-                logger.error(
-                    "Failed to get story_id from chapters metadata",
-                    extra={"metadata_id": metadata_id, "error": str(e)},
-                )
-
-        if not site_story_id:
-            logger.info(
-                "story_id is null, extracting from URL",
-                extra={"novel_id": novel_id},
-            )
-            site_story_id = extract_story_id_from_url(novel.url, site_name)
-            if site_story_id:
-                logger.info(
-                    "Extracted story_id from URL",
-                    extra={"novel_id": novel_id, "story_id": site_story_id},
-                )
-                # Persist the recovered source key so every later chapter uses
-                # the same stable identity without repeating URL parsing.
-                novel_services.update_novel(
-                    db,
-                    novel.id,
-                    {"story_id": site_story_id, "site_story_id": site_story_id},
-                )
-            else:
-                logger.error("Could not extract story_id from URL", novel_id=novel_id)
-                chapter_services.update_chapter(
-                    db,
-                    chapter_id,
-                    {
-                        "content_status": ContentStatus.FAILED,
-                        "download_finished_at": datetime.utcnow(),
-                        "download_error": "Could not determine story_id from URL",
-                    },
-                )
-                return
-
-        site_chapter_id = chapter.site_chapter_id
-        if site_chapter_id is None:
-            logger.error(
-                "Chapter missing site_chapter_id for background download",
-                chapter_id=chapter_id,
-            )
+        if not metadata_id:
+            # Source access is deliberately centralized in Nexus Server. Old
+            # local-only rows have no durable source identity to delegate.
+            logger.error("Chapter has no metadata-server identity", novel_id=novel_id)
             chapter_services.update_chapter(
                 db,
                 chapter_id,
                 {
                     "content_status": ContentStatus.FAILED,
                     "download_finished_at": datetime.utcnow(),
-                    "download_error": "Chapter missing site_chapter_id",
-                },
-            )
-            return
-
-        if not site_name:
-            logger.error(
-                "Could not determine site name for background download",
-                novel_id=novel_id,
-            )
-            chapter_services.update_chapter(
-                db,
-                chapter_id,
-                {
-                    "content_status": ContentStatus.FAILED,
-                    "download_finished_at": datetime.utcnow(),
-                    "download_error": "Could not determine site name from URL",
+                    "download_error": "Novel has no Nexus Server identity; refresh metadata first",
                 },
             )
             return
@@ -347,15 +188,12 @@ def download_chapter_background(
         try:
             start_time = time.time()
             try:
-                py_chapter = asyncio.run(
-                    fetch_chapter(
-                        int(site_story_id),
-                        chapter_number,
-                        int(site_chapter_id),
-                        site_name,
-                        timeout=float(os.getenv("NEXUS_CHAPTER_DOWNLOAD_TIMEOUT", "180")),
-                    )
-                )
+                # Nexus Server owns source access. This keeps WebNovel and all
+                # other source-policy decisions in one durable gateway.
+                fetched = asyncio.run(metadata_client.fetch_public_chapter_text(int(metadata_id), chapter_number)) if metadata_id else None
+                py_chapter = None
+                if not fetched:
+                    raise RuntimeError("Chapter has no metadata-server identity")
             except asyncio.TimeoutError:
                 logger.error(
                     "Chapter download timed out",
@@ -377,7 +215,7 @@ def download_chapter_background(
                 f"Chapter download took {elapsed:.2f} seconds", chapter_id=chapter_id
             )
 
-            chapter_data = parse_single_chapter_data(py_chapter)
+            chapter_data = {"content": fetched.get("text"), "title": fetched.get("title") or chapter.title} if fetched else parse_single_chapter_data(py_chapter)
 
             if chapter_data:
                 chapter_data["content_status"] = ContentStatus.PRESENT

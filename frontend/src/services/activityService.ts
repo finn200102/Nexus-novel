@@ -65,6 +65,8 @@ export interface SourceHealth {
   last_error?: string | null;
 }
 
+export interface SourcePolicySummary { hours: number; sources: Array<{ site: string; requests: number; cache_hit_percent: number; average_latency_ms: number; last_request_at: string | null; circuit_state: string; last_error_category: string | null; average_job_duration_seconds: number; retention_days: number; }>; }
+
 export const activityService = {
   async getFeed(libraryId: number, unreadOnly = false): Promise<ActivityEvent[]> {
     const response = await apiClient.get(`/activity/feed?library_id=${libraryId}&unread_only=${unreadOnly}`);
@@ -125,6 +127,10 @@ export const activityService = {
   },
   async resetSourceHealth(site: string): Promise<SourceHealth> {
     const response = await apiClient.post(`/operations/source-health/${encodeURIComponent(site)}/reset`);
+    return response.data;
+  },
+  async getSourcePolicy(): Promise<SourcePolicySummary> {
+    const response = await apiClient.get("/operations/source-policy");
     return response.data;
   },
   async markAllRead(libraryId: number): Promise<number> {

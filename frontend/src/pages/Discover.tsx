@@ -36,6 +36,11 @@ const EMPTY_FILTERS: DiscoveryFilters = {
   minFollows: "",
   minReviews: "",
   minChapterCount: "",
+  maxWordCount: "",
+  updatedSinceDays: "",
+  label: "",
+  labelOrigin: "",
+  importState: "",
   sortBy: "updated",
   sortOrder: "desc",
 };
@@ -371,6 +376,16 @@ const Discover: React.FC = () => {
               <input type="number" min="0" value={filters.minWordCount} onChange={(event) => updateFilter("minWordCount", event.target.value)} placeholder="0" />
             </label>
             <label>
+              Max words
+              <input type="number" min="0" value={filters.maxWordCount} onChange={(event) => updateFilter("maxWordCount", event.target.value)} placeholder="No maximum" />
+            </label>
+            <label>
+              Updated within
+              <select value={filters.updatedSinceDays} onChange={(event) => updateFilter("updatedSinceDays", event.target.value)}>
+                <option value="">Any time</option><option value="7">7 days</option><option value="30">30 days</option><option value="90">90 days</option><option value="365">1 year</option>
+              </select>
+            </label>
+            <label>
               Min favorites
               <input type="number" min="0" value={filters.minFavorites} onChange={(event) => updateFilter("minFavorites", event.target.value)} placeholder="0" />
             </label>
@@ -385,6 +400,20 @@ const Discover: React.FC = () => {
             <label>
               Min chapters
               <input type="number" min="0" value={filters.minChapterCount} onChange={(event) => updateFilter("minChapterCount", event.target.value)} placeholder="0" />
+            </label>
+            <label>
+              Label
+              <input value={filters.label} onChange={(event) => updateFilter("label", event.target.value)} placeholder="e.g. cozy" />
+            </label>
+            <label>
+              Label origin
+              <select value={filters.labelOrigin} onChange={(event) => updateFilter("labelOrigin", event.target.value)}>
+                <option value="">Any label</option><option value="ai">AI label</option><option value="user">My label</option><option value="community">Community label</option>
+              </select>
+            </label>
+            <label>
+              Import state
+              <select value={filters.importState} onChange={(event) => updateFilter("importState", event.target.value)}><option value="">Ready only</option><option value="in_progress">Imports in progress</option></select>
             </label>
             <label>
               Sort by

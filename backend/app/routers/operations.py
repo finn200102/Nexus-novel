@@ -258,6 +258,11 @@ def list_source_health(current_user: User = Depends(get_current_user)):
     return _metadata_proxy("GET", "/api/jobs/source-health")
 
 
+@router.get("/source-policy")
+def source_policy(hours: int = Query(default=24, ge=1, le=720), current_user: User = Depends(get_current_user)):
+    return _metadata_proxy("GET", "/source-policy/summary", params={"hours": hours})
+
+
 @router.post("/source-health/{site}/reset")
 def reset_source_health(site: str, current_user: User = Depends(get_current_user)):
     return _metadata_proxy("POST", f"/api/jobs/source-health/{site}/reset")

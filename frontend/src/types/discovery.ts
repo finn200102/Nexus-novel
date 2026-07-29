@@ -35,6 +35,11 @@ export interface DiscoveryFilters {
   minFollows: string;
   minReviews: string;
   minChapterCount: string;
+  maxWordCount: string;
+  updatedSinceDays: string;
+  label: string;
+  labelOrigin: string;
+  importState: string;
   sortBy: string;
   sortOrder: string;
 }

@@ -79,6 +79,9 @@ const Reader: React.FC = () => {
   const [chaptersLoading, setChaptersLoading] = useState<boolean>(true);
   const [chaptersError, setChaptersError] = useState<string | null>(null);
   const [fontScale, setFontScale] = useState(() => Number(localStorage.getItem("nexus-reader-font-scale")) || 1);
+  const [lineHeight, setLineHeight] = useState(() => Number(localStorage.getItem("nexus-reader-line-height")) || 1.8);
+  const [contentWidth, setContentWidth] = useState(() => Number(localStorage.getItem("nexus-reader-content-width")) || 760);
+  const [chapterQuery, setChapterQuery] = useState("");
   const [theme, setTheme] = useState<"night" | "dusk" | "paper">(() => (localStorage.getItem("nexus-reader-theme") as "night" | "dusk" | "paper") || "night");
   const [progress, setProgress] = useState<ReadingProgress | null>(null);
   const [annotations, setAnnotations] = useState<ReadingAnnotation[]>([]);
@@ -178,6 +181,9 @@ const Reader: React.FC = () => {
     localStorage.setItem("nexus-reader-font-scale", String(fontScale));
   }, [fontScale]);
 
+  useEffect(() => { localStorage.setItem("nexus-reader-line-height", String(lineHeight)); }, [lineHeight]);
+  useEffect(() => { localStorage.setItem("nexus-reader-content-width", String(contentWidth)); }, [contentWidth]);
+
   useEffect(() => {
     localStorage.setItem("nexus-reader-theme", theme);
   }, [theme]);
@@ -257,6 +263,10 @@ const Reader: React.FC = () => {
       if (event.key === "ArrowLeft") goToChapter(chapter_number - 1);
       if (event.key === "ArrowRight") goToChapter(chapter_number + 1);
       if (event.key.toLowerCase() === "b") void addAnnotation("bookmark");
+      if (event.key.toLowerCase() === "j") goToChapter(chapter_number + 1);
+      if (event.key.toLowerCase() === "k") goToChapter(chapter_number - 1);
+      if (event.key === "[") setFontScale((value) => Math.max(0.85, value - 0.1));
+      if (event.key === "]") setFontScale((value) => Math.min(1.3, value + 0.1));
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -677,6 +687,14 @@ const Reader: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
+  const exportSelectedQuote = async () => {
+    const quote = window.getSelection()?.toString().trim();
+    if (!quote) { setAudioPlayerError("Select text in the chapter first, then export the quote."); return; }
+    const payload = `“${quote}”\n— ${novel?.title || "Nexus"}, chapter ${chapter?.chapter_number || ""}`;
+    try { await navigator.clipboard.writeText(payload); setProviderDiagnostic("Quote copied to your clipboard."); }
+    catch { const blob = new Blob([payload], { type: "text/plain" }); const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = "nexus-quote.txt"; link.click(); URL.revokeObjectURL(url); }
+  };
+
   if (loading) return <div className="reader-loading">Loading content...</div>;
   if (error && !chapter) return <div className="reader-error">{error}</div>;
   if (!chapter || !novel)
@@ -717,6 +735,7 @@ const Reader: React.FC = () => {
             {chapter.chapter_number}/{novel.total_chapters}
           </span>
         </div>
+        <label className="reader-sidebar__jump">Jump to chapter<input aria-label="Search chapters" value={chapterQuery} onChange={(event) => setChapterQuery(event.target.value)} placeholder="Number or title" /></label>
         <div className="reader-sidebar__list">
           {chaptersLoading && (
             <p className="reader-sidebar__status">Loading…</p>
@@ -728,7 +747,7 @@ const Reader: React.FC = () => {
           )}
           {!chaptersLoading && !chaptersError && (
             <ul>
-              {chapters.map((item) => (
+              {chapters.filter((item) => !chapterQuery || String(item.chapter_number).includes(chapterQuery) || item.title.toLowerCase().includes(chapterQuery.toLowerCase())).map((item) => (
                 <li key={item.id}>
                   <button
                     type="button"
@@ -741,6 +760,7 @@ const Reader: React.FC = () => {
                   >
                     <span className="chapter-number">{item.chapter_number}</span>
                     <span className="chapter-title">{item.title || "Untitled"}</span>
+                    {progress?.chapter_number && item.chapter_number > progress.chapter_number && <span className="reader-unread-marker" aria-label="Unread chapter">New</span>}
                   </button>
                 </li>
               ))}
@@ -766,6 +786,7 @@ const Reader: React.FC = () => {
               <div className="reader-type-controls" aria-label="Chapter actions">
                 <button type="button" onClick={() => void addAnnotation("bookmark")}>Bookmark</button>
                 <button type="button" onClick={() => void addAnnotation("note")}>Note</button>
+                <button type="button" onClick={() => void exportSelectedQuote()}>Quote</button>
                 <button type="button" onClick={exportReadingState}>Export</button>
                 <button type="button" onClick={() => void keepChapterOffline()}>Offline {offlineChapterCount}</button>
               </div>
@@ -822,7 +843,7 @@ const Reader: React.FC = () => {
         <div
           ref={contentRef}
           className="reader-content"
-          style={{ fontSize: `${1.05 * fontScale}rem` }}
+          style={{ fontSize: `${1.05 * fontScale}rem`, lineHeight, maxWidth: `${contentWidth}px` }}
         >
           {chapter.content.split("\n").map((paragraph, index) => (
             <p key={index}>{paragraph}</p>
@@ -853,6 +874,9 @@ const Reader: React.FC = () => {
           <div className="reader-theme-controls">
             {themeOptions.map((option) => <button key={option.value} type="button" className={theme === option.value ? "is-active" : ""} onClick={() => setTheme(option.value)}>{option.label}</button>)}
           </div>
+          <label>Line height <select value={lineHeight} onChange={(event) => setLineHeight(Number(event.target.value))}><option value={1.5}>Compact</option><option value={1.8}>Comfortable</option><option value={2.1}>Relaxed</option></select></label>
+          <label>Reading width <select value={contentWidth} onChange={(event) => setContentWidth(Number(event.target.value))}><option value={620}>Narrow</option><option value={760}>Balanced</option><option value={920}>Wide</option></select></label>
+          <small>Shortcuts: ←/→ or J/K chapters · B bookmark · [ / ] text size.</small>
         </section>
         <section className="reader-inspector__section">
           <header><strong>TTS settings</strong></header>

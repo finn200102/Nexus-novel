@@ -177,6 +177,12 @@ async def get_novel_metadata(novel_id: int) -> dict:
     return data
 
 
+async def fetch_public_chapter_text(metadata_novel_id: int, chapter_number: int) -> dict:
+    """Delegate source access to Nexus Server; no local scraper bypass."""
+    response = await _request("POST", f"/chapters/novel/{metadata_novel_id}/{chapter_number}/fetch", timeout=BACKGROUND_TIMEOUT)
+    return response.json()
+
+
 async def refresh_novel_metadata(novel_id: int) -> dict:
     logger.info("Refreshing novel metadata", novel_id=novel_id)
     cache.invalidate(f"novel:{novel_id}")
@@ -234,6 +240,11 @@ async def list_novels_metadata(
     min_follows: Optional[int] = None,
     min_reviews: Optional[int] = None,
     min_chapter_count: Optional[int] = None,
+    max_word_count: Optional[int] = None,
+    updated_since_days: Optional[int] = None,
+    label: Optional[str] = None,
+    label_origin: Optional[str] = None,
+    import_state: Optional[str] = None,
     sort_by: str = "updated",
     sort_order: str = "desc",
     limit: int = 100,
@@ -256,6 +267,11 @@ async def list_novels_metadata(
         "min_follows": min_follows,
         "min_reviews": min_reviews,
         "min_chapter_count": min_chapter_count,
+        "max_word_count": max_word_count,
+        "updated_since_days": updated_since_days,
+        "label": label,
+        "label_origin": label_origin,
+        "import_state": import_state,
         "sort_by": sort_by,
         "sort_order": sort_order,
     }.items():

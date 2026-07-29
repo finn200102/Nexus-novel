@@ -39,6 +39,11 @@ export const discoveryService = {
         minFollows: "min_follows",
         minReviews: "min_reviews",
         minChapterCount: "min_chapter_count",
+        maxWordCount: "max_word_count",
+        updatedSinceDays: "updated_since_days",
+        label: "label",
+        labelOrigin: "label_origin",
+        importState: "import_state",
         sortBy: "sort_by",
         sortOrder: "sort_order",
       };
