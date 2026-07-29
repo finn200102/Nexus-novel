@@ -38,6 +38,7 @@ from datetime import datetime
 from io import BytesIO
 from html import escape
 from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
+import re
 
 
 # Load environment variables
@@ -49,6 +50,30 @@ router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 logger = get_logger(__name__)
+
+
+def extract_story_id_from_url(url: str | None, site_name: str | None) -> int | None:
+    """Return the source's stable story/thread ID from a canonical work URL.
+
+    Catalog imports intentionally create a lightweight manifest first.  Those
+    records do not always carry the scraper's ``story_id`` yet, so chapter
+    downloads must be able to recover it from the source URL.  Keep this
+    source-aware rather than applying the old WebNovel-only expression to
+    every connector.
+    """
+    value = str(url or "")
+    patterns = {
+        "fanfiction": r"/s/(\d+)(?:/|$)",
+        "royalroad": r"/fiction/(\d+)(?:/|$)",
+        "spacebattles": r"/threads/(?:[^/]+\.)?(\d+)(?:/|$)",
+        "archive": r"/works/(\d+)(?:/|$)",
+        "webnovel": r"/book/[^_/?]+_(\d+)(?:[/?]|$)",
+    }
+    pattern = patterns.get(site_name or "")
+    if not pattern:
+        return None
+    match = re.search(pattern, value, flags=re.IGNORECASE)
+    return int(match.group(1)) if match else None
 
 
 def run_queued_download(job_id: int, db_session_factory):
@@ -260,15 +285,18 @@ def download_chapter_background(
                 "story_id is null, extracting from URL",
                 extra={"novel_id": novel_id},
             )
-            import re
-
-            novel_url = str(novel.url) if novel.url else ""
-            match = re.search(r"/book/[^_]+_(\d+)", novel_url)
-            if match:
-                site_story_id = match.group(1)
+            site_story_id = extract_story_id_from_url(novel.url, site_name)
+            if site_story_id:
                 logger.info(
                     "Extracted story_id from URL",
                     extra={"novel_id": novel_id, "story_id": site_story_id},
+                )
+                # Persist the recovered source key so every later chapter uses
+                # the same stable identity without repeating URL parsing.
+                novel_services.update_novel(
+                    db,
+                    novel.id,
+                    {"story_id": site_story_id, "site_story_id": site_story_id},
                 )
             else:
                 logger.error("Could not extract story_id from URL", novel_id=novel_id)
@@ -317,9 +345,6 @@ def download_chapter_background(
             return
 
         try:
-            import time
-            import asyncio
-
             start_time = time.time()
             try:
                 py_chapter = asyncio.run(

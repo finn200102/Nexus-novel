@@ -13,6 +13,7 @@ from app.services.user_services import create_user
 from app.auth.jwt import create_access_token
 import os
 from pathlib import Path
+from app.routers.chapter import extract_story_id_from_url
 
 
 def create_test_user(db):
@@ -160,6 +161,27 @@ def test_get_downloaded_chapter_content(client, db):
 
 def test_download_chapter(client, db):
     pytest.skip("Download functionality requires pybindings and metadata server")
+
+
+@pytest.mark.parametrize(
+    ("url", "site", "expected"),
+    [
+        ("https://www.fanfiction.net/s/6928484", "fanfiction", 6928484),
+        ("https://www.fanfiction.net/s/5782108/1/title", "fanfiction", 5782108),
+        ("https://www.royalroad.com/fiction/65629/the-game-at-carousel", "royalroad", 65629),
+        ("https://forums.spacebattles.com/threads/story-name.428998", "spacebattles", 428998),
+        ("https://forums.spacebattles.com/threads/428998/", "spacebattles", 428998),
+        ("https://archiveofourown.org/works/12345/chapters/67890", "archive", 12345),
+        ("https://www.webnovel.com/book/example_12345", "webnovel", 12345),
+    ],
+)
+def test_extract_story_id_from_supported_source_urls(url, site, expected):
+    assert extract_story_id_from_url(url, site) == expected
+
+
+def test_extract_story_id_rejects_unknown_or_invalid_urls():
+    assert extract_story_id_from_url("https://example.test/works/123", "unknown") is None
+    assert extract_story_id_from_url("https://www.royalroad.com/fictions/123", "royalroad") is None
 
 
 def test_queue_chapter_downloads_persists_jobs(client, db, monkeypatch):
