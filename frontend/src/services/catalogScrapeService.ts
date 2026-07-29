@@ -6,7 +6,7 @@ export interface CatalogQuery {
   language: string; status: string; min_words: number | null; max_words: number | null;
   min_reviews: number; min_favorites: number; min_follows: number; time_field: string;
   time_range: string; sort: string; limit: number; max_pages: number; custom_urls?: string[]; search_text?: string;
-  include_tags?: string[]; exclude_tags?: string[]; source_options?: Record<string, unknown>;
+  include_tags?: string[]; exclude_tags?: string[]; content_warnings?: string[]; source_options?: Record<string, unknown>;
 }
 export interface CatalogCandidate { id?: number; site?: string; title?: string; author?: string; source_url: string; source_key?: string; status?: string; word_count?: number; reviews?: number; favorites?: number; follows?: number; updated?: string; matched?: boolean; skip_reason?: string; candidate_status?: string; import_job_id?: string; listing_metadata?: Record<string, any>; request_snapshot?: Record<string, unknown>; }
 export interface CatalogSourceCapability { site: string; name: string; adapter_version: number; modes: string[]; filters: string[]; remote_filters: string[]; local_filters: string[]; media?: { value: string; label: string }[]; rate_limit: string; policy?: string; }
