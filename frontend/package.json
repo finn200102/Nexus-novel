@@ -16,7 +16,8 @@
     "test:e2e:local": "playwright test authentication.spec.ts catalog-operations.spec.ts",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:debug": "playwright test --debug",
-    "test:e2e:docker": "playwright test --config=playwright.docker.config.ts"
+    "test:e2e:docker": "playwright test --config=playwright.docker.config.ts",
+    "test:e2e:docker:full": "sh scripts/docker-acceptance.sh"
   },
   "dependencies": {
     "axios": "^1.8.3",

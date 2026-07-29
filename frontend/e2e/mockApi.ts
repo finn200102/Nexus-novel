@@ -134,7 +134,11 @@ export async function installMockApi(page: Page, options: MockApiOptions = {}) {
       return;
     }
     if (path.startsWith("/catalog-scrapes/jobs/") && path.endsWith("/candidates?limit=100")) {
-      await json(route, [{ id: 1, source_url: "https://www.fanfiction.net/s/123456/1/a-fixture-story", candidate_status: "import_queued", listing_metadata: { title: "A Fixture Story" } }]);
+      await json(route, [{ id: 1, source_url: "https://www.fanfiction.net/s/123456/1/a-fixture-story", candidate_status: "matched", listing_metadata: { title: "A Fixture Story" } }]);
+      return;
+    }
+    if (/^\/catalog-scrapes\/jobs\/[^/]+\/candidates\/\d+$/.test(path) && method === "PATCH") {
+      await json(route, { id: 1, source_url: "https://www.fanfiction.net/s/123456/1/a-fixture-story", candidate_status: "ignored", skip_reason: "Ignored by administrator", listing_metadata: { title: "A Fixture Story" } });
       return;
     }
     if (path.startsWith("/catalog-scrapes/jobs/") && method === "GET") {

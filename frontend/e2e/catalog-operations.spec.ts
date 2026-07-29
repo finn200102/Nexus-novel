@@ -14,6 +14,8 @@ test.describe("catalog and operations resilience", () => {
     await expect(signedInPage.getByRole("heading", { name: "Job progress" })).toBeVisible();
     await expect(signedInPage.getByText(/Scanning page \d/).first()).toBeVisible();
     await expect(signedInPage.getByText("1", { exact: true }).first()).toBeVisible();
+    await signedInPage.getByRole("button", { name: "Ignore" }).click();
+    await expect(signedInPage.getByText("Ignored by administrator")).toBeVisible();
   });
 
   test("keeps the catalog page usable after a preview timeout and recovers on retry", async ({ page }) => {
