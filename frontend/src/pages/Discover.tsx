@@ -73,6 +73,7 @@ const Discover: React.FC = () => {
   const locationSearch = window.location.search;
   const queryParams = new URLSearchParams(locationSearch);
   const searchFromUrl = queryParams.get("q") || "";
+  const similarToFromUrl = Number(queryParams.get("similar_to")) || null;
   const filtersFromUrl = (() => {
     try { return { ...EMPTY_FILTERS, ...JSON.parse(queryParams.get("filters") || "{}") } as DiscoveryFilters; }
     catch { return EMPTY_FILTERS; }
@@ -96,7 +97,7 @@ const Discover: React.FC = () => {
     setSearch(searchFromUrl);
     setFilters(filtersFromUrl);
     setAppliedFilters(filtersFromUrl);
-    void fetchNovels(currentSite, 1, searchFromUrl, filtersFromUrl);
+    void fetchNovels(currentSite, 1, searchFromUrl, filtersFromUrl, similarToFromUrl);
     return () => cancelPendingRequests("/discovery/novels/");
   }, [currentSite, locationSearch]);
 
@@ -108,7 +109,8 @@ const Discover: React.FC = () => {
     siteValue: string,
     page: number,
     title = search,
-    activeFilters = appliedFilters
+    activeFilters = appliedFilters,
+    similarTo = similarToFromUrl,
   ) => {
     const cursor = page > 1 ? nextCursor : null;
     const key = `discover:${siteValue}:${page}:${title}:${cursor}:${JSON.stringify(activeFilters)}`;
@@ -126,7 +128,8 @@ const Discover: React.FC = () => {
           ITEMS_PER_PAGE,
           cursor,
           title,
-          activeFilters
+          activeFilters,
+          similarTo,
         ));
 
       console.log("Fetched novels:", response.data.slice(0, 3).map(n => ({ id: n.id, title: n.title?.slice(0, 30), img_url: n.img_url })));
@@ -158,7 +161,7 @@ const Discover: React.FC = () => {
     setNextCursor(null);
     setHasMore(true);
     setIsRefreshing(true);
-    void fetchNovels(currentSite, 1, searchFromUrl, appliedFilters).finally(() => {
+    void fetchNovels(currentSite, 1, searchFromUrl, appliedFilters, similarToFromUrl).finally(() => {
       setIsRefreshing(false);
     });
   };
@@ -174,11 +177,11 @@ const Discover: React.FC = () => {
 
   const handleLoadMore = () => {
     if (nextCursor !== null) {
-      void fetchNovels(currentSite, 2);
+    void fetchNovels(currentSite, 2, search, appliedFilters, similarToFromUrl);
     }
   };
 
-  useAdaptivePolling(() => fetchNovels(currentSite, 1, searchFromUrl, appliedFilters), true, {
+  useAdaptivePolling(() => fetchNovels(currentSite, 1, searchFromUrl, appliedFilters, similarToFromUrl), true, {
     // Discover has no active job to monitor; refreshing it aggressively only
     // creates avoidable load while a source worker is busy elsewhere.
     activeMs: 15000,

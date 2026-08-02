@@ -14,7 +14,8 @@ export const discoveryService = {
     limit: number = 20,
     cursor: number | null = null,
     title: string | null = null,
-    filters?: Partial<DiscoveryFilters>
+    filters?: Partial<DiscoveryFilters>,
+    similarTo?: number | null,
   ): Promise<PaginatedResponse<DiscoveredNovel>> {
     try {
       const params: Record<string, string | number | null> = {
@@ -28,6 +29,9 @@ export const discoveryService = {
       }
       if (title?.trim()) {
         params.title = title.trim();
+      }
+      if (similarTo) {
+        params.similar_to = similarTo;
       }
       const filterParams: Record<keyof DiscoveryFilters, string> = {
         tag: "tag",

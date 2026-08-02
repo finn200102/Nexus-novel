@@ -33,6 +33,7 @@ async def get_novels(
     label: Optional[str] = Query(None),
     label_origin: Optional[str] = Query(None, pattern="^(source|ai|user|community)$"),
     import_state: Optional[str] = Query(None, pattern="^(ready|in_progress)$"),
+    similar_to: Optional[int] = Query(None, ge=1, description="Return works similar to this Nexus work"),
     sort_by: str = Query("updated"),
     sort_order: str = Query("desc", pattern="^(asc|desc)$"),
     limit: int = Query(20, ge=1, le=100, description="Max items to return"),
@@ -58,6 +59,7 @@ async def get_novels(
         label=label,
         label_origin=label_origin,
         import_state=import_state,
+        similar_to=similar_to,
         sort_by=sort_by,
         sort_order=sort_order,
         limit=limit,
@@ -88,6 +90,11 @@ async def get_similar_novels(
     current_user: User = Depends(get_current_user),
 ):
     return await metadata_client.get_similar_novels(novel_id, limit)
+
+
+@router.get("/novels/{novel_id}/editions")
+async def get_novel_editions(novel_id: int, current_user: User = Depends(get_current_user)):
+    return await metadata_client.get_canonical_work(novel_id)
 
 
 @router.get("/sites/")

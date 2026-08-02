@@ -265,6 +265,12 @@ async def get_similar_novels(metadata_novel_id: int, limit: int = 12) -> dict:
     return response.json()
 
 
+async def get_canonical_work(metadata_novel_id: int) -> dict:
+    """Return the edition group without exposing metadata-server credentials."""
+    response = await _request("GET", f"/canonical-works/by-novel/{metadata_novel_id}", timeout=INTERACTIVE_TIMEOUT)
+    return response.json()
+
+
 async def fetch_public_chapter_text(metadata_novel_id: int, chapter_number: int) -> dict:
     """Delegate source access to Nexus Server; no local scraper bypass."""
     response = await _request("POST", f"/chapters/novel/{metadata_novel_id}/{chapter_number}/fetch", timeout=BACKGROUND_TIMEOUT)
@@ -362,6 +368,7 @@ async def list_novels_metadata(
     label: Optional[str] = None,
     label_origin: Optional[str] = None,
     import_state: Optional[str] = None,
+    similar_to: Optional[int] = None,
     sort_by: str = "updated",
     sort_order: str = "desc",
     limit: int = 100,
@@ -389,6 +396,7 @@ async def list_novels_metadata(
         "label": label,
         "label_origin": label_origin,
         "import_state": import_state,
+        "similar_to": similar_to,
         "sort_by": sort_by,
         "sort_order": sort_order,
     }.items():
