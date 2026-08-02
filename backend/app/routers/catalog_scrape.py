@@ -35,9 +35,16 @@ async def _request(method: str, path: str, *, json: dict | None = None, params: 
     # its own source timeout; this shorter gateway timeout gives the browser a
     # deterministic, actionable response when a source is blocked or degraded.
     timeout = 15.0 if path == "/catalog-scrapes/preview" else 30.0
+    headers = {"X-API-Key": settings.METADATA_API_KEY} if settings.METADATA_API_KEY else {}
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
-            response = await client.request(method, f"{settings.METADATA_SERVER_URL}{path}", json=json, params=params)
+            response = await client.request(
+                method,
+                f"{settings.METADATA_SERVER_URL}{path}",
+                json=json,
+                params=params,
+                headers=headers,
+            )
     except httpx.TimeoutException as exc:
         raise HTTPException(status_code=504, detail="Metadata server timed out while contacting the source. Check source health and retry later.") from exc
     except httpx.RequestError as exc:

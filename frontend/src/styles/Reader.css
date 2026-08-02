@@ -636,3 +636,5 @@
   .reader-inspector { grid-template-columns: 1fr; }
   .reader-inspector .reader-annotations { grid-column: auto; }
 }
+/* Cadence is advisory: it never replaces a source's own publication status. */
+.reader-hiatus { display: grid; gap: 4px; margin-top: 12px; padding: 10px; border: 1px solid rgba(122,104,255,.28); border-radius: 9px; background: rgba(70,54,143,.12); }.reader-hiatus strong { color: #d6cbff; font-size: 12px; }.reader-hiatus small { color: #9eacc4; font-size: 11px; line-height: 1.35; }.reader-hiatus--likely_hiatus { border-color: rgba(245,196,107,.4); background: rgba(111,75,25,.16); }.reader-hiatus--likely_hiatus strong { color: #f5c46b; }

@@ -159,6 +159,19 @@ def ensure_runtime_schema(engine) -> None:
             )
         """))
         connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS reading_history (
+                id INTEGER PRIMARY KEY,
+                created_at TIMESTAMP,
+                updated_at TIMESTAMP,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                novel_id INTEGER NOT NULL REFERENCES novels(id) ON DELETE CASCADE,
+                chapter_number INTEGER NOT NULL,
+                reading_date TIMESTAMP NOT NULL,
+                max_percent INTEGER NOT NULL DEFAULT 0,
+                CONSTRAINT uq_reading_history_day UNIQUE (user_id, novel_id, chapter_number, reading_date)
+            )
+        """))
+        connection.execute(text("""
             CREATE TABLE IF NOT EXISTS reading_annotations (
                 id INTEGER PRIMARY KEY,
                 created_at TIMESTAMP,

@@ -54,6 +54,25 @@ router = APIRouter(
 FOLLOW_STATES = {"plan_to_read", "reading", "on_hold", "completed", "dropped", "ignored"}
 
 
+@router.get("/hiatus/{novel_id}")
+async def get_novel_hiatus(
+    novel_id: int,
+    library_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    check_library(db, library_id, current_user)
+    novel = novel_services.get_novel_by_id(db, novel_id)
+    if not novel or novel.library_id != library_id:
+        raise HTTPException(status_code=404, detail="Novel not found")
+    if not novel.metadata_id:
+        return {"state": "unknown", "confidence": 0.0, "reason": "This novel has not finished metadata import."}
+    try:
+        return await metadata_client.get_hiatus_status(int(novel.metadata_id))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail="Hiatus status is temporarily unavailable") from exc
+
+
 def get_existing_follow(db: Session, user_id: int, novel: Novel) -> UserNovelFollow | None:
     follow = (
         db.query(UserNovelFollow)
@@ -164,6 +183,7 @@ class MetadataRefreshEvent(BaseModel):
     new_chapter_numbers: list[int] = Field(default_factory=list)
     chapters: list[MetadataChapterEvent] = Field(default_factory=list)
     message: str | None = None
+    hiatus: dict | None = None
 
 
 def claim_metadata_webhook_delivery(db: Session, event: MetadataRefreshEvent) -> bool:
@@ -217,6 +237,28 @@ def receive_metadata_event(
                 event_type="source_failed",
                 message=event.message or "Source refresh failed",
                 details={"source_job_id": str(event.job_id), "source_id": event.source_id, "site": event.site},
+                notification_visible=follow.notification_policy == "immediate",
+            ))
+            created_events += 1
+        db.commit()
+        return {"accepted": True, "created_events": created_events, "queued_downloads": 0}
+    if event.event == "source_returned_from_hiatus":
+        created_events = 0
+        for novel in db.query(Novel).filter(Novel.metadata_id == event.metadata_novel_id).all():
+            if not novel.library:
+                continue
+            follow = get_existing_follow(db, novel.library.user_id, novel)
+            if not follow or follow.state in {"completed", "dropped", "ignored"}:
+                continue
+            db.add(NovelUpdateEvent(
+                user_id=follow.user_id,
+                novel_id=novel.id,
+                event_type="resumed",
+                chapter_count=len(event.new_chapter_numbers),
+                first_chapter_number=min(event.new_chapter_numbers) if event.new_chapter_numbers else None,
+                last_chapter_number=max(event.new_chapter_numbers) if event.new_chapter_numbers else None,
+                message=event.message or "This story returned after a long update gap.",
+                details={"source_job_id": str(event.job_id), "source_id": event.source_id, "site": event.site, "hiatus": getattr(event, "hiatus", None)},
                 notification_visible=follow.notification_policy == "immediate",
             ))
             created_events += 1

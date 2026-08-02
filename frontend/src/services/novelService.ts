@@ -158,6 +158,9 @@ export const novelService = {
     );
     return response.data as NovelUpdateEvent[];
   },
+  async getHiatusStatus(libraryId: number, novelId: number) {
+    return (await apiClient.get(`/novel/hiatus/${novelId}`, { params: { library_id: libraryId } })).data as { state: string; confidence: number; reason: string; baseline_days?: number; observed_updates?: number };
+  },
   async markUpdateEventRead(eventId: number): Promise<NovelUpdateEvent> {
     const response = await apiClient.post(`/novel/updates/${eventId}/read`);
     return response.data as NovelUpdateEvent;

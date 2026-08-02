@@ -8,7 +8,7 @@ import time
 from uuid import uuid4
 
 from config.database import engine, Base, SessionLocal
-from app.routers import auth, novel, library, chapter, discovery, follow, download, activity, operations, catalog_scrape, audio, saved_search, recommendations
+from app.routers import auth, novel, library, chapter, discovery, follow, download, activity, operations, catalog_scrape, audio, saved_search, recommendations, admin_integrations
 from app.models.author import Author
 from app.models.chapter import Chapter
 from app.models.genre import Genre
@@ -23,6 +23,7 @@ from app.models.reading_progress import ReadingProgress
 from app.models.reading_annotation import ReadingAnnotation
 from app.models.audio_job import ChapterAudioJob, ChapterAudioPart
 from app.models.saved_search import SavedSearch
+from app.models.reading_history import ReadingHistory
 from app.database_migrations import ensure_runtime_schema
 from app.services import metadata_client
 
@@ -107,6 +108,7 @@ app.include_router(catalog_scrape.router)
 app.include_router(audio.router)
 app.include_router(saved_search.router)
 app.include_router(recommendations.router)
+app.include_router(admin_integrations.router)
 
 
 @app.middleware("http")

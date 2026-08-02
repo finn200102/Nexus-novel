@@ -234,6 +234,9 @@
   cursor: pointer;
 }
 
+.discover-saved-searches { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 0 0 16px; padding: 11px 13px; border: 1px solid rgba(114,87,245,.28); border-radius: 10px; background: rgba(52,39,112,.14); }
+.discover-saved-searches strong, .discover-saved-searches small { display: block; }.discover-saved-searches small { margin-top: 2px; color: var(--text-muted); font-size: 11px; }.discover-saved-searches > div:last-child { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }.discover-saved-searches span { display: inline-flex; overflow: hidden; border: 1px solid var(--border-subtle); border-radius: 999px; background: #121b31; }.discover-saved-searches button { padding: 6px 9px; color: #cfc7ff; font-size: 12px; }.discover-saved-searches span button + button { border-left: 1px solid var(--border-subtle); color: #ff9caf; }
+
 @media (max-width: 768px) {
   .novel-list__grid {
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -244,4 +247,5 @@
     gap: 1rem;
     bottom: 1rem;
   }
+  .discover-saved-searches { align-items: flex-start; flex-direction: column; }.discover-saved-searches > div:last-child { justify-content: flex-start; }
 }

@@ -27,6 +27,8 @@ class Settings(BaseSettings):
         default="http://127.0.0.1:8004",
         description="URL for the metadata scraping server",
     )
+    METADATA_API_KEY: str = Field(default="", description="Internal Nexus Server API key")
+    METADATA_ADMIN_API_KEY: str = Field(default="", description="Internal Nexus Server administrator key")
 
     def validate_required(self) -> list[str]:
         missing = []

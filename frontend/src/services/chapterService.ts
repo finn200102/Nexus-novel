@@ -95,6 +95,12 @@ export const chapterService = {
     const response = await apiClient.get(`/chapter/annotations/${novelId}`);
     return response.data;
   },
+  async getReadingHistory(novelId: number) {
+    return (await apiClient.get(`/chapter/history/${novelId}`)).data;
+  },
+  async getSpoilerSafeRecap(novelId: number) {
+    return (await apiClient.get(`/chapter/recap/${novelId}`)).data;
+  },
   async createReadingAnnotation(novelId: number, annotation: {
     chapter_number: number;
     annotation_type: "bookmark" | "note" | "highlight";

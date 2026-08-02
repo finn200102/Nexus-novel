@@ -38,12 +38,26 @@ class RefreshScheduleUpdate(BaseModel):
 
 
 def _metadata_get(path: str):
-    return httpx.get(f"{settings.METADATA_SERVER_URL}{path}", timeout=httpx.Timeout(3.0, connect=1.0))
+    headers = {"X-API-Key": settings.METADATA_API_KEY} if settings.METADATA_API_KEY else {}
+    return httpx.get(
+        f"{settings.METADATA_SERVER_URL}{path}",
+        timeout=httpx.Timeout(3.0, connect=1.0),
+        headers=headers,
+    )
 
 
 def _metadata_proxy(method: str, path: str, **kwargs):
     try:
-        response = httpx.request(method, f"{settings.METADATA_SERVER_URL}{path}", timeout=httpx.Timeout(3.0, connect=1.0), **kwargs)
+        headers = dict(kwargs.pop("headers", {}) or {})
+        if settings.METADATA_API_KEY:
+            headers.setdefault("X-API-Key", settings.METADATA_API_KEY)
+        response = httpx.request(
+            method,
+            f"{settings.METADATA_SERVER_URL}{path}",
+            timeout=httpx.Timeout(3.0, connect=1.0),
+            headers=headers,
+            **kwargs,
+        )
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=503, detail=f"Metadata service unavailable: {exc}") from exc
     if response.status_code >= 400:

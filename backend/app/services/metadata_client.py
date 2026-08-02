@@ -93,11 +93,18 @@ async def _get_client() -> httpx.AsyncClient:
     return _client
 
 
-async def _request(method: str, path: str, *, timeout: httpx.Timeout, **kwargs: Any) -> httpx.Response:
+async def _request(
+    method: str,
+    path: str,
+    *,
+    timeout: httpx.Timeout,
+    admin: bool = False,
+    **kwargs: Any,
+) -> httpx.Response:
     """Perform one bounded metadata request with request-id propagation."""
     client = await _get_client()
     try:
-        response = await client.request(method, path, headers=_get_headers(), timeout=timeout, **kwargs)
+        response = await client.request(method, path, headers=_get_headers(admin=admin), timeout=timeout, **kwargs)
         response.raise_for_status()
         return response
     except httpx.TimeoutException as exc:
@@ -108,11 +115,26 @@ async def _request(method: str, path: str, *, timeout: httpx.Timeout, **kwargs: 
         raise RuntimeError("Metadata service request failed") from exc
 
 
-def _get_headers() -> dict:
+def _get_headers(*, admin: bool = False) -> dict:
+    headers: dict[str, str] = {}
+    if settings.METADATA_API_KEY:
+        headers["X-API-Key"] = settings.METADATA_API_KEY
+    if admin and settings.METADATA_ADMIN_API_KEY:
+        headers["X-Nexus-Admin-Key"] = settings.METADATA_ADMIN_API_KEY
     request_id = get_request_id()
     if request_id:
-        return {"X-Request-ID": request_id}
-    return {}
+        headers["X-Request-ID"] = request_id
+    return headers
+
+
+async def admin_request(method: str, path: str, *, json: dict | None = None) -> Any:
+    """Call Nexus Server's admin surface after Novel has authorized the user.
+
+    The browser never receives the metadata API/admin keys; this module is the
+    only bridge between the two server processes.
+    """
+    response = await _request(method, path, timeout=BACKGROUND_TIMEOUT, admin=True, json=json)
+    return response.json() if response.content else None
 
 
 async def scrape_novel_by_url(url: str, site: str) -> dict:
@@ -174,6 +196,17 @@ async def get_novel_metadata(novel_id: int) -> dict:
     data = response.json()
     cache.set(cache_key, data)
     logger.info("Successfully fetched novel metadata", novel_id=novel_id)
+    return data
+
+
+async def get_hiatus_status(metadata_novel_id: int) -> dict:
+    cache_key = f"hiatus:{metadata_novel_id}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+    response = await _request("GET", f"/novels/{metadata_novel_id}/hiatus", timeout=INTERACTIVE_TIMEOUT)
+    data = response.json()
+    cache.set(cache_key, data, ttl=300)
     return data
 
 

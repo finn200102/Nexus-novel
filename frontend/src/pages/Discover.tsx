@@ -10,6 +10,7 @@ import NovelCard from "../components/novel/NovelCard";
 import { NovelCardSkeleton } from "../components/common/Skeleton";
 import { cancelPendingRequests, getUserFacingError, isRequestCancelled } from "../services/apiClient";
 import { RequestCoordinator, useAdaptivePolling } from "../services/requestResilience";
+import { SavedSearch, savedSearchService } from "../services/savedSearchService";
 import CreateNovelForm from "../components/novel/CreateNovelForm";
 import defaultCoverImage from "../assets/cover.png";
 import "../styles/library.css";
@@ -64,11 +65,18 @@ const Discover: React.FC = () => {
   const [appliedFilters, setAppliedFilters] = useState<DiscoveryFilters>(EMPTY_FILTERS);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
   const [lastRefreshAt, setLastRefreshAt] = useState<Date | null>(null);
   const [catalogStatus, setCatalogStatus] = useState<"unknown" | "online" | "offline">("unknown");
   const coordinatorRef = React.useRef(new RequestCoordinator());
   const hasSnapshotRef = React.useRef(false);
-  const searchFromUrl = new URLSearchParams(window.location.search).get("q") || "";
+  const locationSearch = window.location.search;
+  const queryParams = new URLSearchParams(locationSearch);
+  const searchFromUrl = queryParams.get("q") || "";
+  const filtersFromUrl = (() => {
+    try { return { ...EMPTY_FILTERS, ...JSON.parse(queryParams.get("filters") || "{}") } as DiscoveryFilters; }
+    catch { return EMPTY_FILTERS; }
+  })();
 
   const currentSite = site || "all";
 
@@ -86,9 +94,15 @@ const Discover: React.FC = () => {
     setNextCursor(null);
     setHasMore(true);
     setSearch(searchFromUrl);
-    void fetchNovels(currentSite, 1, searchFromUrl, appliedFilters);
+    setFilters(filtersFromUrl);
+    setAppliedFilters(filtersFromUrl);
+    void fetchNovels(currentSite, 1, searchFromUrl, filtersFromUrl);
     return () => cancelPendingRequests("/discovery/novels/");
-  }, [currentSite, searchFromUrl]);
+  }, [currentSite, locationSearch]);
+
+  useEffect(() => {
+    void savedSearchService.list().then(setSavedSearches).catch(() => setSavedSearches([]));
+  }, []);
 
   const fetchNovels = async (
     siteValue: string,
@@ -181,7 +195,10 @@ const Discover: React.FC = () => {
     setAppliedFilters(filters);
     setNextCursor(null);
     setHasMore(true);
-    fetchNovels(currentSite, 1, searchFromUrl, filters);
+    const params = new URLSearchParams();
+    if (searchFromUrl) params.set("q", searchFromUrl);
+    params.set("filters", JSON.stringify(filters));
+    navigate(`/discover/${currentSite}?${params.toString()}`);
   };
 
   const clearFilters = () => {
@@ -189,7 +206,19 @@ const Discover: React.FC = () => {
     setAppliedFilters(EMPTY_FILTERS);
     setNextCursor(null);
     setHasMore(true);
-    fetchNovels(currentSite, 1, searchFromUrl, EMPTY_FILTERS);
+    navigate(`/discover/${currentSite}${searchFromUrl ? `?q=${encodeURIComponent(searchFromUrl)}` : ""}`);
+  };
+
+  const saveSearch = async () => {
+    const name = window.prompt("Name this saved search");
+    if (!name?.trim()) return;
+    try {
+      await savedSearchService.create(name.trim(), appliedFilters, window.confirm("Notify when future imports match this search?"));
+      setSavedSearches(await savedSearchService.list());
+      addToast(`Saved search “${name.trim()}”`, "success");
+    } catch (err) {
+      addToast(getUserFacingError(err, "Could not save this search"), "error");
+    }
   };
 
   const updateFilter = (key: keyof DiscoveryFilters, value: string) => {
@@ -344,6 +373,11 @@ const Discover: React.FC = () => {
               <X size={16} aria-hidden="true" />
             </button>
           )}
+          {(hasActiveFilters || searchFromUrl) && (
+            <button type="button" className="discover-filter-toggle" onClick={saveSearch} title="Save current search">
+              Save search
+            </button>
+          )}
         </div>
         {filtersOpen && (
           <section id="discover-filters" className="discover-filters" aria-label="Discover filters">
@@ -450,6 +484,16 @@ const Discover: React.FC = () => {
           ))}
         </div>
       </div>
+
+      {savedSearches.length > 0 && (
+        <section className="discover-saved-searches" aria-label="Saved searches">
+          <div><strong>Saved searches</strong><small>Auto-updating filters you can reopen at any time.</small></div>
+          <div>{savedSearches.map((saved) => <span key={saved.id}><button type="button" onClick={() => {
+            const params = new URLSearchParams({ filters: JSON.stringify(saved.filters) });
+            navigate(`/discover/all?${params.toString()}`);
+          }}>{saved.name}{saved.notify_on_match ? " · alerts" : ""}</button><button type="button" aria-label={`Delete saved search ${saved.name}`} onClick={() => void savedSearchService.remove(saved.id).then(() => setSavedSearches((items) => items.filter((item) => item.id !== saved.id))).catch((err) => addToast(getUserFacingError(err, "Could not remove saved search"), "error"))}>×</button></span>)}</div>
+        </section>
+      )}
 
       {!loading && !error && <p className="discover-result-count">{novels.length}{hasMore ? "+" : ""} results from {getSiteDisplayName(currentSite)}</p>}
 

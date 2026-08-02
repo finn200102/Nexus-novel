@@ -11,6 +11,7 @@ import {
   Search,
   X,
   Server,
+  Link2,
 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import LibrarySwitcher from "./LibrarySwitcher";
@@ -31,6 +32,7 @@ const navItems = [
   { label: "Activity", to: "/activity", icon: Bell },
   { label: "Operations", to: "/operations", icon: Server },
   { label: "Scrape Jobs", to: "/scrape-jobs", icon: Search },
+  { label: "Integrations", to: "/integrations", icon: Link2 },
 ];
 
 const Navbar: React.FC<NavbarProps> = ({ onRequestCreateLibrary }) => {

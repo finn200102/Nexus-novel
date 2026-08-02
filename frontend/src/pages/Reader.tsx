@@ -110,6 +110,9 @@ const Reader: React.FC = () => {
   const [audioDuration, setAudioDuration] = useState(0);
   const [sleepMinutes, setSleepMinutes] = useState(() => Number(localStorage.getItem("nexus-reader-audio-sleep-minutes")) || 0);
   const [providerDiagnostic, setProviderDiagnostic] = useState<string | null>(null);
+  const [readingHistory, setReadingHistory] = useState<{ chapters_touched: number; active_days: number; current_streak_days: number } | null>(null);
+  const [recap, setRecap] = useState<{ summary: string; spoiler_boundary_chapter: number; chapters: { number: number; title: string }[] } | null>(null);
+  const [hiatus, setHiatus] = useState<{ state: string; confidence: number; reason: string; baseline_days?: number; observed_updates?: number } | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const providerAudioRef = useRef<HTMLAudioElement | null>(null);
   const audioControllerRef = useRef<AbortController | null>(null);
@@ -123,6 +126,7 @@ const Reader: React.FC = () => {
         setLoading(true);
         const chapterData = await chapterService.getChapterContentByNumber(chapter_number, library_id, novel_id);
         const savedProgress = await chapterService.getReadingProgress(novel_id).catch(() => null);
+        void novelService.getHiatusStatus(library_id, novel_id).then(setHiatus).catch(() => setHiatus(null));
         setChapter(chapterData);
         setProgress(savedProgress);
         setRestoredPosition(false);
@@ -176,6 +180,10 @@ const Reader: React.FC = () => {
       .then(setAnnotations)
       .catch((err) => console.error("Failed to load reader annotations", err));
   }, [novel_id]);
+
+  useEffect(() => {
+    void chapterService.getReadingHistory(novel_id).then(setReadingHistory).catch(() => setReadingHistory(null));
+  }, [novel_id, chapter_number]);
 
   useEffect(() => {
     localStorage.setItem("nexus-reader-font-scale", String(fontScale));
@@ -695,6 +703,11 @@ const Reader: React.FC = () => {
     catch { const blob = new Blob([payload], { type: "text/plain" }); const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = "nexus-quote.txt"; link.click(); URL.revokeObjectURL(url); }
   };
 
+  const loadSpoilerSafeRecap = async () => {
+    try { setRecap(await chapterService.getSpoilerSafeRecap(novel_id)); }
+    catch { setAudioPlayerError("Could not create a spoiler-safe recap right now."); }
+  };
+
   if (loading) return <div className="reader-loading">Loading content...</div>;
   if (error && !chapter) return <div className="reader-error">{error}</div>;
   if (!chapter || !novel)
@@ -787,6 +800,7 @@ const Reader: React.FC = () => {
                 <button type="button" onClick={() => void addAnnotation("bookmark")}>Bookmark</button>
                 <button type="button" onClick={() => void addAnnotation("note")}>Note</button>
                 <button type="button" onClick={() => void exportSelectedQuote()}>Quote</button>
+                <button type="button" onClick={() => void loadSpoilerSafeRecap()}>Recap</button>
                 <button type="button" onClick={exportReadingState}>Export</button>
                 <button type="button" onClick={() => void keepChapterOffline()}>Offline {offlineChapterCount}</button>
               </div>
@@ -902,6 +916,13 @@ const Reader: React.FC = () => {
               <button type="button" onClick={() => void removeAnnotation(annotation.id)} aria-label="Delete annotation">×</button>
             </div>
           ))}
+        </section>
+        <section className="reader-inspector__section reader-reading-stats">
+          <header><strong>Reading history</strong></header>
+          {readingHistory ? <p>{readingHistory.chapters_touched} chapters touched · {readingHistory.active_days} active days · {readingHistory.current_streak_days}-day streak</p> : <small>History appears after progress is saved.</small>}
+          <button type="button" onClick={() => void loadSpoilerSafeRecap()}>Spoiler-safe recap</button>
+          {recap && <div className="reader-recap"><strong>Up to chapter {recap.spoiler_boundary_chapter}</strong><p>{recap.summary}</p><ul>{recap.chapters.slice(-5).map((item) => <li key={item.number}>{item.number}. {item.title}</li>)}</ul></div>}
+          {hiatus && <div className={`reader-hiatus reader-hiatus--${hiatus.state}`}><strong>{hiatus.state === "likely_hiatus" ? "Likely on hiatus" : hiatus.state === "active" ? "Update cadence looks active" : "Cadence still learning"}</strong><small>{hiatus.reason}</small></div>}
         </section>
       </aside>
     </div>

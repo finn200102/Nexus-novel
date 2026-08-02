@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, status, HTTPException, BackgroundTasks
 from fastapi.responses import StreamingResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from config.database import SessionLocal as SessionFactory
 from config.database import get_db
@@ -16,6 +17,7 @@ from app.models.chapter import ContentStatus
 from app.models.download_job import ChapterDownloadJob
 from app.models.reading_progress import ReadingProgress
 from app.models.reading_annotation import ReadingAnnotation
+from app.models.reading_history import ReadingHistory
 from app.services.download_job_service import claim_job, complete_job, fail_or_retry_job
 
 from pathlib import Path
@@ -585,9 +587,86 @@ def update_reading_progress(
     progress.chapter_number = update.chapter_number
     progress.position = max(update.position, 0)
     progress.percent = min(max(update.percent, 0), 100)
+    # Persist a compact history point once per chapter/day. It powers streaks
+    # and velocity without recording raw scrolling or text selection data.
+    from datetime import date
+    today = date.today()
+    history = db.query(ReadingHistory).filter(
+        ReadingHistory.user_id == current_user.id,
+        ReadingHistory.novel_id == novel_id,
+        ReadingHistory.chapter_number == update.chapter_number,
+        func.date(ReadingHistory.reading_date) == today.isoformat(),
+    ).first()
+    if history:
+        history.max_percent = max(history.max_percent or 0, round(progress.percent))
+    else:
+        db.add(ReadingHistory(
+            user_id=current_user.id,
+            novel_id=novel_id,
+            chapter_number=update.chapter_number,
+            reading_date=datetime.combine(today, datetime.min.time()),
+            max_percent=round(progress.percent),
+        ))
     db.commit()
     db.refresh(progress)
     return progress
+
+
+@router.get("/history/{novel_id:int}")
+def get_reading_history(
+    novel_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    novel = novel_services.get_novel_by_id(db, novel_id)
+    if not novel or novel.library_id not in [library.id for library in current_user.libraries]:
+        raise HTTPException(status_code=404, detail="Novel not found")
+    rows = db.query(ReadingHistory).filter(
+        ReadingHistory.user_id == current_user.id,
+        ReadingHistory.novel_id == novel_id,
+    ).order_by(ReadingHistory.reading_date.desc()).limit(365).all()
+    dates = sorted({row.reading_date.date() for row in rows if row.reading_date})
+    streak = 0
+    from datetime import date, timedelta
+    cursor = date.today()
+    while cursor in dates:
+        streak += 1
+        cursor -= timedelta(days=1)
+    return {
+        "chapters_touched": len({row.chapter_number for row in rows}),
+        "active_days": len(dates),
+        "current_streak_days": streak,
+        "events": [{"chapter_number": row.chapter_number, "date": row.reading_date.date().isoformat(), "percent": row.max_percent} for row in rows],
+    }
+
+
+@router.get("/recap/{novel_id:int}")
+def spoiler_safe_recap(
+    novel_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """A deterministic recap that cannot read beyond the saved position."""
+    progress = db.query(ReadingProgress).filter(
+        ReadingProgress.user_id == current_user.id,
+        ReadingProgress.novel_id == novel_id,
+    ).first()
+    completed_through = int(progress.chapter_number or 0) if progress else 0
+    chapters = db.query(Chapter).filter(
+        Chapter.novel_id == novel_id,
+        Chapter.chapter_number <= completed_through,
+    ).order_by(Chapter.chapter_number.asc()).all()
+    annotations = db.query(ReadingAnnotation).filter(
+        ReadingAnnotation.user_id == current_user.id,
+        ReadingAnnotation.novel_id == novel_id,
+        ReadingAnnotation.chapter_id.in_([chapter.id for chapter in chapters] or [-1]),
+    ).order_by(ReadingAnnotation.created_at.desc()).limit(12).all()
+    return {
+        "spoiler_boundary_chapter": completed_through,
+        "summary": f"You have reached chapter {completed_through}. This recap only includes titles and your annotations from earlier chapters.",
+        "chapters": [{"number": row.chapter_number, "title": row.title} for row in chapters[-12:]],
+        "annotations": [{"chapter_number": row.chapter.chapter_number, "quote": row.quote, "note": row.note, "type": row.annotation_type} for row in annotations],
+    }
 
 
 @router.get("/annotations/{novel_id:int}", response_model=list[ReadingAnnotationResponse])
