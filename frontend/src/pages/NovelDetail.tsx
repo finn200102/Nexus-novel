@@ -26,6 +26,8 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
   const [signals, setSignals] = useState<InsightSignal[]>([]);
   const [similar, setSimilar] = useState<SimilarNovel[]>([]);
   const [canonicalWork, setCanonicalWork] = useState<CanonicalWork | null>(null);
+  const [analysisState, setAnalysisState] = useState<string>("not_started");
+  const [enriching, setEnriching] = useState(false);
   const { addToast } = useToast();
   const fetchNovel = useCallback(async () => {
     try {
@@ -58,10 +60,24 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
     if (!novel?.metadata_id) return;
     let active = true;
     Promise.all([insightService.analysis(novel.metadata_id), insightService.similar(novel.metadata_id), insightService.editions(novel.metadata_id).catch(() => null)])
-      .then(([analysis, matches, work]) => { if (active) { setSignals(analysis.signals || []); setSimilar(matches.results || []); setCanonicalWork(work); } })
-      .catch(() => { if (active) { setSignals([]); setSimilar([]); setCanonicalWork(null); } });
+      .then(([analysis, matches, work]) => { if (active) { setSignals(analysis.signals || []); setSimilar(matches.results || []); setCanonicalWork(work); setAnalysisState(analysis.state || "not_started"); } })
+      .catch(() => { if (active) { setSignals([]); setSimilar([]); setCanonicalWork(null); setAnalysisState("not_started"); } });
     return () => { active = false; };
   }, [novel?.metadata_id]);
+
+  const handleEnrich = async () => {
+    if (!novel?.metadata_id) return;
+    setEnriching(true);
+    try {
+      const result = await insightService.enqueue(novel.metadata_id);
+      setAnalysisState(result.queued ? "queued" : "completed");
+      addToast(result.queued ? "Nexus insights queued in the low-priority local worker." : "Nexus insights are already up to date.", "success");
+    } catch {
+      addToast("Could not queue local insights. You can try again safely.", "error");
+    } finally {
+      setEnriching(false);
+    }
+  };
 
   const handleRefreshMetadata = async () => {
     try {
@@ -346,8 +362,8 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
               <ChapterList novel_id={novel.id} library_id={libraryId} />
             </div>
           </div>
-          {(signals.length > 0 || similar.length > 0 || canonicalWork) && <section className="novel-insights" aria-label="Nexus insights">
-            {signals.length > 0 && <div className="novel-insights__panel"><p className="novel-insights__eyebrow">Nexus insights</p><h2>Text signals</h2><p className="novel-insights__notice">Local, cautious classifier signals. They never replace source facts.</p><div className="novel-insights__chips">{signals.map((signal) => <span key={`${signal.family}:${signal.value}`} title={`${signal.model_version} · ${(signal.confidence || 0) * 100}% confidence`}>{signal.family.replace(/_/g, " ")}: <strong>{signal.value}</strong></span>)}</div></div>}
+          {novel.metadata_id && <section className="novel-insights" aria-label="Nexus insights">
+            <div className="novel-insights__panel"><p className="novel-insights__eyebrow">Nexus insights</p><h2>Text signals</h2><p className="novel-insights__notice">Local, cautious classifier signals. They never replace source facts.</p>{signals.length > 0 ? <div className="novel-insights__chips">{signals.map((signal) => <span key={`${signal.family}:${signal.value}`} title={`${signal.model_version} · ${(signal.confidence || 0) * 100}% confidence`}>{signal.family.replace(/_/g, " ")}: <strong>{signal.value}</strong></span>)}</div> : <div className="novel-insights__empty"><span>{analysisState === "queued" || analysisState === "running" ? "Analysis is running in the low-priority local worker." : "No local text signals yet."}</span><button type="button" className="novel-insights__browse" disabled={enriching || analysisState === "queued" || analysisState === "running"} onClick={() => void handleEnrich()}>{enriching ? "Queueing…" : analysisState === "queued" || analysisState === "running" ? "Analysis queued" : "Generate insights"}</button></div>}</div>
             {similar.length > 0 && <div className="novel-insights__panel"><p className="novel-insights__eyebrow">More to explore</p><h2>Similar stories</h2><div className="novel-insights__similar">{similar.map((match) => <button type="button" key={match.novel_id} onClick={() => window.location.assign(`/discover/all/${match.novel_id}`)}><strong>{match.title}</strong><small>{match.author || "Unknown author"} · {match.explanation}</small></button>)}</div><button type="button" className="novel-insights__browse" onClick={() => window.location.assign(`/discover/all?similar_to=${novel.id}`)}>Browse all similar stories</button></div>}
             {canonicalWork && <div className="novel-insights__panel"><p className="novel-insights__eyebrow">Editions</p><h2>{canonicalWork.editions.length} linked edition{canonicalWork.editions.length === 1 ? "" : "s"}</h2><p className="novel-insights__notice">Source records and reading state stay separate; uncertain chapter mappings are never merged automatically.</p><div className="novel-insights__chips">{canonicalWork.editions.map((edition) => <span key={edition.id}>{edition.edition_kind}{edition.language ? ` · ${edition.language}` : ""}</span>)}</div></div>}
           </section>}

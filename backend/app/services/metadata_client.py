@@ -260,6 +260,16 @@ async def get_novel_analysis(metadata_novel_id: int) -> dict:
     return response.json()
 
 
+async def enqueue_novel_analysis(metadata_novel_id: int) -> dict:
+    """Ask the metadata service to enqueue low-priority local enrichment.
+
+    This is deliberately a tiny authenticated proxy: the browser never gains
+    direct metadata credentials and the request cannot contact a story source.
+    """
+    response = await _request("POST", f"/analysis/novels/{metadata_novel_id}/enqueue", timeout=INTERACTIVE_TIMEOUT)
+    return response.json()
+
+
 async def get_similar_novels(metadata_novel_id: int, limit: int = 12) -> dict:
     response = await _request("GET", f"/analysis/novels/{metadata_novel_id}/similar", timeout=INTERACTIVE_TIMEOUT, params={"limit": limit})
     return response.json()

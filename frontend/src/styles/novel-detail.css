@@ -346,6 +346,10 @@
 .novel-insights__chips { display: flex; flex-wrap: wrap; gap: .5rem; }
 .novel-insights__chips span { border: 1px solid rgba(139, 92, 246, .35); color: var(--text-muted); border-radius: 999px; padding: .35rem .65rem; font-size: .82rem; }
 .novel-insights__chips strong { color: var(--text-main); text-transform: capitalize; }
+.novel-insights__empty { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; color: var(--text-muted); font-size: .9rem; }
+.novel-insights__browse { border: 1px solid rgba(139, 92, 246, .45); background: rgba(79, 45, 168, .18); color: var(--text-main); border-radius: .55rem; padding: .45rem .7rem; cursor: pointer; font: inherit; }
+.novel-insights__browse:hover:not(:disabled) { border-color: var(--accent-primary); background: rgba(124, 58, 237, .22); }
+.novel-insights__browse:disabled { opacity: .62; cursor: wait; }
 .novel-insights__similar { display: grid; gap: .55rem; }
 .novel-insights__similar button { text-align: left; color: var(--text-main); background: rgba(17, 31, 62, .72); border: 1px solid var(--border-subtle); border-radius: .6rem; padding: .65rem .75rem; cursor: pointer; }
 .novel-insights__similar button:hover { border-color: var(--accent-primary); }

@@ -1,12 +1,16 @@
 import apiClient from "./apiClient";
 
 export type InsightSignal = { family: string; value: string; confidence?: number; evidence: Record<string, unknown>; model_version: string };
+export type InsightAnalysis = { state: "not_started" | "queued" | "running" | "completed" | "failed"; signals: InsightSignal[] };
 export type SimilarNovel = { novel_id: number; title: string; author?: string; score: number; explanation: string };
 export type CanonicalWork = { id: number; title: string; editions: Array<{ id: number; novel_id: number; edition_kind: string; language?: string | null }> };
 
 export const insightService = {
-  async analysis(metadataId: number): Promise<{ signals: InsightSignal[] }> {
+  async analysis(metadataId: number): Promise<InsightAnalysis> {
     return (await apiClient.get(`/discovery/novels/${metadataId}/analysis`)).data;
+  },
+  async enqueue(metadataId: number): Promise<{ queued: boolean; job_id?: string | null }> {
+    return (await apiClient.post(`/discovery/novels/${metadataId}/analysis/enqueue`)).data;
   },
   async similar(metadataId: number): Promise<{ results: SimilarNovel[] }> {
     return (await apiClient.get(`/discovery/novels/${metadataId}/similar`)).data;

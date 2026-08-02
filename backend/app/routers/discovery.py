@@ -83,6 +83,12 @@ async def get_novel_analysis(novel_id: int, current_user: User = Depends(get_cur
     return await metadata_client.get_novel_analysis(novel_id)
 
 
+@router.post("/novels/{novel_id}/analysis/enqueue")
+async def enqueue_novel_analysis(novel_id: int, current_user: User = Depends(get_current_user)):
+    """Queue local-only metadata analysis without blocking the detail page."""
+    return await metadata_client.enqueue_novel_analysis(novel_id)
+
+
 @router.get("/novels/{novel_id}/similar")
 async def get_similar_novels(
     novel_id: int,
