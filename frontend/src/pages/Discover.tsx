@@ -442,7 +442,7 @@ const Discover: React.FC = () => {
             <label>
               Label origin
               <select value={filters.labelOrigin} onChange={(event) => updateFilter("labelOrigin", event.target.value)}>
-                <option value="">Any label</option><option value="ai">AI label</option><option value="user">My label</option><option value="community">Community label</option>
+                <option value="">Any signal</option><option value="ai">Nexus insight</option><option value="source">Source fact</option>
               </select>
             </label>
             <label>
