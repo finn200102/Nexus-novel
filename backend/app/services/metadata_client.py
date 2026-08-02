@@ -226,6 +226,16 @@ async def get_hiatus_status(metadata_novel_id: int) -> dict:
     return data
 
 
+async def get_novel_analysis(metadata_novel_id: int) -> dict:
+    response = await _request("GET", f"/analysis/novels/{metadata_novel_id}", timeout=INTERACTIVE_TIMEOUT)
+    return response.json()
+
+
+async def get_similar_novels(metadata_novel_id: int, limit: int = 12) -> dict:
+    response = await _request("GET", f"/analysis/novels/{metadata_novel_id}/similar", timeout=INTERACTIVE_TIMEOUT, params={"limit": limit})
+    return response.json()
+
+
 async def fetch_public_chapter_text(metadata_novel_id: int, chapter_number: int) -> dict:
     """Delegate source access to Nexus Server; no local scraper bypass."""
     response = await _request("POST", f"/chapters/novel/{metadata_novel_id}/{chapter_number}/fetch", timeout=BACKGROUND_TIMEOUT)

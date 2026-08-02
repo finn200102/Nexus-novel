@@ -8,6 +8,7 @@ import { Novel, NovelFollowSettings } from "../types/novel";
 import { NovelDetailHeroSkeleton } from "../components/common/Skeleton";
 import { useToast } from "../context/ToastContext";
 import { Bell } from "lucide-react";
+import { insightService, InsightSignal, SimilarNovel } from "../services/insightService";
 import "../styles/novel-detail.css";
 
 interface NovelDetailProps {
@@ -22,6 +23,8 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
   const [updating, setUpdating] = useState<boolean>(false);
   const [updatingFollow, setUpdatingFollow] = useState(false);
   const [followSettings, setFollowSettings] = useState<NovelFollowSettings | null>(null);
+  const [signals, setSignals] = useState<InsightSignal[]>([]);
+  const [similar, setSimilar] = useState<SimilarNovel[]>([]);
   const { addToast } = useToast();
   const fetchNovel = useCallback(async () => {
     try {
@@ -49,6 +52,15 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
   useEffect(() => {
     fetchNovel();
   }, [fetchNovel]);
+
+  useEffect(() => {
+    if (!novel?.metadata_id) return;
+    let active = true;
+    Promise.all([insightService.analysis(novel.metadata_id), insightService.similar(novel.metadata_id)])
+      .then(([analysis, matches]) => { if (active) { setSignals(analysis.signals || []); setSimilar(matches.results || []); } })
+      .catch(() => { if (active) { setSignals([]); setSimilar([]); } });
+    return () => { active = false; };
+  }, [novel?.metadata_id]);
 
   const handleRefreshMetadata = async () => {
     try {
@@ -333,6 +345,10 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
               <ChapterList novel_id={novel.id} library_id={libraryId} />
             </div>
           </div>
+          {(signals.length > 0 || similar.length > 0) && <section className="novel-insights" aria-label="Nexus insights">
+            {signals.length > 0 && <div className="novel-insights__panel"><p className="novel-insights__eyebrow">Nexus insights</p><h2>Text signals</h2><p className="novel-insights__notice">Local, cautious classifier signals. They never replace source facts.</p><div className="novel-insights__chips">{signals.map((signal) => <span key={`${signal.family}:${signal.value}`} title={`${signal.model_version} · ${(signal.confidence || 0) * 100}% confidence`}>{signal.family.replace(/_/g, " ")}: <strong>{signal.value}</strong></span>)}</div></div>}
+            {similar.length > 0 && <div className="novel-insights__panel"><p className="novel-insights__eyebrow">More to explore</p><h2>Similar stories</h2><div className="novel-insights__similar">{similar.map((match) => <button type="button" key={match.novel_id} onClick={() => window.location.assign(`/discover/all/${match.novel_id}`)}><strong>{match.title}</strong><small>{match.author || "Unknown author"} · {match.explanation}</small></button>)}</div></div>}
+          </section>}
         </div>
       )}
     </div>

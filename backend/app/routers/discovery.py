@@ -76,6 +76,20 @@ async def get_novel_by_id(
     return data
 
 
+@router.get("/novels/{novel_id}/analysis")
+async def get_novel_analysis(novel_id: int, current_user: User = Depends(get_current_user)):
+    return await metadata_client.get_novel_analysis(novel_id)
+
+
+@router.get("/novels/{novel_id}/similar")
+async def get_similar_novels(
+    novel_id: int,
+    limit: int = Query(8, ge=1, le=24),
+    current_user: User = Depends(get_current_user),
+):
+    return await metadata_client.get_similar_novels(novel_id, limit)
+
+
 @router.get("/sites/")
 async def get_supported_sites(
     current_user: User = Depends(get_current_user),
