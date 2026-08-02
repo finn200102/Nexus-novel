@@ -14,6 +14,8 @@ from app.auth.jwt import create_access_token
 import os
 from pathlib import Path
 from app.routers.chapter import extract_story_id_from_url
+from app.models.download_job import ChapterDownloadJob
+from app.services.download_job_service import retry_job
 
 
 def create_test_user(db):
@@ -50,6 +52,28 @@ def get_auth_headers(user_id):
     """Generate authorization headers for a user"""
     token = create_access_token(data={"sub": str(user_id)})
     return {"Authorization": f"Bearer {token}"}
+
+
+def test_manual_download_retry_starts_a_new_attempt_cycle(db):
+    job = ChapterDownloadJob(
+        user_id=1,
+        library_id=1,
+        novel_id=1,
+        chapter_id=1,
+        status="failed",
+        attempt_count=3,
+        max_attempts=3,
+        error="old source error",
+    )
+    db.add(job)
+    db.commit()
+
+    retry_job(db, job)
+    db.refresh(job)
+
+    assert job.status == "queued"
+    assert job.attempt_count == 0
+    assert job.error is None
 
 
 def add_chapter(client, novel_id, headers):

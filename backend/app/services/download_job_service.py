@@ -98,8 +98,13 @@ def cancel_job(db: Session, job: ChapterDownloadJob, reason: str = "Cancelled by
 
 
 def retry_job(db: Session, job: ChapterDownloadJob) -> None:
+    # A manual retry is a new retry cycle.  Keeping the old counter caused a
+    # previously exhausted job to jump directly to impossible states such as
+    # "attempt 4/3" and fail without receiving its renewed retry budget.
     job.status = "queued"
+    job.attempt_count = 0
     job.next_attempt_at = datetime.now(UTC)
+    job.started_at = None
     job.finished_at = None
     job.cancelled_at = None
     job.cancellation_reason = None
