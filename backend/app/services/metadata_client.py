@@ -110,6 +110,10 @@ async def _request(
     except httpx.TimeoutException as exc:
         logger.warning("metadata_request.timeout", method=method, path=path)
         raise RuntimeError("Metadata service did not respond before the request timeout") from exc
+    except httpx.HTTPStatusError as exc:
+        detail = _response_detail(exc.response)
+        logger.warning("metadata_request.http_error", method=method, path=path, status_code=exc.response.status_code, detail=detail)
+        raise RuntimeError(f"Metadata server returned HTTP {exc.response.status_code}: {detail}") from exc
     except httpx.HTTPError as exc:
         logger.warning("metadata_request.failed", method=method, path=path, error=str(exc))
         raise RuntimeError("Metadata service request failed") from exc
@@ -125,6 +129,18 @@ def _get_headers(*, admin: bool = False) -> dict:
     if request_id:
         headers["X-Request-ID"] = request_id
     return headers
+
+
+def _response_detail(response: httpx.Response) -> str:
+    """Return a concise upstream explanation without leaking a traceback."""
+    try:
+        payload = response.json()
+        detail = payload.get("detail") if isinstance(payload, dict) else None
+        if detail:
+            return str(detail)
+    except ValueError:
+        pass
+    return "Request rejected by metadata server"
 
 
 async def admin_request(method: str, path: str, *, json: dict | None = None) -> Any:
@@ -214,6 +230,31 @@ async def fetch_public_chapter_text(metadata_novel_id: int, chapter_number: int)
     """Delegate source access to Nexus Server; no local scraper bypass."""
     response = await _request("POST", f"/chapters/novel/{metadata_novel_id}/{chapter_number}/fetch", timeout=BACKGROUND_TIMEOUT)
     return response.json()
+
+
+def fetch_public_chapter_text_sync(metadata_novel_id: int, chapter_number: int) -> dict:
+    """Worker-safe counterpart to :func:`fetch_public_chapter_text`.
+
+    The durable download worker is synchronous and used to wrap the async
+    client in a fresh ``asyncio.run`` call for every chapter.  The pooled async
+    client then outlived its event loop, making later downloads fail with
+    loop/connection errors.  Keep source access owned by Nexus Server, but use
+    a short-lived synchronous client at this sync boundary.
+    """
+    headers = _get_headers()
+    url = f"{settings.METADATA_SERVER_URL.rstrip('/')}/chapters/novel/{metadata_novel_id}/{chapter_number}/fetch"
+    try:
+        with httpx.Client(timeout=BACKGROUND_TIMEOUT) as client:
+            response = client.post(url, headers=headers)
+            response.raise_for_status()
+            return response.json()
+    except httpx.HTTPStatusError as exc:
+        detail = _response_detail(exc.response)
+        raise RuntimeError(f"Metadata server returned HTTP {exc.response.status_code}: {detail}") from exc
+    except httpx.TimeoutException as exc:
+        raise RuntimeError("Metadata server did not respond before the chapter download timeout") from exc
+    except httpx.HTTPError as exc:
+        raise RuntimeError("Metadata server is unavailable for chapter downloads") from exc
 
 
 async def refresh_novel_metadata(novel_id: int) -> dict:

@@ -192,7 +192,11 @@ def download_chapter_background(
             try:
                 # Nexus Server owns source access. This keeps WebNovel and all
                 # other source-policy decisions in one durable gateway.
-                fetched = asyncio.run(metadata_client.fetch_public_chapter_text(int(metadata_id), chapter_number)) if metadata_id else None
+                # This synchronous worker must not reuse the async metadata
+                # client across a new event loop per chapter.  The sync helper
+                # still calls only Nexus Server, which remains the sole owner
+                # of external source access.
+                fetched = metadata_client.fetch_public_chapter_text_sync(int(metadata_id), chapter_number) if metadata_id else None
                 py_chapter = None
                 if not fetched:
                     raise RuntimeError("Chapter has no metadata-server identity")
