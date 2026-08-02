@@ -72,11 +72,18 @@ def complete_job(db: Session, job: ChapterDownloadJob) -> None:
     db.commit()
 
 
-def fail_or_retry_job(db: Session, job: ChapterDownloadJob, error: str, *, error_code: str = "DOWNLOAD_FAILED") -> None:
+def fail_or_retry_job(
+    db: Session,
+    job: ChapterDownloadJob,
+    error: str,
+    *,
+    error_code: str = "DOWNLOAD_FAILED",
+    retryable: bool = True,
+) -> None:
     now = datetime.now(UTC)
     job.error = error[:2000]
     job.error_code = error_code
-    if (job.attempt_count or 0) >= (job.max_attempts or 3):
+    if not retryable or (job.attempt_count or 0) >= (job.max_attempts or 3):
         job.status = "failed"
         job.finished_at = now
         job.next_attempt_at = None

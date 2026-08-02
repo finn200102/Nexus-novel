@@ -21,6 +21,35 @@ class CacheEntry:
     expires_at: float
 
 
+class ChapterSourceError(RuntimeError):
+    """Typed error returned by Nexus Server's public-chapter contract."""
+
+    def __init__(self, category: str, message: str, *, retryable: bool):
+        super().__init__(message)
+        self.category = category
+        self.retryable = retryable
+
+
+def _chapter_source_error(response: httpx.Response) -> ChapterSourceError:
+    """Decode the structured availability result without leaking raw upstream text."""
+    try:
+        payload = response.json()
+        detail = payload.get("detail", {}) if isinstance(payload, dict) else {}
+        if isinstance(detail, dict):
+            return ChapterSourceError(
+                str(detail.get("category") or "unknown"),
+                str(detail.get("message") or "Chapter source request failed"),
+                retryable=bool(detail.get("retryable", response.status_code >= 500)),
+            )
+    except ValueError:
+        pass
+    return ChapterSourceError(
+        "unknown",
+        _response_detail(response),
+        retryable=response.status_code >= 500,
+    )
+
+
 class MetadataCache:
     """Small bounded read cache for metadata calls.
 
@@ -256,8 +285,12 @@ def fetch_public_chapter_text_sync(metadata_novel_id: int, chapter_number: int) 
     try:
         with httpx.Client(timeout=BACKGROUND_TIMEOUT) as client:
             response = client.post(url, headers=headers)
+            if response.status_code >= 400:
+                raise _chapter_source_error(response)
             response.raise_for_status()
             return response.json()
+    except ChapterSourceError:
+        raise
     except httpx.HTTPStatusError as exc:
         detail = _response_detail(exc.response)
         raise RuntimeError(f"Metadata server returned HTTP {exc.response.status_code}: {detail}") from exc

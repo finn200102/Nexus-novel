@@ -54,6 +54,17 @@ router = APIRouter(
 logger = get_logger(__name__)
 
 
+_PERMANENT_CHAPTER_FAILURES = {"locked", "removed"}
+
+
+def _chapter_failure_details(error: str | None) -> tuple[str, bool]:
+    """Recover typed source status stored on a chapter by the worker."""
+    value = str(error or "")
+    category, separator, _ = value.partition(":")
+    category = category.strip().lower() if separator else "download_failed"
+    return category.upper(), category not in _PERMANENT_CHAPTER_FAILURES
+
+
 def extract_story_id_from_url(url: str | None, site_name: str | None) -> int | None:
     """Return the source's stable story/thread ID from a canonical work URL.
 
@@ -111,7 +122,9 @@ def run_queued_download(job_id: int, db_session_factory):
         if chapter and chapter.content_status == ContentStatus.PRESENT:
             complete_job(db, job)
         else:
-            fail_or_retry_job(db, job, (chapter.download_error if chapter else "Chapter disappeared") or "Download failed")
+            error = (chapter.download_error if chapter else "Chapter disappeared") or "Download failed"
+            error_code, retryable = _chapter_failure_details(error)
+            fail_or_retry_job(db, job, error, error_code=error_code, retryable=retryable)
     except Exception as exc:
         db.rollback()
         job = db.query(ChapterDownloadJob).filter(ChapterDownloadJob.id == job_id).first()
@@ -247,6 +260,23 @@ def download_chapter_background(
                     "Background chapter download failed - no data returned",
                     chapter_id=chapter_id,
                 )
+        except metadata_client.ChapterSourceError as exc:
+            error_msg = f"{exc.category}: {exc}"
+            logger.warning(
+                "Background chapter source outcome",
+                chapter_id=chapter_id,
+                category=exc.category,
+                retryable=exc.retryable,
+            )
+            chapter_services.update_chapter(
+                db,
+                chapter_id,
+                {
+                    "content_status": ContentStatus.FAILED,
+                    "download_finished_at": datetime.utcnow(),
+                    "download_error": error_msg,
+                },
+            )
         except Exception as e:
             error_msg = str(e)
             logger.error(
