@@ -5,7 +5,6 @@ backend/__pycache__
 backend/**/*.pyc
 frontend/node_modules
 frontend/dist
-rustbindings/target
 downloads
 *.db
 .env
