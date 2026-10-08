@@ -13,6 +13,8 @@ CACHE_TTL = 300
 CACHE_MAX_ENTRIES = 512
 INTERACTIVE_TIMEOUT = httpx.Timeout(15.0, connect=3.0)
 BACKGROUND_TIMEOUT = httpx.Timeout(20.0, connect=3.0)
+# Live site listings may queue behind the shared per-site limiter.
+LIVE_LISTING_TIMEOUT = httpx.Timeout(45.0, connect=3.0)
 
 
 @dataclass
@@ -610,3 +612,18 @@ async def search_novel_by_url(url: str) -> dict:
     data = response.json()
     cache.set(cache_key, data, ttl=30)
     return data
+
+
+async def live_listing(kind: str, params: dict) -> dict:
+    """One page of a live site listing: ``kind`` is live, browse or user-list.
+
+    The metadata server reports source failures per site in ``error``; a
+    failure to reach the metadata server itself is reported the same way so
+    one slow site never breaks a multi-site search.
+    """
+    try:
+        response = await _request("GET", f"/search/{kind}", timeout=LIVE_LISTING_TIMEOUT, params=params)
+        return response.json()
+    except RuntimeError as exc:
+        code = "timeout" if "timeout" in str(exc).lower() else "metadata_unavailable"
+        return {"site": params.get("site"), "page": params.get("page", 1), "results": [], "error": {"code": code, "message": str(exc)}}

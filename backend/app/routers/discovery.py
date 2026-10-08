@@ -341,3 +341,101 @@ async def get_fandoms(
     return await metadata_client.list_fandoms_metadata(
         site=site, media_type=media_type, query=q, limit=limit
     )
+
+
+# --- Live site search (WP-4) -------------------------------------------------
+# Sites with a working keyword search on the metadata server.
+LIVE_SEARCH_SITES = (
+    "royalroad",
+    "fanfiction",
+    "archive",
+    "spacebattles",
+    "sufficientvelocity",
+    "questionablequesting",
+    "webnovel",
+)
+
+
+def _url_key(url: str | None) -> str:
+    if not url:
+        return ""
+    key = url.strip().lower().split("#", 1)[0].rstrip("/")
+    return key.replace("http://", "https://", 1)
+
+
+def _local_hit(row: dict) -> dict:
+    return {
+        **row,
+        "metadata_id": row.get("id"),
+        "url": row.get("source_url"),
+        "sources": ["local"],
+    }
+
+
+@router.get("/live/capabilities")
+async def live_capabilities(current_user: User = Depends(get_current_user)):
+    return {"search": list(LIVE_SEARCH_SITES)}
+
+
+@router.get("/live")
+async def live_search(
+    q: str = Query(..., min_length=1, max_length=200),
+    sites: Optional[list[str]] = Query(None, description="Sites to search (repeatable); default all searchable sites"),
+    page: int = Query(1, ge=1, le=50),
+    include_local: bool = Query(True, description="Merge matching catalog works in"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Search the sources themselves, merged with catalog hits by source URL.
+
+    Each site is one request through the metadata server's shared limiter
+    and cache. A failing site is listed in ``errors`` with its code; the
+    other sites still return results. Blocked works are dropped.
+    """
+    chosen = [site for site in dict.fromkeys(sites or LIVE_SEARCH_SITES) if site]
+    calls = [metadata_client.live_listing("live", {"site": site, "q": q, "page": page}) for site in chosen]
+    local_rows: list[dict] = []
+    if include_local and page == 1:
+        try:
+            local = await metadata_client.list_novels_metadata(title=q, limit=20)
+            local_rows = local.get("data", []) if isinstance(local, dict) else []
+        except Exception:
+            local_rows = []
+    answers = await asyncio.gather(*calls)
+
+    merged: dict[str, dict] = {}
+    for row in local_rows:
+        key = _url_key(row.get("source_url")) or f"local:{row.get('id')}"
+        merged[key] = _local_hit(row)
+    errors = []
+    for site, answer in zip(chosen, answers):
+        if answer.get("error"):
+            errors.append({"site": site, **answer["error"]})
+        for item in answer.get("results") or []:
+            key = _url_key(item.get("url")) or f"live:{site}:{item.get('metadata_id')}"
+            if key in merged:
+                merged[key]["sources"] = sorted({*merged[key]["sources"], "live"})
+                continue
+            merged[key] = {**item, "id": item.get("metadata_id"), "source_url": item.get("url"), "sources": ["live"]}
+    return {
+        "query": q,
+        "page": page,
+        "sites": chosen,
+        "results": apply_blocklist(db, current_user, list(merged.values())),
+        "errors": errors,
+    }
+
+
+@router.get("/live/browse")
+async def live_browse(
+    site: str,
+    feed: str = Query(..., min_length=1, max_length=200),
+    page: int = Query(1, ge=1, le=50),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """One page of a site feed such as Royal Road rising stars."""
+    answer = await metadata_client.live_listing("browse", {"site": site, "feed": feed, "page": page})
+    results = [{**item, "id": item.get("metadata_id"), "source_url": item.get("url"), "sources": ["live"]} for item in answer.get("results") or []]
+    errors = [{"site": site, **answer["error"]}] if answer.get("error") else []
+    return {"site": site, "feed": feed, "page": page, "results": apply_blocklist(db, current_user, results), "errors": errors}
