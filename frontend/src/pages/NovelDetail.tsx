@@ -15,6 +15,7 @@ import { PersonalPanel } from "../components/organization/PersonalPanel";
 import AutoDownloadToggle from "../components/novel/AutoDownloadToggle";
 import { ReasonList } from "../components/organization/ReasonList";
 import { ShelfPicker } from "../components/organization/ShelfPicker";
+import SourceStatusChip from "../components/common/SourceStatusChip";
 import { organizationService } from "../services/organizationService";
 import type { Shelf } from "../types/organization";
 import "../styles/novel-detail.css";
@@ -304,6 +305,7 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
                   {novel.novel_site ? novel.novel_site.toUpperCase() : "UNKNOWN"}
                 </span>
                 {getScrapeStatusIndicator()}
+                <SourceStatusChip site={novel.novel_site} />
               </div>
               <h1 className="novel-hero__title">{novel.title}</h1>
               {novel.author && (

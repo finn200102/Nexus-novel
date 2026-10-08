@@ -1,0 +1,38 @@
+.source-status-banner {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.5rem 1rem;
+  background: var(--warning-bg, #fff4e0);
+  color: var(--warning-text, #6b4a00);
+  font-size: 0.9rem;
+}
+
+.source-status-banner__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.source-status-banner__item button {
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0 0.25rem;
+}
+
+.source-status-chip {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.75rem;
+  background: var(--surface-muted, #eee);
+}
+
+.source-status-chip--ok { background: #e3f5e8; color: #1d5c2e; }
+.source-status-chip--degraded,
+.source-status-chip--rate_limited { background: #fff4e0; color: #6b4a00; }
+.source-status-chip--down { background: #fde4e4; color: #7a1c1c; }

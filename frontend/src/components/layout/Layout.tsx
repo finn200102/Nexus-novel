@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import Navbar from "./Navbar";
 import CreateLibraryModal from "../library/CreateLibraryModal";
+import SourceStatusBanner from "../common/SourceStatusBanner";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -18,6 +19,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   return (
     <div className="layout-shell">
       <Navbar onRequestCreateLibrary={() => setShowLibraryModal(true)} />
+      <SourceStatusBanner />
       <main className="layout-main">
         <div className="app-container">
           <div className="app-content">{children}</div>

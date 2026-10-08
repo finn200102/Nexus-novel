@@ -627,3 +627,15 @@ async def live_listing(kind: str, params: dict) -> dict:
     except RuntimeError as exc:
         code = "timeout" if "timeout" in str(exc).lower() else "metadata_unavailable"
         return {"site": params.get("site"), "page": params.get("page", 1), "results": [], "error": {"code": code, "message": str(exc)}}
+
+
+async def source_health() -> list[dict]:
+    """Per-site health rows from the metadata server (API-key read, cached briefly)."""
+    cache_key = "source-health"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+    response = await _request("GET", "/api/jobs/source-health", timeout=INTERACTIVE_TIMEOUT)
+    data = response.json()
+    cache.set(cache_key, data, ttl=60)
+    return data
