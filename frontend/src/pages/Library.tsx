@@ -20,7 +20,7 @@ const sourceOptions = [
   { value: "ao3", label: "AO3" },
   { value: "sufficientvelocity", label: "Sufficient Velocity" },
   { value: "questionablequesting", label: "Questionable Questing" },
-  { value: "scribblehub", label: "ScribbleHub" },
+  { value: "scribblehub", label: "ScribbleHub (experimental)" },
 ];
 
 const LibraryPage: React.FC<LibraryPageProps> = ({ library_id }) => {

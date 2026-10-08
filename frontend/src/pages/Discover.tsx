@@ -32,7 +32,7 @@ const SITE_OPTIONS = [
   { value: "webnovel", label: "WebNovel" },
   { value: "sufficientvelocity", label: "Sufficient Velocity" },
   { value: "questionablequesting", label: "Questionable Questing" },
-  { value: "scribblehub", label: "ScribbleHub" },
+  { value: "scribblehub", label: "ScribbleHub (experimental)" },
 ];
 
 const ITEMS_PER_PAGE = 20;

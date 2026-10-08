@@ -37,7 +37,7 @@ const getSiteDisplayName = (site: string | null | undefined): string => {
     webnovel: "WebNovel",
     sufficientvelocity: "Sufficient Velocity",
     questionablequesting: "Questionable Questing",
-    scribblehub: "ScribbleHub",
+    scribblehub: "ScribbleHub (experimental)",
   };
   return sites[site.toLowerCase()] || site;
 };

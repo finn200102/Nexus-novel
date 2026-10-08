@@ -141,7 +141,7 @@ const DiscoverNovelDetail: React.FC = () => {
       webnovel: "WebNovel",
       sufficientvelocity: "Sufficient Velocity",
       questionablequesting: "Questionable Questing",
-      scribblehub: "ScribbleHub",
+      scribblehub: "ScribbleHub (experimental)",
     };
     return sites[siteValue.toLowerCase()] || siteValue;
   };
