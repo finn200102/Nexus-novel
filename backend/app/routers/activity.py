@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from config.database import get_db
 from app.auth.dependencies import get_current_user
 from app.models.download_job import ChapterDownloadJob
+from app.models.novel import Novel
 from app.models.user import User
 from app.models.update_event import NovelUpdateEvent
 from app.schemas.activity import ActivityDay, ActivityEventResponse, ActivitySummary
@@ -16,9 +17,11 @@ router = APIRouter(prefix="/activity", tags=["activity"])
 
 @router.post("/read-all")
 def mark_all_read(library_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    # Update events belong to a novel, and the novel to a library.
+    library_novels = db.query(Novel.id).filter(Novel.library_id == library_id)
     updated = db.query(NovelUpdateEvent).filter(
         NovelUpdateEvent.user_id == current_user.id,
-        NovelUpdateEvent.library_id == library_id,
+        NovelUpdateEvent.novel_id.in_(library_novels),
         NovelUpdateEvent.read_at.is_(None),
         NovelUpdateEvent.notification_visible.is_(True),
     ).update({NovelUpdateEvent.read_at: datetime.now(UTC)}, synchronize_session=False)
