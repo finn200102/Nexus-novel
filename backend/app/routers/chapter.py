@@ -310,27 +310,6 @@ def download_chapter_background(
         db.close()
 
 
-def supported_src(url):
-    supported = [
-        "www.royalroad.com",
-        "forums.spacebattles.com",
-        "www.fanfiction.net",
-        "archiveofourown.org",
-        "www.webnovel.com",
-        "forums.sufficientvelocity.com",
-        "forum.questionablequesting.com",
-        "www.scribblehub.com",
-    ]
-
-    def check_url_supported(url):
-        for s in supported:
-            if s in url:
-                return True
-        return False
-
-    return check_url_supported(url)
-
-
 def get_site_name_from_url(url):
     if "royalroad" in url:
         return "royalroad"

@@ -37,6 +37,7 @@ import asyncio
 import hmac
 import os
 import shutil
+from urllib.parse import urlparse
 from datetime import UTC, datetime
 from pydantic import BaseModel, Field
 
@@ -444,26 +445,27 @@ def scrape_novel_background(
         db.close()
 
 
+SUPPORTED_HOSTS = frozenset({
+    "www.royalroad.com",
+    "forums.spacebattles.com",
+    "www.fanfiction.net",
+    "archiveofourown.org",
+    "www.webnovel.com",
+    "webnovel.com",
+    "forums.sufficientvelocity.com",
+    "forum.questionablequesting.com",
+    "www.scribblehub.com",
+})
+
+
 def supported_src(url):
-    supported = [
-        "www.royalroad.com",
-        "forums.spacebattles.com",
-        "www.fanfiction.net",
-        "archiveofourown.org",
-        "www.webnovel.com",
-        "webnovel.com",
-        "forums.sufficientvelocity.com",
-        "forum.questionablequesting.com",
-        "www.scribblehub.com",
-    ]
-
-    def check_url_supported(url):
-        for s in supported:
-            if s in url:
-                return True
+    # Match the parsed host, not a substring: "http://10.0.0.1/?www.royalroad.com"
+    # must not reach the scraper, which fetches whatever URL it is given.
+    try:
+        parsed = urlparse(str(url or "").strip())
+    except ValueError:
         return False
-
-    return check_url_supported(url)
+    return parsed.scheme in ("http", "https") and (parsed.hostname or "").lower() in SUPPORTED_HOSTS
 
 
 def get_site_name_from_url(url):
