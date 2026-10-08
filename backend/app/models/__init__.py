@@ -9,6 +9,7 @@ from .audio_job import ChapterAudioJob, ChapterAudioPart
 from .author import Author
 from .chapter import Chapter
 from .download_job import ChapterDownloadJob
+from .ereader import AppPassword, EpubBuild, KosyncProgress
 from .follow import UserNovelFollow
 from .genre import Genre
 from .library import Library
@@ -35,6 +36,9 @@ __all__ = [
     "ChapterAudioJob",
     "ChapterAudioPart",
     "ChapterDownloadJob",
+    "AppPassword",
+    "EpubBuild",
+    "KosyncProgress",
     "Genre",
     "Library",
     "MetadataWebhookDelivery",
