@@ -2,8 +2,9 @@
 
 Import rules:
 * Libraries are matched by name, novels by source URL inside the library.
-* Missing novels are created through the same path as the add-novel flow;
-  their metadata scrape runs in the background.
+* Missing novels are created in the library right away (so progress and
+  notes attach to them) and queued on a durable import job; the worker
+  starts their metadata scrapes one at a time (``import_job_ids``).
 * Follow state is set to the exported value.
 * Progress keeps the furthest position (chapter, then percent).
 * History keeps one row per chapter and day, with the higher percent.
@@ -23,8 +24,6 @@ Running an import twice leaves the second run with nothing to change.
 
 from collections import defaultdict
 from datetime import UTC, date, datetime, time
-from typing import Callable
-
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -47,13 +46,9 @@ from app.routers.novel import (
     supported_src,
 )
 from app.schemas.user_data import EXPORT_FORMAT, EXPORT_VERSION, UserDataDocument
-from app.services import metadata_client
+from app.services import import_job_service
 from app.services.blocklist_service import normalize_value
 import app.services.library_organization_service as organization
-import app.services.novel_services as novel_services
-
-# Called once a new novel row is committed: (novel_id, metadata_id).
-ScheduleScrape = Callable[[int, int], None]
 
 
 def _clamp_percent(value: float) -> float:
@@ -441,42 +436,30 @@ def _import_blocklist(db: Session, user: User, entries) -> list[dict]:
     return reports
 
 
-async def _create_novel(db: Session, library: Library, item, schedule_scrape: ScheduleScrape) -> tuple[Novel | None, str | None]:
+def _create_novel(db: Session, library: Library, item) -> tuple[Novel | None, str | None]:
     if not supported_src(item.url):
         return None, "Not a supported source url"
     site_name = get_site_name_from_url(item.url)
     if not site_name:
         return None, "Could not determine site from URL"
-
-    result = await metadata_client.scrape_novel_by_url(item.url, site_name)
-    metadata_id = result.get("novel_id") if result else None
-    if not result or not result.get("success") or not metadata_id:
-        message = result.get("message", "Failed to start scraping") if result else "Failed to start scraping"
-        return None, f"Failed to add novel: {message}"
-
     title = item.title or item.url.rstrip("/").split("/")[-1].replace("-", " ").title()
-    novel = novel_services.create_novel(db, {
-        "title": title,
-        "url": item.url,
-        "library_id": library.id,
-        "metadata_id": metadata_id,
-        "novel_site": site_name,
-        "scrape_status": "pending",
-    })
-    schedule_scrape(int(novel.id), int(metadata_id))
+    novel = Novel(title=title, url=item.url, library_id=library.id, novel_site=site_name, scrape_status="pending")
+    db.add(novel)
+    db.flush()
     return novel, None
 
 
-async def _import_novel(db: Session, user: User, library: Library, item, schedule_scrape: ScheduleScrape) -> dict:
+def _import_novel(db: Session, user: User, library: Library, item, queued: list[Novel]) -> dict:
     report: dict = {"url": item.url, "title": item.title, "status": None, "reason": None}
     novel = db.query(Novel).filter(Novel.library_id == library.id, Novel.url == item.url).first()
     if novel is None:
-        novel, failure = await _create_novel(db, library, item, schedule_scrape)
+        novel, failure = _create_novel(db, library, item)
         if novel is None:
             report["status"] = "failed"
             report["reason"] = failure
             return report
         report["status"] = "created"
+        queued.append(novel)
     else:
         report["status"] = "linked"
 
@@ -520,12 +503,7 @@ def _summarize(libraries: list[dict], saved_searches: list[dict], shelves: list[
     }
 
 
-async def import_user_data(
-    db: Session,
-    user: User,
-    document: UserDataDocument,
-    schedule_scrape: ScheduleScrape,
-) -> dict:
+def import_user_data(db: Session, user: User, document: UserDataDocument) -> dict:
     if document.version != EXPORT_VERSION:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -533,6 +511,7 @@ async def import_user_data(
         )
 
     library_reports = []
+    import_jobs = []
     novel_index: dict[tuple[str, str], Novel] = {}
     for entry in document.libraries:
         library = (
@@ -547,14 +526,21 @@ async def import_user_data(
             db.flush()
             library_status = "created"
         novel_reports = []
+        queued: list[Novel] = []
         for item in entry.novels:
-            report = await _import_novel(db, user, library, item, schedule_scrape)
+            report = _import_novel(db, user, library, item, queued)
             novel_reports.append(report)
             db.flush()
             novel = db.query(Novel).filter(Novel.library_id == library.id, Novel.url == item.url).first()
             if novel is not None:
                 novel_index[(entry.name, item.url)] = novel
         library_reports.append({"name": entry.name, "status": library_status, "novels": novel_reports})
+        if queued:
+            import_jobs.append(import_job_service.create_job(
+                db, user, library, "user_data",
+                entries=[{"url": novel.url, "title": novel.title, "novel_id": novel.id} for novel in queued],
+                commit=False,
+            ))
 
     saved_reports = []
     existing_searches = {
@@ -591,4 +577,5 @@ async def import_user_data(
         "saved_searches": saved_reports,
         "shelves": shelf_reports,
         "blocklist": blocklist_reports,
+        "import_job_ids": [job.id for job in import_jobs],
     }

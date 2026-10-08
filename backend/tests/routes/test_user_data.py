@@ -6,6 +6,7 @@ import pytest
 from tests.auth_helpers import bearer_headers
 from app.models.chapter import Chapter
 from app.models.follow import UserNovelFollow
+from app.models.import_job import ImportJob
 from app.models.library import Library
 from app.models.novel import Novel
 from app.models.reading_annotation import ReadingAnnotation
@@ -23,11 +24,10 @@ def _headers(user: User) -> dict[str, str]:
 
 @pytest.fixture
 def scrape(monkeypatch):
-    """Metadata calls are mocked; the background scrape is recorded, not run."""
+    """Metadata calls are mocked; /me/import must not call them inline."""
     scrape_call = AsyncMock(return_value={"success": True, "novel_id": 99, "message": "ok"})
     background = MagicMock()
     monkeypatch.setattr("app.services.metadata_client.scrape_novel_by_url", scrape_call)
-    monkeypatch.setattr("app.routers.user_data.scrape_novel_background", background)
     return scrape_call, background
 
 
@@ -156,8 +156,11 @@ def test_export_wipe_import_round_trip_restores_equal_content(client, db, test_u
     assert report["summary"]["novels_created"] == 1
     # Chapters arrive with the background scrape, so annotations wait for them.
     assert report["summary"]["annotations_deferred"] == 1
-    scrape_call.assert_awaited_once_with(ROYAL_ROAD_URL, "royalroad")
-    background.assert_called_once()
+    # The metadata scrape is queued on a durable import job, not run inline.
+    scrape_call.assert_not_awaited()
+    job = db.get(ImportJob, report["import_job_ids"][0])
+    assert job.source == "user_data"
+    assert [(item.url, item.status) for item in job.items] == [(ROYAL_ROAD_URL, "queued")]
 
     novel = db.query(Novel).filter(Novel.url == ROYAL_ROAD_URL).one()
     _add_chapters(db, novel)  # simulates the scrape finishing
@@ -207,7 +210,7 @@ def test_import_relinks_existing_novel_by_url_without_scraping(client, db, test_
     assert response.status_code == 200
     assert response.json()["libraries"][0]["novels"][0]["status"] == "linked"
     scrape_call.assert_not_awaited()
-    background.assert_not_called()
+    assert response.json()["import_job_ids"] == []
     assert db.query(Novel).count() == 1
 
 

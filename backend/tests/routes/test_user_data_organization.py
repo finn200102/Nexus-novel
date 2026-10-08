@@ -16,7 +16,6 @@ def scrape(monkeypatch):
     scrape_call = AsyncMock(return_value={"success": True, "novel_id": 99, "message": "ok"})
     background = MagicMock()
     monkeypatch.setattr("app.services.metadata_client.scrape_novel_by_url", scrape_call)
-    monkeypatch.setattr("app.routers.user_data.scrape_novel_background", background)
     return scrape_call, background
 
 

@@ -13,6 +13,7 @@ from .download_job import ChapterDownloadJob
 from .ereader import AppPassword, EpubBuild, KosyncProgress
 from .follow import UserNovelFollow
 from .genre import Genre
+from .import_job import ImportJob, ImportJobItem
 from .library import Library
 from .metadata_webhook_delivery import MetadataWebhookDelivery
 from .notification import NotificationChannel, PushSubscription
@@ -42,6 +43,8 @@ __all__ = [
     "ChapterDownloadJob",
     "AppPassword",
     "EpubBuild",
+    "ImportJob",
+    "ImportJobItem",
     "KosyncProgress",
     "Genre",
     "Library",

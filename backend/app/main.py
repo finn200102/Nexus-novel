@@ -10,7 +10,7 @@ from app import models  # noqa: F401  (registers every mapper before the first r
 from config.database import engine
 from config.settings import settings
 from app.routers import auth, novel, library, chapter, discovery, follow, download, activity, operations, catalog_scrape, audio, saved_search, recommendations, admin_integrations, admin_users, notifications
-from app.routers import user_data
+from app.routers import user_data, imports
 from app.routers import app_passwords, kosync, opds
 from app.routers import blocklist, personal, shelves
 from app.db_migrations import upgrade_database
@@ -75,6 +75,7 @@ app.include_router(recommendations.router)
 app.include_router(admin_integrations.router)
 app.include_router(admin_users.router)
 app.include_router(user_data.router)
+app.include_router(imports.router)
 app.include_router(notifications.router)
 app.include_router(app_passwords.router)
 app.include_router(opds.router)

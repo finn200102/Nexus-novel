@@ -15,6 +15,7 @@ from app.models.follow import UserNovelFollow
 from app.models.update_event import NovelUpdateEvent
 from app.routers.chapter import run_queued_download
 from app.services.audio_job_service import process_audio_job
+from app.services.import_job_service import next_job_id, run_import_job
 from app.services.notification_delivery import deliver_due_notifications
 
 
@@ -127,11 +128,39 @@ def process_audio_jobs() -> int:
     return len(ids)
 
 
+async def run_imports(stop: asyncio.Event) -> None:
+    """Import jobs run one at a time beside the download loop.
+
+    An item waits for its metadata scrape, so jobs are slow by design (each
+    source request is paced by the metadata server); keeping them on their own
+    task means chapter downloads and notifications are never held up.
+    """
+    loop = asyncio.get_running_loop()
+    while not stop.is_set():
+        db = SessionLocal()
+        try:
+            job_id = next_job_id(db)
+        finally:
+            db.close()
+        if job_id is not None:
+            try:
+                await run_import_job(job_id, SessionLocal, loop=loop, should_stop=stop.is_set)
+            except Exception:
+                logging.getLogger(__name__).exception("Import job %s failed", job_id)
+                await asyncio.sleep(30)
+            continue
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=5)
+        except asyncio.TimeoutError:
+            pass
+
+
 async def run() -> None:
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, stop.set)
+    imports_task = asyncio.create_task(run_imports(stop))
     while not stop.is_set():
         # The downloader is synchronous internally and bridges to async source
         # clients with asyncio.run(). Keep it off this worker's event loop.
@@ -147,6 +176,7 @@ async def run() -> None:
             await asyncio.wait_for(stop.wait(), timeout=5)
         except asyncio.TimeoutError:
             pass
+    await imports_task
 
 
 if __name__ == "__main__":
