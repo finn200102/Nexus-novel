@@ -61,6 +61,9 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(
         default=60 * 24 * 30, description="JWT token expiration in minutes"
     )
+    RUN_MIGRATIONS_ON_STARTUP: bool = Field(
+        default=True, description="Run Alembic upgrade head when the API or worker starts"
+    )
     METADATA_SERVER_URL: str = Field(
         default="http://127.0.0.1:8004",
         description="URL for the metadata scraping server",

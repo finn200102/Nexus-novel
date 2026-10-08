@@ -1,3 +1,4 @@
+import os
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -15,7 +16,7 @@ from app.models.tag import Tag
 load_dotenv()
 
 # Us in-memory SQLite for testing
-TEST_DATABASE_URL = "sqlite:///./test.db"
+TEST_DATABASE_URL = os.environ["DATABASE_URL"]
 
 # Create test engine
 engine = create_engine(TEST_DATABASE_URL)

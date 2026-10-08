@@ -5,7 +5,9 @@ import signal
 from datetime import UTC, datetime
 from sqlalchemy import or_
 
-from config.database import SessionLocal
+from config.database import SessionLocal, engine
+from config.settings import settings
+from app.db_migrations import upgrade_database
 from app.models.download_job import ChapterDownloadJob
 from app.models.audio_job import ChapterAudioJob
 from app.models.follow import UserNovelFollow
@@ -128,4 +130,8 @@ async def run() -> None:
 
 
 if __name__ == "__main__":
+    if settings.RUN_MIGRATIONS_ON_STARTUP:
+        # Normally a no-op: the API migrates first and both hold the same
+        # advisory lock, so a simultaneous start waits instead of racing.
+        upgrade_database(engine)
     asyncio.run(run())

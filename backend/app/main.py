@@ -1,35 +1,18 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-import logging
 import time
 from uuid import uuid4
 
-from config.database import engine, Base, SessionLocal
+from app import models  # noqa: F401  (registers every mapper before the first request)
+from config.database import engine
+from config.settings import settings
 from app.routers import auth, novel, library, chapter, discovery, follow, download, activity, operations, catalog_scrape, audio, saved_search, recommendations, admin_integrations
 from app.routers import user_data
-from app.models.author import Author
-from app.models.chapter import Chapter
-from app.models.genre import Genre
-from app.models.library import Library
-from app.models.novel import Novel
-from app.models.tag import Tag
-from app.models.user import User
-from app.models.follow import UserNovelFollow
-from app.models.update_event import NovelUpdateEvent
-from app.models.download_job import ChapterDownloadJob
-from app.models.reading_progress import ReadingProgress
-from app.models.reading_annotation import ReadingAnnotation
-from app.models.audio_job import ChapterAudioJob, ChapterAudioPart
-from app.models.saved_search import SavedSearch
-from app.models.reading_history import ReadingHistory
-from app.database_migrations import ensure_runtime_schema
+from app.db_migrations import upgrade_database
 from app.services import metadata_client
-
-Base.metadata.create_all(bind=engine)
-ensure_runtime_schema(engine)
 from app.logging_config import (
     setup_logging,
     set_request_id,
@@ -44,36 +27,10 @@ setup_logging()
 logger = get_logger(__name__)
 
 
-def ensure_local_admin() -> None:
-    """Keep the documented local test account able to administer Nexus.
-
-    Production deployments can override the username or disable this bootstrap
-    by setting ``NEXUS_BOOTSTRAP_ADMIN_USERNAME`` to an empty value.
-    """
-    import os
-
-    username = os.getenv("NEXUS_BOOTSTRAP_ADMIN_USERNAME", "user").strip()
-    if not username:
-        return
-    db = SessionLocal()
-    try:
-        # Only recover an instance without any administrator. Otherwise anyone
-        # able to register the bootstrap username would gain admin on restart.
-        if db.query(User).filter(User.is_admin.is_(True)).first():
-            return
-        user = db.query(User).filter(User.username == username).first()
-        if user and not user.is_admin:
-            user.is_admin = True
-            db.commit()
-            logger.info("bootstrap_admin_promoted", username=username)
-    finally:
-        db.close()
-
-
-ensure_local_admin()
-
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    if settings.RUN_MIGRATIONS_ON_STARTUP:
+        upgrade_database(engine)
     await metadata_client.start()
     try:
         yield

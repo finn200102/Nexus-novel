@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.models.base import BaseModel
@@ -13,6 +13,7 @@ class ChapterAudioJob(BaseModel):
     """
 
     __tablename__ = "chapter_audio_jobs"
+    __table_args__ = (Index("ix_audio_jobs_queue", "status", "next_attempt_at", "created_at"),)
 
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     library_id = Column(Integer, ForeignKey("libraries.id", ondelete="CASCADE"), nullable=False)

@@ -1,7 +1,5 @@
 import pytest
 from fastapi import status
-import bcrypt
-from app.schemas.user import UserCreate
 from app.services.user_services import get_user_by_username
 from app.services.user_services import get_user_by_id
 from app.auth.jwt import verify_token
@@ -108,16 +106,3 @@ def test_insecure_default_secret_is_replaced_by_persisted_key(tmp_path, monkeypa
     assert (tmp_path / ".nexus-secret-key").stat().st_mode & 0o777 == 0o600
     assert Settings(SECRET_KEY="operator-chosen", DOWNLOAD_PATH=str(tmp_path)).SECRET_KEY == "operator-chosen"
 
-
-def test_bootstrap_admin_is_not_granted_when_an_admin_exists(db, monkeypatch):
-    from app import main
-    from app.models.user import User
-
-    db.add_all([User(username="owner", password="x", is_admin=True), User(username="user", password="x")])
-    db.commit()
-    monkeypatch.setattr(main, "SessionLocal", lambda: db)
-    monkeypatch.setattr(db, "close", lambda: None)
-
-    main.ensure_local_admin()
-
-    assert get_user_by_username(db, "user").first().is_admin is False
