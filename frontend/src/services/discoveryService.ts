@@ -7,6 +7,7 @@ import {
   SiteInfo,
   FandomInfo,
 } from "../types/discovery";
+import { discoveryFilterParams } from "./discoveryFilters";
 
 export const discoveryService = {
   async getNovelsBySite(
@@ -18,7 +19,7 @@ export const discoveryService = {
     similarTo?: number | null,
   ): Promise<PaginatedResponse<DiscoveredNovel>> {
     try {
-      const params: Record<string, string | number | null> = {
+      const params: Record<string, string | number | string[] | null> = {
         limit,
       };
       if (site && site !== "all") {
@@ -33,34 +34,12 @@ export const discoveryService = {
       if (similarTo) {
         params.similar_to = similarTo;
       }
-      const filterParams: Record<keyof DiscoveryFilters, string> = {
-        tag: "tag",
-        fandom: "fandom",
-        genre: "genre",
-        status: "status",
-        minWordCount: "min_word_count",
-        minFavorites: "min_favorites",
-        minFollows: "min_follows",
-        minReviews: "min_reviews",
-        minChapterCount: "min_chapter_count",
-        maxWordCount: "max_word_count",
-        updatedSinceDays: "updated_since_days",
-        label: "label",
-        labelOrigin: "label_origin",
-        importState: "import_state",
-        sortBy: "sort_by",
-        sortOrder: "sort_order",
-      };
-      Object.entries(filterParams).forEach(([key, parameter]) => {
-        const value = filters?.[key as keyof DiscoveryFilters]?.trim();
-        if (value) {
-          params[parameter] = value;
-        }
-      });
+      Object.assign(params, discoveryFilterParams(filters ?? {}));
 
+      // Axios would send arrays as tag[]=a; FastAPI expects repeated tag=a&tag=b.
       const response = await apiClient.get<PaginatedResponse<DiscoveredNovel>>(
         "/discovery/novels/",
-        { params }
+        { params, paramsSerializer: { indexes: null } }
       );
       return response.data;
     } catch (error) {

@@ -1,0 +1,127 @@
+import { DiscoveryFilters } from "../types/discovery";
+
+export const EMPTY_DISCOVERY_FILTERS: DiscoveryFilters = {
+  tag: [],
+  tagMode: "all",
+  fandom: [],
+  genre: [],
+  excludeTag: [],
+  excludeFandom: [],
+  excludeGenre: [],
+  excludeAuthor: [],
+  excludeText: [],
+  language: [],
+  completeOnly: "",
+  crossover: "",
+  status: "",
+  minWordCount: "",
+  minFavorites: "",
+  minFollows: "",
+  minReviews: "",
+  minChapterCount: "",
+  maxWordCount: "",
+  updatedSinceDays: "",
+  label: "",
+  labelOrigin: "",
+  importState: "",
+  sortBy: "updated",
+  sortOrder: "desc",
+};
+
+type ListFilterKey = {
+  [K in keyof DiscoveryFilters]: DiscoveryFilters[K] extends string[] ? K : never;
+}[keyof DiscoveryFilters];
+
+// Each list maps to a repeatable query parameter on the server.
+export const LIST_FILTER_PARAMS: [ListFilterKey, string][] = [
+  ["tag", "tag"],
+  ["fandom", "fandom"],
+  ["genre", "genre"],
+  ["excludeTag", "exclude_tag"],
+  ["excludeFandom", "exclude_fandom"],
+  ["excludeGenre", "exclude_genre"],
+  ["excludeAuthor", "exclude_author"],
+  ["excludeText", "exclude_text"],
+  ["language", "language"],
+];
+
+const SCALAR_FILTER_PARAMS: [keyof DiscoveryFilters, string][] = [
+  ["status", "status"],
+  ["minWordCount", "min_word_count"],
+  ["minFavorites", "min_favorites"],
+  ["minFollows", "min_follows"],
+  ["minReviews", "min_reviews"],
+  ["minChapterCount", "min_chapter_count"],
+  ["maxWordCount", "max_word_count"],
+  ["updatedSinceDays", "updated_since_days"],
+  ["label", "label"],
+  ["labelOrigin", "label_origin"],
+  ["importState", "import_state"],
+  ["sortBy", "sort_by"],
+  ["sortOrder", "sort_order"],
+];
+
+/** Trims, drops blanks and case-insensitive repeats. */
+export const cleanList = (value: unknown): string[] => {
+  const items = Array.isArray(value) ? value : typeof value === "string" ? [value] : [];
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const item of items) {
+    if (typeof item !== "string") continue;
+    const text = item.trim();
+    if (!text || seen.has(text.toLowerCase())) continue;
+    seen.add(text.toLowerCase());
+    result.push(text);
+  }
+  return result;
+};
+
+/**
+ * Accepts filters from the URL or a saved search. Older saved searches stored
+ * tag, fandom and genre as single strings, which become one-item lists.
+ */
+export const normalizeDiscoveryFilters = (raw: unknown): DiscoveryFilters => {
+  const source: Record<string, unknown> = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const result: Record<string, unknown> = { ...EMPTY_DISCOVERY_FILTERS };
+  for (const key of Object.keys(EMPTY_DISCOVERY_FILTERS) as (keyof DiscoveryFilters)[]) {
+    const fallback = EMPTY_DISCOVERY_FILTERS[key];
+    const value = source[key];
+    if (Array.isArray(fallback)) {
+      result[key] = cleanList(value);
+    } else if (key === "tagMode") {
+      result[key] = value === "any" ? "any" : "all";
+    } else if (key === "completeOnly") {
+      result[key] = value === true || value === "true" ? "true" : "";
+    } else if (key === "crossover") {
+      result[key] = value === true || value === "true" ? "true" : value === false || value === "false" ? "false" : "";
+    } else if (typeof value === "string" || typeof value === "number") {
+      result[key] = String(value);
+    }
+  }
+  return result as unknown as DiscoveryFilters;
+};
+
+/** True when any filter narrows results; sort and match mode alone do not. */
+export const isDiscoveryFilterActive = (filters: DiscoveryFilters): boolean =>
+  (Object.keys(filters) as (keyof DiscoveryFilters)[]).some((key) => {
+    if (key === "sortBy" || key === "sortOrder" || key === "tagMode") return false;
+    const value = filters[key];
+    return Array.isArray(value) ? value.length > 0 : Boolean(value);
+  });
+
+/** Query parameters for the Discover list request. Lists repeat the key. */
+export const discoveryFilterParams = (filters: Partial<DiscoveryFilters>): Record<string, string | string[]> => {
+  const params: Record<string, string | string[]> = {};
+  for (const [key, name] of LIST_FILTER_PARAMS) {
+    const values = cleanList(filters[key]);
+    if (values.length) params[name] = values;
+  }
+  for (const [key, name] of SCALAR_FILTER_PARAMS) {
+    const value = String(filters[key] ?? "").trim();
+    if (value) params[name] = value;
+  }
+  if (filters.tagMode === "any") params.tag_mode = "any";
+  if (filters.completeOnly === "true") params.complete_only = "true";
+  if (filters.crossover === "true" || filters.crossover === "false") params.crossover = filters.crossover;
+  return params;
+};

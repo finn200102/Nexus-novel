@@ -5,6 +5,8 @@ import { discoveryService } from "../services/discoveryService";
 import { useLibraryContext } from "../context/useLibraryContext";
 import { useToast } from "../context/useToast";
 import { DiscoveredNovel, DiscoveryFilters, FandomInfo } from "../types/discovery";
+import { EMPTY_DISCOVERY_FILTERS, isDiscoveryFilterActive, normalizeDiscoveryFilters } from "../services/discoveryFilters";
+import { ChipInput } from "../components/common/ChipInput";
 import { Novel } from "../types/novel";
 import NovelCard from "../components/novel/NovelCard";
 import { NovelCardSkeleton } from "../components/common/Skeleton";
@@ -27,31 +29,21 @@ const SITE_OPTIONS = [
 
 const ITEMS_PER_PAGE = 20;
 
-const EMPTY_FILTERS: DiscoveryFilters = {
-  tag: "",
-  fandom: "",
-  genre: "",
-  status: "",
-  minWordCount: "",
-  minFavorites: "",
-  minFollows: "",
-  minReviews: "",
-  minChapterCount: "",
-  maxWordCount: "",
-  updatedSinceDays: "",
-  label: "",
-  labelOrigin: "",
-  importState: "",
-  sortBy: "updated",
-  sortOrder: "desc",
-};
+const EMPTY_FILTERS = EMPTY_DISCOVERY_FILTERS;
+
+const LANGUAGE_SUGGESTIONS = ["English", "French", "German", "Spanish", "Italian", "Portuguese", "Russian", "Chinese", "Japanese", "Korean"];
+
+const MATCH_MODE_OPTIONS = [
+  { value: "all", label: "All of these" },
+  { value: "any", label: "Any of these" },
+];
 
 const parseDiscoverUrl = (locationSearch: string) => {
   const queryParams = new URLSearchParams(locationSearch);
   const searchFromUrl = queryParams.get("q") || "";
   const similarToFromUrl = Number(queryParams.get("similar_to")) || null;
   const filtersFromUrl = (() => {
-    try { return { ...EMPTY_FILTERS, ...JSON.parse(queryParams.get("filters") || "{}") } as DiscoveryFilters; }
+    try { return normalizeDiscoveryFilters(JSON.parse(queryParams.get("filters") || "{}")); }
     catch { return EMPTY_FILTERS; }
   })();
   return { searchFromUrl, similarToFromUrl, filtersFromUrl };
@@ -73,6 +65,7 @@ const Discover: React.FC = () => {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filters, setFilters] = useState<DiscoveryFilters>(EMPTY_FILTERS);
   const [fandomOptions, setFandomOptions] = useState<FandomInfo[]>([]);
+  const [fandomDraft, setFandomDraft] = useState("");
   const [appliedFilters, setAppliedFilters] = useState<DiscoveryFilters>(EMPTY_FILTERS);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -89,10 +82,10 @@ const Discover: React.FC = () => {
   useEffect(() => {
     if (!filtersOpen) return;
     const timer = window.setTimeout(() => {
-      void discoveryService.getFandoms(currentSite, filters.fandom).then(setFandomOptions).catch(() => setFandomOptions([]));
+      void discoveryService.getFandoms(currentSite, fandomDraft).then(setFandomOptions).catch(() => setFandomOptions([]));
     }, 180);
     return () => window.clearTimeout(timer);
-  }, [currentSite, filters.fandom, filtersOpen]);
+  }, [currentSite, fandomDraft, filtersOpen]);
 
   useEffect(() => {
     void savedSearchService.list().then(setSavedSearches).catch(() => setSavedSearches([]));
@@ -240,9 +233,12 @@ const Discover: React.FC = () => {
     setFilters((current) => ({ ...current, [key]: value }));
   };
 
-  const hasActiveFilters = Object.entries(appliedFilters).some(
-    ([key, value]) => !["sortBy", "sortOrder"].includes(key) && Boolean(value)
-  );
+  const updateListFilter = (key: keyof DiscoveryFilters, values: string[]) => {
+    setFilters((current) => ({ ...current, [key]: values }));
+  };
+
+  const hasActiveFilters = isDiscoveryFilterActive(appliedFilters);
+  const fandomSuggestions = Array.from(new Set(fandomOptions.map((fandom) => fandom.display_name)));
 
   const handleAddToLibrary = async (novel: DiscoveredNovel) => {
     if (!activeLibraryId) {
@@ -396,21 +392,43 @@ const Discover: React.FC = () => {
         </div>
         {filtersOpen && (
           <section id="discover-filters" className="discover-filters" aria-label="Discover filters">
-            <label>
-              Fandom / series
-              <input list="discover-fandoms" value={filters.fandom} onChange={(event) => updateFilter("fandom", event.target.value)} placeholder="Search imported source fandoms" />
-              <datalist id="discover-fandoms">
-                {fandomOptions.map((fandom) => <option key={fandom.id} value={fandom.display_name}>{fandom.media_type}{fandom.story_count ? ` · ${fandom.story_count.toLocaleString()} stories` : ""}</option>)}
-              </datalist>
-            </label>
-            <label>
-              Tag
-              <input value={filters.tag} onChange={(event) => updateFilter("tag", event.target.value)} placeholder="e.g. time loop" />
-            </label>
-            <label>
-              Genre
-              <input value={filters.genre} onChange={(event) => updateFilter("genre", event.target.value)} placeholder="e.g. fantasy" />
-            </label>
+            <ChipInput
+              label="Fandom / series"
+              values={filters.fandom}
+              onChange={(values) => updateListFilter("fandom", values)}
+              onDraftChange={setFandomDraft}
+              suggestions={fandomSuggestions}
+              placeholder="Type a fandom, then Enter"
+            />
+            <ChipInput
+              label="Tag"
+              values={filters.tag}
+              onChange={(values) => updateListFilter("tag", values)}
+              placeholder="e.g. time loop, then Enter"
+            />
+            <ChipInput
+              label="Genre"
+              values={filters.genre}
+              onChange={(values) => updateListFilter("genre", values)}
+              placeholder="e.g. fantasy, then Enter"
+            />
+            <div className="discover-filters__field">
+              <span id="discover-match-mode-label">Match tags, genres and fandoms</span>
+              <div className="discover-segmented" role="radiogroup" aria-labelledby="discover-match-mode-label">
+                {MATCH_MODE_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={filters.tagMode === option.value}
+                    className={filters.tagMode === option.value ? "is-active" : ""}
+                    onClick={() => updateFilter("tagMode", option.value)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <label>
               Status
               <select value={filters.status} onChange={(event) => updateFilter("status", event.target.value)}>
@@ -450,6 +468,42 @@ const Discover: React.FC = () => {
               Min chapters
               <input type="number" min="0" value={filters.minChapterCount} onChange={(event) => updateFilter("minChapterCount", event.target.value)} placeholder="0" />
             </label>
+            <ChipInput
+              label="Language"
+              values={filters.language}
+              onChange={(values) => updateListFilter("language", values)}
+              suggestions={LANGUAGE_SUGGESTIONS}
+              placeholder="e.g. English, then Enter"
+            />
+            <label className="discover-filters__check">
+              <input
+                type="checkbox"
+                checked={filters.completeOnly === "true"}
+                onChange={(event) => updateFilter("completeOnly", event.target.checked ? "true" : "")}
+              />
+              Complete stories only
+            </label>
+            <label>
+              Crossover
+              <select value={filters.crossover} onChange={(event) => updateFilter("crossover", event.target.value)}>
+                <option value="">Any</option>
+                <option value="true">Crossovers only</option>
+                <option value="false">Single fandom only</option>
+              </select>
+            </label>
+            <section className="discover-filters__exclude" aria-label="Exclude">
+              <div>
+                <h3>Exclude</h3>
+                <p>Hide any story that matches. Tags, genres, fandoms and authors must match exactly; words match title or summary.</p>
+              </div>
+              <div className="discover-filters__exclude-grid">
+                <ChipInput tone="exclude" label="Tags" values={filters.excludeTag} onChange={(values) => updateListFilter("excludeTag", values)} placeholder="e.g. character death" />
+                <ChipInput tone="exclude" label="Fandoms" values={filters.excludeFandom} onChange={(values) => updateListFilter("excludeFandom", values)} suggestions={fandomSuggestions} placeholder="Fandom name" />
+                <ChipInput tone="exclude" label="Genres" values={filters.excludeGenre} onChange={(values) => updateListFilter("excludeGenre", values)} placeholder="e.g. horror" />
+                <ChipInput tone="exclude" label="Authors" values={filters.excludeAuthor} onChange={(values) => updateListFilter("excludeAuthor", values)} placeholder="Author name" />
+                <ChipInput tone="exclude" label="Words in title or summary" values={filters.excludeText} onChange={(values) => updateListFilter("excludeText", values)} placeholder="e.g. gore" />
+              </div>
+            </section>
             <label>
               Label
               <input value={filters.label} onChange={(event) => updateFilter("label", event.target.value)} placeholder="e.g. cozy" />

@@ -470,13 +470,27 @@ async def get_author_metadata(author_id: int, include_novels: bool = False) -> d
     return data
 
 
+def _clean_list(values: Optional[list[str]]) -> Optional[list[str]]:
+    cleaned = [value.strip() for value in values or [] if value and value.strip()]
+    return cleaned or None
+
+
 async def list_novels_metadata(
     site: Optional[str] = None,
     author: Optional[str] = None,
     title: Optional[str] = None,
-    tag: Optional[str] = None,
-    fandom: Optional[str] = None,
-    genre: Optional[str] = None,
+    tag: Optional[list[str]] = None,
+    tag_mode: str = "all",
+    fandom: Optional[list[str]] = None,
+    genre: Optional[list[str]] = None,
+    exclude_tag: Optional[list[str]] = None,
+    exclude_fandom: Optional[list[str]] = None,
+    exclude_genre: Optional[list[str]] = None,
+    exclude_author: Optional[list[str]] = None,
+    exclude_text: Optional[list[str]] = None,
+    language: Optional[list[str]] = None,
+    complete_only: bool = False,
+    crossover: Optional[bool] = None,
     status: Optional[str] = None,
     min_word_count: Optional[int] = None,
     min_favorites: Optional[int] = None,
@@ -501,10 +515,20 @@ async def list_novels_metadata(
         params["author"] = author
     if title:
         params["title"] = title
+    # Repeatable parameters stay lists so httpx sends ?tag=a&tag=b.
     for name, value in {
-        "tag": tag,
-        "fandom": fandom,
-        "genre": genre,
+        "tag": _clean_list(tag),
+        "tag_mode": tag_mode if tag_mode != "all" else None,
+        "fandom": _clean_list(fandom),
+        "genre": _clean_list(genre),
+        "exclude_tag": _clean_list(exclude_tag),
+        "exclude_fandom": _clean_list(exclude_fandom),
+        "exclude_genre": _clean_list(exclude_genre),
+        "exclude_author": _clean_list(exclude_author),
+        "exclude_text": _clean_list(exclude_text),
+        "language": _clean_list(language),
+        "complete_only": True if complete_only else None,
+        "crossover": crossover,
         "status": status,
         "min_word_count": min_word_count,
         "min_favorites": min_favorites,
@@ -525,7 +549,7 @@ async def list_novels_metadata(
     if cursor:
         params["cursor"] = cursor
 
-    cache_key = f"novels:list:{hash(frozenset(params.items()))}"
+    cache_key = "novels:list:" + repr(sorted(params.items()))
     cached = cache.get(cache_key)
     if cached:
         return cached

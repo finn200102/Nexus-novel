@@ -26,9 +26,18 @@ export interface PaginatedResponse<T> {
 }
 
 export interface DiscoveryFilters {
-  tag: string;
-  fandom: string;
-  genre: string;
+  tag: string[];
+  tagMode: string;
+  fandom: string[];
+  genre: string[];
+  excludeTag: string[];
+  excludeFandom: string[];
+  excludeGenre: string[];
+  excludeAuthor: string[];
+  excludeText: string[];
+  language: string[];
+  completeOnly: string;
+  crossover: string;
   status: string;
   minWordCount: string;
   minFavorites: string;
