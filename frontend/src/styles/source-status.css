@@ -9,10 +9,10 @@
   margin: 0 0 16px;
   padding: 0 0.6rem 0 0.85rem;
   min-width: 0;
-  border: 1px solid rgba(245, 158, 11, 0.35);
+  border: 1px solid color-mix(in srgb, var(--warning) 45%, transparent);
   border-radius: 8px;
-  background: rgba(245, 158, 11, 0.12);
-  color: #f6d38b;
+  background: var(--warning-subtle);
+  color: var(--text);
   font-size: 0.875rem;
 }
 
@@ -44,37 +44,13 @@
   width: min(360px, calc(100vw - 32px));
   margin: 0;
   padding: 0.6rem 0.9rem 0.6rem 1.6rem;
-  border: 1px solid rgba(245, 158, 11, 0.35);
+  border: 1px solid color-mix(in srgb, var(--warning) 45%, transparent);
   border-radius: 8px;
-  background: #151c28;
-  color: #f6d38b;
+  background: var(--surface);
+  color: var(--text);
   line-height: 1.5;
   white-space: normal;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
-}
-
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) .source-status-banner {
-    border-color: rgba(180, 83, 9, 0.35);
-    background: #fff4e0;
-    color: #6b4a00;
-  }
-  :root:not([data-theme="dark"]) .source-status-banner__details {
-    border-color: rgba(180, 83, 9, 0.35);
-    background: #ffffff;
-    color: #6b4a00;
-  }
-}
-
-:root[data-theme="light"] .source-status-banner {
-  border-color: rgba(180, 83, 9, 0.35);
-  background: #fff4e0;
-  color: #6b4a00;
-}
-:root[data-theme="light"] .source-status-banner__details {
-  border-color: rgba(180, 83, 9, 0.35);
-  background: #ffffff;
-  color: #6b4a00;
+  box-shadow: var(--elev-1);
 }
 
 .source-status-chip {
@@ -82,10 +58,11 @@
   border-radius: 999px;
   padding: 0.15rem 0.6rem;
   font-size: 0.75rem;
-  background: var(--surface-muted, #eee);
+  background: var(--surface-2);
+  color: var(--text-2);
 }
 
-.source-status-chip--ok { background: #e3f5e8; color: #1d5c2e; }
+.source-status-chip--ok { background: var(--success-subtle); color: var(--success); }
 .source-status-chip--degraded,
-.source-status-chip--rate_limited { background: #fff4e0; color: #6b4a00; }
-.source-status-chip--down { background: #fde4e4; color: #7a1c1c; }
+.source-status-chip--rate_limited { background: var(--warning-subtle); color: var(--warning); }
+.source-status-chip--down { background: var(--danger-subtle); color: var(--danger); }

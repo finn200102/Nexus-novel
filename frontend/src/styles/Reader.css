@@ -55,66 +55,66 @@
 }
 
 .reader-shell--dusk {
-  background: linear-gradient(135deg, var(--bg-surface), #311b4a);
+  background: linear-gradient(135deg, var(--bg-surface), var(--accent-subtle));
 }
 
 .reader-shell--paper {
-  background: #fdfaf6;
-  color: #1f2937;
-  border-color: rgba(0, 0, 0, 0.1);
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border);
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.05);
 }
 
 .reader-shell--paper .reader-body {
-  background: #ffffff;
-  color: #1f2937;
-  border-color: rgba(0, 0, 0, 0.05);
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border);
 }
 
 .reader-shell--paper .reader-content {
-  color: #1f2937;
+  color: var(--text);
 }
 
 .reader-shell--paper .reader-sidebar {
-  background: #f7f3e8;
-  color: #1f2937;
-  border-color: rgba(0, 0, 0, 0.05);
+  background: var(--surface-2);
+  color: var(--text);
+  border-color: var(--border);
 }
 
 .reader-shell--paper .reader-sidebar__list button {
-  color: #4b5563;
+  color: var(--text-muted);
 }
 
 .reader-shell--paper .reader-sidebar__list button.is-active {
-  background: rgba(0, 0, 0, 0.05);
-  color: #111827;
+  background: var(--surface-2);
+  color: var(--accent);
   font-weight: 600;
 }
 
 .reader-shell--paper .reader-toolbar {
-  color: #111827;
+  color: var(--accent);
 }
 
 .reader-shell--paper .reader-type-controls,
 .reader-shell--paper .reader-theme-controls {
-  background: rgba(0, 0, 0, 0.05);
+  background: var(--surface-2);
   border-color: transparent;
 }
 
 .reader-shell--paper .reader-type-controls button,
 .reader-shell--paper .reader-theme-controls button {
-  color: #4b5563;
+  color: var(--text-muted);
 }
 
 .reader-shell--paper .reader-theme-controls button.is-active {
-  background: #fff;
-  color: #111827;
+  background: var(--surface);
+  color: var(--accent);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .reader-shell--paper .reader-navigation .prev-button {
-  background: rgba(0, 0, 0, 0.05);
-  color: #111827;
+  background: var(--surface-2);
+  color: var(--accent);
 }
 
 .reader-sidebar {
@@ -218,13 +218,13 @@
 }
 
 .reader-sidebar__list button:hover:not(.is-active) {
-  background: rgba(255, 255, 255, 0.05);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
   color: var(--text-main);
   transform: translateX(4px);
 }
 
 .reader-sidebar__list button.is-active {
-  background: rgba(99, 102, 241, 0.15);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
   color: var(--accent-primary);
   font-weight: 600;
   border-left: 3px solid var(--accent-primary);
@@ -357,10 +357,10 @@
   line-height: 1.35;
 }
 
-.reader-audio-status--generating { color: #a78bfa; }
-.reader-audio-status--ready { color: #4ade80; }
+.reader-audio-status--generating { color: var(--accent); }
+.reader-audio-status--ready { color: var(--success); }
 .reader-audio-status--failed { color: var(--status-error); }
-.reader-audio-status--cancelled { color: #fbbf24; }
+.reader-audio-status--cancelled { color: var(--warning); }
 
 .reader-audio-progress {
   display: grid;
@@ -406,7 +406,7 @@
   gap: .45rem;
   border-color: transparent !important;
   background: var(--accent-primary) !important;
-  color: #fff !important;
+  color: var(--on-accent) !important;
   font-weight: 700;
 }
 
@@ -555,20 +555,20 @@
 }
 
 .reader-navigation .prev-button {
-  background: rgba(255, 255, 255, 0.05);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
   color: var(--text-main);
   border: 1px solid var(--border-subtle);
 }
 
 .reader-navigation .prev-button:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.1);
+  background: color-mix(in srgb, var(--text) 10%, transparent);
   transform: translateX(-4px);
 }
 
 .reader-navigation .next-button {
   background: var(--accent-primary);
-  color: #fff;
-  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.3);
+  color: var(--on-accent);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 .reader-navigation .next-button:hover:not(:disabled) {
@@ -637,4 +637,4 @@
   .reader-inspector .reader-annotations { grid-column: auto; }
 }
 /* Cadence is advisory: it never replaces a source's own publication status. */
-.reader-hiatus { display: grid; gap: 4px; margin-top: 12px; padding: 10px; border: 1px solid rgba(122,104,255,.28); border-radius: 9px; background: rgba(70,54,143,.12); }.reader-hiatus strong { color: #d6cbff; font-size: 12px; }.reader-hiatus small { color: #9eacc4; font-size: 11px; line-height: 1.35; }.reader-hiatus--likely_hiatus { border-color: rgba(245,196,107,.4); background: rgba(111,75,25,.16); }.reader-hiatus--likely_hiatus strong { color: #f5c46b; }
+.reader-hiatus { display: grid; gap: 4px; margin-top: 12px; padding: 10px; border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent); border-radius: 9px; background: color-mix(in srgb, var(--accent) 12%, transparent); }.reader-hiatus strong { color: var(--accent); font-size: 12px; }.reader-hiatus small { color: var(--text-2); font-size: 11px; line-height: 1.35; }.reader-hiatus--likely_hiatus { border-color: color-mix(in srgb, var(--warning) 40%, transparent); background: color-mix(in srgb, var(--warning) 16%, transparent); }.reader-hiatus--likely_hiatus strong { color: var(--warning); }

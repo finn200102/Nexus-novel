@@ -1,0 +1,225 @@
+/*
+ * Nexus design tokens (design-proposal.md §4.1–4.5).
+ * The only place where colours, font sizes, radii, spacing and durations are defined.
+ * Theme: light on :root, dark via [data-theme="dark"] or the OS preference when no
+ * explicit theme is set. `.nx-theme-light` / `.nx-theme-dark` scope a theme to a subtree
+ * (used by the reader, whose theme is independent of the app theme).
+ */
+
+:root,
+.nx-theme-light,
+[data-reader-theme="paper"],
+[data-reader-theme="sepia"],
+.reader-shell--paper /* legacy: remove in D6 */ {
+  --bg: #faf8f4;
+  --surface: #ffffff;
+  --surface-2: #f1eee8;
+  --border: #e3ded5;
+  --border-strong: #8a8378;
+  --text: #1d1b18;
+  --text-2: #46423c;
+  --text-muted: #5f5a52;
+  --accent: #5235c8;
+  --accent-fill: #5b3fd9;
+  --on-accent: #ffffff;
+  --accent-subtle: #ece8fb;
+  --success: #1d7344;
+  --success-subtle: #e3f2e8;
+  --warning: #8a5300;
+  --warning-subtle: #fbefd9;
+  --danger: #b3261e;
+  --danger-subtle: #fbe7e5;
+  --info: #1c5da6;
+  --info-subtle: #e3eefa;
+  --on-status: #ffffff; /* text on solid success/warning/danger/info fills */
+  --on-danger: #ffffff;
+  --focus: #5235c8;
+  --scrim: rgb(20 18 15 / 0.45);
+  --elev-1: 0 4px 16px rgb(29 27 24 / 0.12);
+  --elev-2: 0 12px 40px rgb(29 27 24 / 0.18);
+  color-scheme: light;
+}
+
+:root[data-theme="dark"],
+.nx-theme-dark,
+[data-reader-theme="night"],
+[data-reader-theme="black"],
+.reader-shell--night,
+.reader-shell--dusk /* legacy: remove in D6 */ {
+  --bg: #121315;
+  --surface: #1a1b1e;
+  --surface-2: #24262a;
+  --border: #34363b;
+  --border-strong: #7d7f86;
+  --text: #ece9e4;
+  --text-2: #c9c5be;
+  --text-muted: #a29e97;
+  --accent: #b3a4ff;
+  --accent-fill: #b3a4ff;
+  --on-accent: #16121f;
+  --accent-subtle: #2b2645;
+  --success: #6fd39a;
+  --success-subtle: #17301f;
+  --warning: #f0b95a;
+  --warning-subtle: #352712;
+  --danger: #ff928a;
+  --danger-subtle: #3a1a18;
+  --info: #8dbeff;
+  --info-subtle: #162a44;
+  --on-status: #121315;
+  --on-danger: #1a0b0a;
+  --focus: #b3a4ff;
+  --scrim: rgb(0 0 0 / 0.6);
+  --elev-1: 0 4px 16px rgb(0 0 0 / 0.5);
+  --elev-2: 0 12px 40px rgb(0 0 0 / 0.6);
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121315;
+    --surface: #1a1b1e;
+    --surface-2: #24262a;
+    --border: #34363b;
+    --border-strong: #7d7f86;
+    --text: #ece9e4;
+    --text-2: #c9c5be;
+    --text-muted: #a29e97;
+    --accent: #b3a4ff;
+    --accent-fill: #b3a4ff;
+    --on-accent: #16121f;
+    --accent-subtle: #2b2645;
+    --success: #6fd39a;
+    --success-subtle: #17301f;
+    --warning: #f0b95a;
+    --warning-subtle: #352712;
+    --danger: #ff928a;
+    --danger-subtle: #3a1a18;
+    --info: #8dbeff;
+    --info-subtle: #162a44;
+    --on-status: #121315;
+    --on-danger: #1a0b0a;
+    --focus: #b3a4ff;
+    --scrim: rgb(0 0 0 / 0.6);
+    --elev-1: 0 4px 16px rgb(0 0 0 / 0.5);
+    --elev-2: 0 12px 40px rgb(0 0 0 / 0.6);
+    color-scheme: dark;
+  }
+}
+
+/* Theme-independent tokens */
+:root {
+  /* Typography (§4.2) */
+  --font-ui: "Inter Variable", Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-read: Literata, "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --fs-xs: 0.75rem;
+  --fs-sm: 0.875rem;
+  --fs-md: 1rem;
+  --fs-lg: 1.125rem;
+  --fs-xl: 1.375rem;
+  --fs-2xl: 1.75rem;
+  --fs-3xl: 2.25rem;
+  --lh-xs: 1rem;
+  --lh-sm: 1.25rem;
+  --lh-md: 1.5rem;
+  --lh-lg: 1.625rem;
+  --lh-xl: 1.75rem;
+  --lh-2xl: 2.125rem;
+  --lh-3xl: 2.75rem;
+
+  /* Spacing (§4.3, 4 px base) */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+  --sp-8: 64px;
+  --gutter: 16px;
+  --content-max: 1200px;
+  --content-max-wide: 1400px;
+
+  /* Radii */
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 16px;
+  --r-pill: 999px;
+  --r-cover: 4px;
+
+  /* Control sizes */
+  --control-sm: 32px;
+  --control-md: 40px;
+  --control-lg: 48px;
+  --touch-min: 44px;
+
+  /* Motion (§4.4) */
+  --dur-1: 120ms;
+  --dur-2: 200ms;
+  --dur-3: 280ms;
+  --ease-enter: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+
+  /* Layers */
+  --z-sticky: 20;
+  --z-overlay: 100;
+  --z-toast: 200;
+}
+
+@media (min-width: 768px) {
+  :root { --gutter: 24px; }
+}
+@media (min-width: 1024px) {
+  :root { --gutter: 32px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-1: 0.01ms;
+    --dur-2: 0.01ms;
+    --dur-3: 0.01ms;
+  }
+}
+
+/*
+ * Reader themes (§4.1, independent of the app theme). Apply with
+ * `data-reader-theme="paper|sepia|night|black"`; each also scopes the matching app
+ * theme so controls inside the reader stay legible.
+ */
+[data-reader-theme="paper"] {
+  --reader-bg: #faf8f4;
+  --reader-text: #1d1b18;
+  --reader-muted: #5f5a52;
+  --reader-link: #5235c8;
+}
+[data-reader-theme="sepia"] {
+  --reader-bg: #f3ead6;
+  --reader-text: #3a2e1f;
+  --reader-muted: #6b5a44;
+  --reader-link: #5235c8;
+}
+[data-reader-theme="night"] {
+  --reader-bg: #121315;
+  --reader-text: #d8d4cd;
+  --reader-muted: #a29e97;
+  --reader-link: #b3a4ff;
+}
+[data-reader-theme="black"] {
+  --reader-bg: #000000;
+  --reader-text: #bdb9b2;
+  --reader-muted: #8f8b85;
+  --reader-link: #b3a4ff;
+}
+
+/* Cover fallback hues (white title text ≥ 7:1 on each) */
+:root {
+  --cover-1: #3f4c6b;
+  --cover-2: #6b3f4f;
+  --cover-3: #2f5d50;
+  --cover-4: #6a5532;
+  --cover-5: #4f3f6b;
+  --cover-6: #5e4a3a;
+  --cover-7: #33566b;
+  --cover-8: #5b3a5e;
+}

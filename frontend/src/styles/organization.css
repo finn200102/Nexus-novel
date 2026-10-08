@@ -48,7 +48,7 @@
   align-items: center;
   padding: 0.15rem 0.3rem 0.15rem 0.6rem;
   border-radius: 999px;
-  background: rgba(127, 127, 127, 0.14);
+  background: var(--surface-2);
   font-size: 0.85rem;
 }
 
@@ -94,7 +94,7 @@
   align-items: center;
   gap: 1rem;
   padding: 0.4rem 0;
-  border-bottom: 1px solid rgba(127, 127, 127, 0.2);
+  border-bottom: 1px solid var(--border);
 }
 
 .shelf-bar {
@@ -127,7 +127,7 @@
   align-items: center;
   gap: 0.2rem;
   padding: 0.15rem 0.35rem;
-  border: 1px solid rgba(127, 127, 127, 0.3);
+  border: 1px solid var(--border-strong);
   border-radius: 999px;
 }
 
@@ -194,7 +194,7 @@
 
 .personal-panel__rating button.is-on {
   opacity: 1;
-  color: #d9a400;
+  color: var(--warning);
 }
 
 .personal-panel__rating span {
@@ -214,7 +214,7 @@
   font: inherit;
   padding: 0.5rem;
   border-radius: 6px;
-  border: 1px solid rgba(127, 127, 127, 0.4);
+  border: 1px solid var(--border-strong);
   background: transparent;
   color: inherit;
 }
@@ -222,7 +222,7 @@
 .personal-panel__preview {
   min-height: 7rem;
   padding: 0.5rem;
-  border: 1px dashed rgba(127, 127, 127, 0.4);
+  border: 1px dashed var(--border-strong);
   border-radius: 6px;
 }
 

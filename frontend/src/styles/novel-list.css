@@ -97,7 +97,7 @@
 
 .novel-selection-toolbar button {
   border: none;
-  background: rgba(255, 255, 255, 0.1);
+  background: color-mix(in srgb, var(--text) 10%, transparent);
   color: var(--text-main);
   padding: 0.6rem 1.25rem;
   border-radius: var(--radius-sm);
@@ -107,18 +107,18 @@
 }
 
 .novel-selection-toolbar button:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: color-mix(in srgb, var(--text) 15%, transparent);
 }
 
 .novel-selection-toolbar button.danger {
-  background: rgba(239, 68, 68, 0.2);
-  color: #fca5a5;
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: color-mix(in srgb, var(--danger) 20%, transparent);
+  color: var(--danger);
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
 }
 
 .novel-selection-toolbar button.danger:hover {
-  background: rgba(239, 68, 68, 0.3);
-  color: #fff;
+  background: color-mix(in srgb, var(--danger) 30%, transparent);
+  color: var(--text);
 }
 
 .novel-selection-toolbar button:disabled {
@@ -140,7 +140,7 @@
   border-radius: 50%;
   border: none;
   background: var(--accent-primary);
-  color: #fff;
+  color: var(--on-accent);
   font-size: 1.25rem;
   font-weight: 600;
   cursor: pointer;
@@ -213,7 +213,7 @@
   align-items: center;
   gap: .45rem;
   padding: .65rem 1rem;
-  color: #fff;
+  color: var(--on-accent);
   background: var(--accent-primary);
   border: 1px solid var(--accent-primary);
   border-radius: var(--radius-sm);
@@ -228,14 +228,14 @@
   margin-top: 1rem;
   background: var(--accent-primary);
   border: none;
-  color: #fff;
+  color: var(--on-accent);
   padding: 0.5rem 1.5rem;
   border-radius: var(--radius-sm);
   cursor: pointer;
 }
 
-.discover-saved-searches { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 0 0 16px; padding: 11px 13px; border: 1px solid rgba(114,87,245,.28); border-radius: 10px; background: rgba(52,39,112,.14); }
-.discover-saved-searches strong, .discover-saved-searches small { display: block; }.discover-saved-searches small { margin-top: 2px; color: var(--text-muted); font-size: 11px; }.discover-saved-searches > div:last-child { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }.discover-saved-searches span { display: inline-flex; overflow: hidden; border: 1px solid var(--border-subtle); border-radius: 999px; background: #121b31; }.discover-saved-searches button { padding: 6px 9px; color: #cfc7ff; font-size: 12px; }.discover-saved-searches span button + button { border-left: 1px solid var(--border-subtle); color: #ff9caf; }
+.discover-saved-searches { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 0 0 16px; padding: 11px 13px; border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent); border-radius: 10px; background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.discover-saved-searches strong, .discover-saved-searches small { display: block; }.discover-saved-searches small { margin-top: 2px; color: var(--text-muted); font-size: 11px; }.discover-saved-searches > div:last-child { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }.discover-saved-searches span { display: inline-flex; overflow: hidden; border: 1px solid var(--border-subtle); border-radius: 999px; background: var(--accent-subtle); }.discover-saved-searches button { padding: 6px 9px; color: var(--accent); font-size: 12px; }.discover-saved-searches span button + button { border-left: 1px solid var(--border-subtle); color: var(--danger); }
 
 @media (max-width: 768px) {
   .novel-list__grid {

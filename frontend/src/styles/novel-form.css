@@ -9,15 +9,15 @@
 .novel-drawer__overlay {
   position: absolute;
   inset: 0;
-  background: rgba(2, 6, 23, 0.7);
+  background: var(--scrim);
 }
 
 .novel-drawer__panel {
   position: relative;
   width: 420px;
   max-width: 90vw;
-  background: rgba(4, 10, 24, 0.95);
-  border-left: 1px solid rgba(148, 163, 184, 0.25);
+  background: var(--scrim);
+  border-left: 1px solid var(--border-strong);
   padding: 1.5rem;
   backdrop-filter: blur(12px);
   overflow-y: auto;
@@ -28,13 +28,13 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 1rem;
-  color: #f8fafc;
+  color: var(--text);
 }
 
 .novel-drawer__close {
   border: none;
   background: transparent;
-  color: rgba(248, 250, 252, 0.9);
+  color: var(--text);
   cursor: pointer;
 }
 
@@ -46,18 +46,18 @@
 }
 
 .novel-drawer__tabs button {
-  border: 1px solid rgba(148, 163, 184, 0.4);
+  border: 1px solid var(--border-strong);
   background: transparent;
-  color: rgba(226, 232, 240, 0.8);
+  color: var(--text-2);
   padding: 0.5rem;
   border-radius: 12px;
   cursor: pointer;
 }
 
 .novel-drawer__tabs button.is-active {
-  background: linear-gradient(135deg, #34d399, #10b981);
+  background: linear-gradient(135deg, var(--success), var(--success));
   border-color: transparent;
-  color: #041221;
+  color: var(--text);
   font-weight: 600;
 }
 
@@ -74,7 +74,7 @@
 }
 
 .novel-drawer__group label {
-  color: rgba(226, 232, 240, 0.85);
+  color: var(--text);
   font-weight: 600;
 }
 
@@ -82,25 +82,25 @@
 .novel-drawer__group textarea {
   width: 100%;
   border-radius: 14px;
-  border: 1px solid rgba(148, 163, 184, 0.35);
+  border: 1px solid var(--border-strong);
   padding: 0.75rem 1rem;
-  background: rgba(10, 21, 40, 0.9);
-  color: #f1f5f9;
+  background: var(--scrim);
+  color: var(--text);
   resize: vertical;
 }
 
 .novel-drawer__status {
   margin: 0;
   font-weight: 600;
-  color: rgba(226, 232, 240, 0.85);
+  color: var(--text);
 }
 
 .novel-drawer__status.is-success {
-  color: #34d399;
+  color: var(--success);
 }
 
 .novel-drawer__status.is-error {
-  color: #f87171;
+  color: var(--danger);
 }
 
 .novel-drawer__submit {
@@ -108,8 +108,8 @@
   border-radius: 14px;
   padding: 0.85rem 1.25rem;
   font-weight: 600;
-  background: linear-gradient(135deg, #f472b6, #c084fc);
-  color: #050914;
+  background: linear-gradient(135deg, var(--accent-fill), var(--accent-fill));
+  color: var(--text);
   cursor: pointer;
 }
 

@@ -1,12 +1,12 @@
 .account-data__body { display: grid; gap: 12px; padding: 14px 16px 16px; }
-.account-data__body > p { margin: 0; color: #94a0af; font-size: 12px; line-height: 1.5; }
+.account-data__body > p { margin: 0; color: var(--text-muted); font-size: 12px; line-height: 1.5; }
 .account-data__actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.account-data__actions button { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; color: #e5e9ef; background: #0e151e; border: 1px solid #273141; border-radius: 5px; font-size: 12px; font-weight: 700; }
-.account-data__actions button:hover:not(:disabled) { border-color: #57479d; background: #1a1b31; }
+.account-data__actions button { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 5px; font-size: 12px; font-weight: 700; }
+.account-data__actions button:hover:not(:disabled) { border-color: var(--accent); background: var(--surface-2); }
 .account-data__actions button:disabled { cursor: not-allowed; opacity: .5; }
-.account-data__report { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid #222c3a; }
+.account-data__report { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid var(--border); }
 .account-data__summary { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px 14px; margin: 0; }
 .account-data__summary div { display: flex; justify-content: space-between; gap: 8px; }
-.account-data__summary dt { color: #8d99a8; font-size: 11px; }
-.account-data__summary dd { margin: 0; color: #e5e9ef; font-size: 12px; font-weight: 700; }
-.account-data__problems { display: grid; gap: 4px; margin: 0; padding-left: 18px; color: #f1b0b0; font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }
+.account-data__summary dt { color: var(--text-muted); font-size: 11px; }
+.account-data__summary dd { margin: 0; color: var(--text); font-size: 12px; font-weight: 700; }
+.account-data__problems { display: grid; gap: 4px; margin: 0; padding-left: 18px; color: var(--danger); font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }

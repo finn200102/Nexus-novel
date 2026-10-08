@@ -1,0 +1,189 @@
+/* Global base styles on top of styles/tokens.css (design-proposal.md §4.2–4.5, §6). */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  background-color: var(--bg);
+}
+
+body {
+  min-height: 100vh;
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--fs-md);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-ui);
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--text);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: inherit;
+}
+
+input,
+select,
+textarea {
+  font-family: inherit;
+  color: inherit;
+}
+/* Give fields a themed background so browsers never fall back to their own field colours. */
+:where(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"]), select, textarea) {
+  background-color: var(--surface);
+}
+
+::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+::selection {
+  background: var(--accent-subtle);
+  color: var(--text);
+}
+
+/* Scrollbars */
+* {
+  scrollbar-color: var(--border-strong) transparent;
+}
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: var(--r-pill);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+}
+
+/* Focus (§4.5): one visible ring for every interactive element. */
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+:focus:not(:focus-visible) {
+  outline: none; /* mouse focus only; keyboard focus keeps the ring above */
+}
+[tabindex="-1"]:focus-visible {
+  outline: none; /* programmatic focus targets (headings, main) */
+}
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  border-color: var(--focus);
+}
+html {
+  scroll-padding-top: 80px;
+}
+
+/* Type scale classes */
+.text-xs { font-size: var(--fs-xs); line-height: var(--lh-xs); font-weight: 500; }
+.text-sm { font-size: var(--fs-sm); line-height: var(--lh-sm); }
+.text-md { font-size: var(--fs-md); line-height: var(--lh-md); }
+.text-lg { font-size: var(--fs-lg); line-height: var(--lh-lg); font-weight: 600; }
+.text-xl { font-size: var(--fs-xl); line-height: var(--lh-xl); font-weight: 650; letter-spacing: -0.01em; }
+.text-2xl { font-size: var(--fs-2xl); line-height: var(--lh-2xl); font-weight: 700; letter-spacing: -0.01em; }
+.text-3xl { font-size: var(--fs-3xl); line-height: var(--lh-3xl); font-weight: 700; letter-spacing: -0.01em; }
+.text-muted { color: var(--text-muted); }
+.text-secondary { color: var(--text-2); }
+
+.visually-hidden,
+.sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+/* Reduced motion (§4.4) */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto !important;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+:root[data-reduce-motion="true"] *,
+:root[data-reduce-motion="true"] *::before,
+:root[data-reduce-motion="true"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* Windows High Contrast / forced colours */
+@media (forced-colors: active) {
+  :focus-visible {
+    outline: 2px solid Highlight;
+  }
+  button,
+  [role="button"],
+  [role="tab"],
+  [role="switch"] {
+    border: 1px solid ButtonText;
+  }
+  [aria-pressed="true"],
+  [aria-selected="true"],
+  [aria-checked="true"],
+  [aria-current] {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
+}
+
+/* Scoped themes: re-establish the text colour, which is otherwise inherited as an
+ * already-resolved value from the page theme. */
+.nx-theme-light,
+.nx-theme-dark,
+[data-reader-theme],
+.reader-shell--night,
+.reader-shell--dusk {
+  color: var(--text);
+}

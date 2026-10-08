@@ -4,9 +4,9 @@
   background: var(--bg-surface);
   background-image: linear-gradient(
     90deg,
-    rgba(255, 255, 255, 0.03) 0px,
-    rgba(255, 255, 255, 0.08) 40px,
-    rgba(255, 255, 255, 0.03) 80px
+    color-mix(in srgb, var(--text) 3%, transparent) 0px,
+    color-mix(in srgb, var(--text) 8%, transparent) 40px,
+    color-mix(in srgb, var(--text) 3%, transparent) 80px
   );
   background-size: 200vw 100%;
   border-radius: var(--radius-sm);
@@ -77,9 +77,9 @@
   border-radius: 0;
   background-image: linear-gradient(
     90deg,
-    rgba(255, 255, 255, 0.02) 0px,
-    rgba(255, 255, 255, 0.06) 40px,
-    rgba(255, 255, 255, 0.02) 80px
+    color-mix(in srgb, var(--text) 2%, transparent) 0px,
+    color-mix(in srgb, var(--text) 6%, transparent) 40px,
+    color-mix(in srgb, var(--text) 2%, transparent) 80px
   );
 }
 
@@ -108,9 +108,9 @@
   background: var(--bg-surface);
   background-image: linear-gradient(
     90deg,
-    rgba(255, 255, 255, 0.02) 0px,
-    rgba(255, 255, 255, 0.06) 40px,
-    rgba(255, 255, 255, 0.02) 80px
+    color-mix(in srgb, var(--text) 2%, transparent) 0px,
+    color-mix(in srgb, var(--text) 6%, transparent) 40px,
+    color-mix(in srgb, var(--text) 2%, transparent) 80px
   );
   animation: shimmer 2s infinite linear;
 }

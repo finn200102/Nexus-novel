@@ -33,9 +33,9 @@
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  background: rgba(99, 102, 241, 0.15);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
   color: var(--accent-primary);
-  border: 1px solid rgba(99, 102, 241, 0.3);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 .novel-status-badge {
@@ -50,28 +50,28 @@
 }
 
 .novel-status-badge.status-complete {
-  background: rgba(16, 185, 129, 0.15);
+  background: color-mix(in srgb, var(--success) 15%, transparent);
   color: var(--status-success);
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  border: 1px solid color-mix(in srgb, var(--success) 30%, transparent);
 }
 
 .novel-status-badge.status-ongoing {
-  background: rgba(99, 102, 241, 0.15);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
   color: var(--accent-primary);
-  border: 1px solid rgba(99, 102, 241, 0.3);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 .novel-status-badge.status-in-progress {
-  background: rgba(245, 158, 11, 0.15);
+  background: color-mix(in srgb, var(--warning) 15%, transparent);
   color: var(--status-warning);
-  border: 1px solid rgba(245, 158, 11, 0.3);
+  border: 1px solid color-mix(in srgb, var(--warning) 30%, transparent);
 }
 
 .novel-status-badge.status-hiatus,
 .novel-status-badge.status-cancelled {
-  background: rgba(239, 68, 68, 0.15);
+  background: color-mix(in srgb, var(--danger) 15%, transparent);
   color: var(--status-error);
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
 }
 
 .novel-info-rows {
@@ -139,8 +139,8 @@
 
 .novel-rating .star.full,
 .novel-rating .star.half {
-  color: #fbbf24;
-  text-shadow: 0 0 8px rgba(251, 191, 36, 0.5);
+  color: var(--warning);
+  text-shadow: 0 0 8px color-mix(in srgb, var(--warning) 50%, transparent);
 }
 
 .novel-rating .star.half {
@@ -148,7 +148,7 @@
 }
 
 .novel-rating .star.empty {
-  color: rgba(255, 255, 255, 0.1);
+  color: var(--text-muted);
 }
 
 .novel-rating .rating-value {
@@ -260,7 +260,7 @@
 
 .metadata-id {
   font-family: monospace;
-  background: rgba(0, 0, 0, 0.3);
+  background: var(--surface-2);
   padding: 0.4rem 0.85rem;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-subtle);

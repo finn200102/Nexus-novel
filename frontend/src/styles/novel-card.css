@@ -33,7 +33,7 @@
   width: 24px;
   height: 24px;
   background-color: var(--status-success);
-  color: #fff;
+  color: var(--on-status);
   border-radius: var(--radius-full);
   display: flex;
   align-items: center;
@@ -94,7 +94,7 @@
   font-size: 0.65rem;
   padding: 0.2rem 0.5rem;
   border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.1);
+  background: color-mix(in srgb, var(--text) 10%, transparent);
   color: var(--text-main);
   font-weight: 600;
   letter-spacing: 0.05em;
@@ -108,12 +108,12 @@
 }
 
 .novel-card__scrape--pending {
-  background: rgba(245, 158, 11, 0.2);
+  background: color-mix(in srgb, var(--warning) 20%, transparent);
   color: var(--status-warning);
 }
 
 .novel-card__scrape--failed {
-  background: rgba(239, 68, 68, 0.2);
+  background: color-mix(in srgb, var(--danger) 20%, transparent);
   color: var(--status-error);
 }
 
@@ -181,7 +181,7 @@
 }
 
 .novel-card__stat.rating {
-  color: #fbbf24;
+  color: var(--warning);
 }
 
 .novel-card__status {
@@ -197,22 +197,22 @@
 }
 
 .novel-card__status.status-complete {
-  background: rgba(16, 185, 129, 0.15);
+  background: color-mix(in srgb, var(--success) 15%, transparent);
   color: var(--status-success);
 }
 
 .novel-card__status.status-ongoing {
-  background: rgba(99, 102, 241, 0.15);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
   color: var(--accent-primary);
 }
 
 .novel-card__status.status-in-progress {
-  background: rgba(245, 158, 11, 0.15);
+  background: color-mix(in srgb, var(--warning) 15%, transparent);
   color: var(--status-warning);
 }
 
 .novel-card__status.status-hiatus {
-  background: rgba(239, 68, 68, 0.15);
+  background: color-mix(in srgb, var(--danger) 15%, transparent);
   color: var(--status-error);
 }
 

@@ -10,17 +10,17 @@
 .library-modal__overlay {
   position: absolute;
   inset: 0;
-  background: rgba(2, 6, 23, 0.7);
+  background: var(--scrim);
 }
 
 .library-modal__panel {
   position: relative;
   width: min(480px, 92vw);
-  background: rgba(6, 11, 25, 0.95);
+  background: var(--scrim);
   border-radius: 28px;
-  border: 1px solid rgba(148, 163, 184, 0.25);
+  border: 1px solid var(--border-strong);
   padding: 2rem;
-  color: #f8fafc;
+  color: var(--text);
   z-index: 1;
   box-shadow: 0 35px 80px rgba(0, 0, 0, 0.45);
 }
@@ -39,7 +39,7 @@
 .library-modal__header button {
   border: none;
   background: transparent;
-  color: rgba(248, 250, 252, 0.85);
+  color: var(--text);
   cursor: pointer;
 }
 
@@ -53,16 +53,16 @@
   font-size: 0.8rem;
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  color: rgba(148, 163, 184, 0.8);
+  color: var(--text-2);
 }
 
 .library-modal__form input {
   margin-top: 0.35rem;
   width: 100%;
   border-radius: 16px;
-  border: 1px solid rgba(148, 163, 184, 0.35);
-  background: rgba(10, 20, 40, 0.9);
-  color: #f8fafc;
+  border: 1px solid var(--border-strong);
+  background: var(--scrim);
+  color: var(--text);
   padding: 0.85rem 1rem;
 }
 
@@ -76,8 +76,8 @@
   border: none;
   border-radius: 18px;
   padding: 0.85rem;
-  color: rgba(248, 250, 252, 0.9);
-  background: rgba(248, 250, 252, 0.05);
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
   cursor: pointer;
   opacity: 0.6;
 }
@@ -88,7 +88,7 @@
 }
 
 .library-modal__status {
-  color: #f87171;
+  color: var(--danger);
   margin: 0;
 }
 
@@ -96,8 +96,8 @@
   border: none;
   border-radius: 16px;
   padding: 0.95rem 1.5rem;
-  background: linear-gradient(135deg, #7dd3fc, #38bdf8);
-  color: #04121e;
+  background: linear-gradient(135deg, var(--info), var(--info));
+  color: var(--text);
   font-weight: 600;
   cursor: pointer;
 }

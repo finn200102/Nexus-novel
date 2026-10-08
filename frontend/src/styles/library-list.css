@@ -1,5 +1,5 @@
 .library-container {
-  background-color: #ffffff;
+  background-color: var(--surface);
   border-radius: 8px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
   padding: 2rem;
@@ -15,18 +15,18 @@
   left: 0;
   width: 100%;
   height: 5px;
-  background: linear-gradient(to right, #4a777a, #e97451);
+  background: linear-gradient(to right, var(--surface-2), var(--danger));
   border-radius: 8px 8px 0 0;
 }
 
 .library-title {
   font-family: "Montserrat", "Helvetica Neue", sans-serif;
-  color: #333333;
+  color: var(--text);
   font-size: 1.8rem;
   margin-top: 0.5rem;
   margin-bottom: 1.5rem;
   padding-bottom: 0.75rem;
-  border-bottom: 1px solid #e0e0d5;
+  border-bottom: 1px solid var(--border);
 }
 
 .library-items {
@@ -39,15 +39,15 @@
   font-family: "Merriweather", Georgia, serif;
   padding: 1rem 1.25rem;
   margin-bottom: 0.75rem;
-  background-color: #f5f5dc;
+  background-color: var(--surface-2);
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s ease;
-  border-left: 4px solid #4a777a;
+  border-left: 4px solid var(--border-strong);
 }
 
 .library-item:hover {
-  background-color: #e0e0d5;
+  background-color: var(--surface-2);
   transform: translateX(5px);
 }
 
@@ -65,19 +65,19 @@
 }
 
 .loading-message {
-  color: #4a777a;
-  background-color: rgba(74, 119, 122, 0.1);
+  color: var(--text-muted);
+  background-color: var(--surface-2);
 }
 
 .error-message {
-  color: #d32f2f;
-  background-color: rgba(211, 47, 47, 0.1);
-  border: 1px solid rgba(211, 47, 47, 0.3);
+  color: var(--danger);
+  background-color: color-mix(in srgb, var(--danger) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
 }
 
 .empty-state-message {
-  color: #666666;
-  background-color: #f5f5dc;
+  color: var(--text-muted);
+  background-color: var(--surface-2);
   font-style: italic;
 }
 

@@ -23,48 +23,48 @@ button {
 
 /* Edit Button */
 .edit-button {
-  background-color: #4a777a;
-  color: #ffffff;
-  border: 1px solid #4a777a;
+  background-color: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
 }
 
 .edit-button:hover {
-  background-color: #3e6461;
+  background-color: var(--surface-2);
   transform: translateY(-2px);
 }
 
 .edit-button.active {
-  background-color: #e97451;
-  border: 1px solid #e97451;
+  background-color: var(--danger);
+  border: 1px solid var(--danger);
 }
 
 .edit-button.active:hover {
-  background-color: #c56e4c;
+  background-color: var(--danger);
 }
 
 /* Download Button */
 .download-button {
-  background-color: #388e3c;
-  color: #ffffff;
-  border: 1px solid #388e3c;
+  background-color: var(--success);
+  color: var(--on-status);
+  border: 1px solid var(--success);
   margin-left: 1rem;
 }
 
 .download-button:hover {
-  background-color: #2f6f2a;
+  background-color: var(--success);
   transform: translateY(-2px);
 }
 
 .download-button:disabled {
-  background-color: #e0e0e0;
-  color: #b0b0b0;
-  border: 1px solid #e0e0e0;
+  background-color: var(--surface-2);
+  color: var(--text-2);
+  border: 1px solid var(--border);
   cursor: not-allowed;
 }
 
 /* Active state on hover */
 .download-button:hover:enabled {
-  background-color: #388e3c;
+  background-color: var(--success);
   transform: translateY(-2px);
 }
 
@@ -74,14 +74,14 @@ button {
   gap: 1rem;
   flex-wrap: wrap;
   align-items: center;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+  border-bottom: 1px solid var(--border-strong);
   padding-bottom: 1rem;
 }
 
 .chapter-list__title {
   font-family: "Montserrat", "Helvetica Neue", sans-serif;
   font-size: 1.2rem;
-  color: #0f172a;
+  color: var(--accent);
   margin: 0;
 }
 
@@ -96,8 +96,8 @@ button {
 }
 
 .chapter-list__loading {
-  color: #4a777a;
-  background-color: rgba(74, 119, 122, 0.1);
+  color: var(--text-muted);
+  background-color: var(--surface-2);
   position: relative;
 }
 
@@ -106,7 +106,7 @@ button {
   display: block;
   width: 40px;
   height: 3px;
-  background-color: #4a777a;
+  background-color: var(--surface-2);
   margin: 1rem auto 0;
   animation: loadingPulse 1.5s infinite ease-in-out;
 }
@@ -127,14 +127,14 @@ button {
 }
 
 .chapter-list__error {
-  color: #d32f2f;
-  background-color: rgba(211, 47, 47, 0.1);
-  border: 1px solid rgba(211, 47, 47, 0.3);
+  color: var(--danger);
+  background-color: color-mix(in srgb, var(--danger) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
 }
 
 .chapter-list__empty {
-  color: #666666;
-  background-color: #f5f5dc;
+  color: var(--text-muted);
+  background-color: var(--surface-2);
   font-style: italic;
 }
 
@@ -153,17 +153,17 @@ button {
 }
 
 .chapter-list__container::-webkit-scrollbar-track {
-  background: #f0f0f0;
+  background: var(--surface-2);
   border-radius: 10px;
 }
 
 .chapter-list__container::-webkit-scrollbar-thumb {
-  background: #cccccc;
+  background: var(--surface-2);
   border-radius: 10px;
 }
 
 .chapter-list__container::-webkit-scrollbar-thumb:hover {
-  background: #4a777a;
+  background: var(--surface-2);
 }
 
 .chapter-item {
@@ -171,7 +171,7 @@ button {
   grid-template-columns: 100px 1fr 100px;
   align-items: center;
   padding: 0.75rem 1rem;
-  background-color: #f5f5dc;
+  background-color: var(--surface-2);
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -179,26 +179,26 @@ button {
 }
 
 .chapter-item:hover {
-  background-color: #e0e0d5;
+  background-color: var(--surface-2);
   transform: translateX(3px);
 }
 
 .chapter-item--selected {
-  background-color: rgba(74, 119, 122, 0.1);
-  border-left: 3px solid #4a777a;
+  background-color: var(--surface-2);
+  border-left: 3px solid var(--border-strong);
 }
 
 .chapter-number {
   font-family: "Montserrat", "Helvetica Neue", sans-serif;
   font-weight: 600;
   font-size: 0.9rem;
-  color: #4a777a;
+  color: var(--text-muted);
 }
 
 .chapter-title {
   font-family: "Merriweather", Georgia, serif;
   font-size: 1rem;
-  color: #333333;
+  color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -209,21 +209,21 @@ button {
   font-family: "Montserrat", "Helvetica Neue", sans-serif;
   font-size: 0.8rem;
   text-align: right;
-  color: #666666;
+  color: var(--text-muted);
   text-transform: capitalize;
 }
 
 /* Status-specific styling */
 .chapter-item[data-status="complete"] .chapter-status {
-  color: #388e3c;
+  color: var(--success);
 }
 
 .chapter-item[data-status="pending"] .chapter-status {
-  color: #f57c00;
+  color: var(--warning);
 }
 
 .chapter-item[data-status="error"] .chapter-status {
-  color: #d32f2f;
+  color: var(--danger);
 }
 
 /* Add a subtle animation when chapters appear */
@@ -296,51 +296,51 @@ button {
 
 /* Download All Button */
 .download-all-button {
-  background-color: #1976d2;
-  color: #ffffff;
-  border: 1px solid #1976d2;
+  background-color: var(--accent-fill);
+  color: var(--on-accent);
+  border: 1px solid var(--accent);
 }
 
 .download-all-button:hover {
-  background-color: #1565c0;
+  background-color: var(--accent-fill);
   transform: translateY(-2px);
 }
 
 /* Download Single Button */
 .download-single-button {
-  background-color: #388e3c;
-  color: #ffffff;
-  border: 1px solid #388e3c;
+  background-color: var(--success);
+  color: var(--on-status);
+  border: 1px solid var(--success);
   padding: 0.25rem 0.5rem;
   font-size: 0.75rem;
   margin-left: 0.5rem;
 }
 
 .download-single-button:hover {
-  background-color: #2f6f2a;
+  background-color: var(--success);
 }
 
 .download-single-button--retry {
-  background-color: #f57c00;
-  border: 1px solid #f57c00;
+  background-color: var(--warning);
+  border: 1px solid var(--warning);
 }
 
 .download-single-button--retry:hover {
-  background-color: #e65100;
+  background-color: var(--warning);
 }
 
 /* Chapter Status Styles */
 .chapter-status--present {
-  color: #388e3c;
+  color: var(--success);
 }
 
 .chapter-status--processing {
-  color: #1976d2;
+  color: var(--accent);
   animation: pulse 1.5s infinite;
 }
 
 .chapter-status--failed {
-  color: #d32f2f;
+  color: var(--danger);
 }
 
 @keyframes pulse {
@@ -364,7 +364,7 @@ button {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
+  background-color: var(--scrim);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -372,7 +372,7 @@ button {
 }
 
 .confirm-dialog {
-  background: white;
+  background: var(--surface);
   padding: 1.5rem;
   border-radius: 8px;
   max-width: 400px;
@@ -395,13 +395,13 @@ button {
 }
 
 .confirm-buttons .confirm-yes {
-  background-color: #1976d2;
-  color: white;
-  border: 1px solid #1976d2;
+  background-color: var(--accent-fill);
+  color: var(--on-accent);
+  border: 1px solid var(--accent);
 }
 
 .confirm-buttons .confirm-yes:hover {
-  background-color: #1565c0;
+  background-color: var(--accent-fill);
 }
 
 /* Chapter Download Status */
@@ -410,9 +410,9 @@ button {
   align-items: center;
   gap: 1rem;
   padding: 0.5rem 0.75rem;
-  background: #f8f9fa;
+  background: var(--surface);
   border-radius: 6px;
-  border: 1px solid #dee2e6;
+  border: 1px solid var(--border);
 }
 
 .chapter-download-progress {
@@ -425,7 +425,7 @@ button {
 .chapter-download-progress-bar {
   flex: 1;
   height: 6px;
-  background: #e9ecef;
+  background: var(--surface-2);
   border-radius: 3px;
   overflow: hidden;
   max-width: 200px;
@@ -433,13 +433,13 @@ button {
 
 .chapter-download-progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #198754, #20c997);
+  background: linear-gradient(90deg, var(--success), var(--success));
   transition: width 0.3s ease;
 }
 
 .chapter-download-progress-text {
   font-size: 0.75rem;
-  color: #6c757d;
+  color: var(--text-muted);
   white-space: nowrap;
 }
 
@@ -452,11 +452,11 @@ button {
 }
 
 .chapter-download-badge--processing {
-  background: #0d6efd;
-  color: white;
+  background: var(--accent-fill);
+  color: var(--on-accent);
 }
 
 .chapter-download-badge--failed {
-  background: #dc3545;
-  color: white;
+  background: var(--danger);
+  color: var(--on-danger);
 }

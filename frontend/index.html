@@ -6,12 +6,23 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     
-    <!-- Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
-    
-    <title>Nexus Novel</title>
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#faf8f4" />
+    <script>
+      // Apply the stored or system theme before first paint (see src/theme/themeStore.ts).
+      (function () {
+        var t = null;
+        try { t = localStorage.getItem("nexus-theme"); } catch (e) {}
+        if (t !== "light" && t !== "dark") {
+          t = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        }
+        document.documentElement.setAttribute("data-theme", t);
+        var m = document.querySelector('meta[name="theme-color"]');
+        if (m) m.setAttribute("content", t === "dark" ? "#121315" : "#faf8f4");
+      })();
+    </script>
+
+    <title>Nexus</title>
   </head>
   <body>
     <div id="root"></div>
