@@ -21,6 +21,7 @@ dependencies = [
     "python-jose[cryptography]>=3.5.0",
     "pywebpush>=2.5.0",
     "sqlalchemy>=2.0.41",
+    "structlog>=25.5.0",
     "uvicorn>=0.35.0",
 ]
 
