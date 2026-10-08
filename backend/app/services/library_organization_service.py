@@ -180,7 +180,14 @@ def get_personal(db: Session, user: User, novel_id: int) -> dict:
         "rating": row.rating if row else None,
         "user_tags": tags,
         "followed_categories": followed_categories_of(row),
+        "auto_download": bool(row.auto_download) if row else False,
+        "keep_ahead": row.keep_ahead if row and row.keep_ahead else DEFAULT_KEEP_AHEAD,
     }
+
+
+DEFAULT_KEEP_AHEAD = 10
+MIN_KEEP_AHEAD = 1
+MAX_KEEP_AHEAD = 200
 
 
 def followed_categories_of(row: NovelPersonalData | None) -> list[str]:
@@ -211,9 +218,13 @@ def set_personal(
     rating: int | None,
     user_tags: list[str],
     followed_categories: list[str] | None = None,
+    auto_download: bool | None = None,
+    keep_ahead: int | None = None,
 ) -> dict:
-    """``followed_categories=None`` leaves the stored categories untouched."""
+    """``None`` for followed_categories, auto_download or keep_ahead leaves the stored value untouched."""
     owned_novel(db, user, novel_id)
+    if keep_ahead is not None and not MIN_KEEP_AHEAD <= keep_ahead <= MAX_KEEP_AHEAD:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"keep_ahead must be between {MIN_KEEP_AHEAD} and {MAX_KEEP_AHEAD}")
     if rating is not None and not 1 <= rating <= 5:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Rating must be between 1 and 5")
     categories = clean_followed_categories(followed_categories) if followed_categories is not None else None
@@ -234,6 +245,10 @@ def set_personal(
     row.rating = rating
     if categories is not None:
         row.followed_categories = categories
+    if auto_download is not None:
+        row.auto_download = auto_download
+    if keep_ahead is not None:
+        row.keep_ahead = keep_ahead
     db.query(NovelUserTag).filter(NovelUserTag.user_id == user.id, NovelUserTag.novel_id == novel_id).delete(synchronize_session=False)
     for tag in cleaned_tags:
         db.add(NovelUserTag(user_id=user.id, novel_id=novel_id, tag=tag))

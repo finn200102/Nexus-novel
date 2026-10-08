@@ -36,3 +36,14 @@ class ActivitySummary(BaseModel):
     source_failures: int
     downloads_completed: int
     unread_count: int
+
+
+class InboxNovelResponse(BaseModel):
+    novel_id: int
+    title: str
+    new_chapter_count: int
+    first_new_chapter_number: int
+    latest_at: datetime
+    event_ids: list[int]
+    next_unread_chapter_id: int | None = None
+    next_unread_chapter_number: int | None = None

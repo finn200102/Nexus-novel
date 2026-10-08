@@ -20,6 +20,7 @@ from app.models.follow import UserNovelFollow
 from app.models.update_event import NovelUpdateEvent
 from app.models.download_job import ChapterDownloadJob
 from app.models.metadata_webhook_delivery import MetadataWebhookDelivery
+from app.services.auto_download_service import queue_auto_downloads
 import app.services.novel_services as novel_services
 import app.services.library_organization_service as organization
 from app.services.chapter_services import (
@@ -97,6 +98,13 @@ def get_or_create_follow(db: Session, user_id: int, novel: Novel) -> UserNovelFo
     return follow
 
 
+def sync_chapter_category(chapter: Chapter, category: str | None) -> None:
+    """Re-sync an existing chapter's category from metadata; new chapters get it at creation."""
+    value = category or "story"
+    if chapter.category != value:
+        chapter.category = value
+
+
 def create_update_event(
     db: Session,
     novel: Novel,
@@ -169,6 +177,7 @@ class MetadataChapterEvent(BaseModel):
     title: str | None = None
     url: str | None = None
     word_count: int | None = None
+    category: str | None = None
 
 
 class MetadataRefreshEvent(BaseModel):
@@ -283,6 +292,8 @@ def receive_metadata_event(
         for number in event.new_chapter_numbers:
             chapter = db.query(Chapter).filter(Chapter.novel_id == novel.id, Chapter.chapter_number == number).first()
             source = chapters_by_number.get(number)
+            if chapter and source and source.category:
+                sync_chapter_category(chapter, source.category)
             if not chapter:
                 chapter = Chapter(
                     novel_id=novel.id,
@@ -292,6 +303,7 @@ def receive_metadata_event(
                     source_url=source.url if source else None,
                     word_count=source.word_count if source else None,
                     content_status=ContentStatus.MISSING,
+                    category=(source.category if source and source.category else "story"),
                 )
                 db.add(chapter)
                 db.flush()
@@ -328,6 +340,9 @@ def receive_metadata_event(
                     continue
                 db.add(ChapterDownloadJob(user_id=novel.library.user_id, library_id=novel.library.id, novel_id=novel.id, chapter_id=chapter.id))
                 queued_downloads += 1
+        queued_downloads += queue_auto_downloads(
+            db, user_id=novel.library.user_id, library_id=novel.library.id, novel=novel
+        )
     db.commit()
     return {"accepted": True, "created_events": created_events, "queued_downloads": queued_downloads}
 
@@ -650,14 +665,16 @@ async def refresh_novel_metadata(
     updated_novel = novel_services.update_novel(db, novel_id, novel_data)
 
     chapters_data = await metadata_client.get_chapters_from_metadata(metadata_id)
-    existing_chapter_numbers = {
-        ch.chapter_number for ch in get_chapters_by_novel_id(db, novel_id).all()
+    existing_chapters = {
+        ch.chapter_number: ch for ch in get_chapters_by_novel_id(db, novel_id).all()
     }
     new_chapter_numbers = []
 
     for chapter_meta in chapters_data:
         chapter_num = chapter_meta.get("chapter_number")
-        if chapter_num not in existing_chapter_numbers:
+        if chapter_num in existing_chapters:
+            sync_chapter_category(existing_chapters[chapter_num], chapter_meta.get("category"))
+        else:
             new_chapter_numbers.append(chapter_num)
             chapter_data = {
                 "novel_id": novel_id,
@@ -677,6 +694,8 @@ async def refresh_novel_metadata(
         chapter_numbers=new_chapter_numbers,
         message=f"{len(new_chapter_numbers)} new chapter(s) available",
     )
+    if new_chapter_numbers and novel.library:
+        queue_auto_downloads(db, user_id=novel.library.user_id, library_id=novel.library.id, novel=novel)
     db.commit()
 
     metadata_client.invalidate_novel_cache(novel.metadata_id)
@@ -1045,10 +1064,12 @@ async def get_novel_by_id(
                 chapters_data = await metadata_client.get_chapters_from_metadata(
                     novel.metadata_id
                 )
-                existing_chapter_numbers = {ch.chapter_number for ch in novel.chapters}
+                existing_chapters = {ch.chapter_number: ch for ch in novel.chapters}
                 for chapter_meta in chapters_data:
                     chapter_num = chapter_meta.get("chapter_number")
-                    if chapter_num not in existing_chapter_numbers:
+                    if chapter_num in existing_chapters:
+                        sync_chapter_category(existing_chapters[chapter_num], chapter_meta.get("category"))
+                    else:
                         chapter_data = {
                             "novel_id": novel_id,
                             "chapter_number": chapter_num,

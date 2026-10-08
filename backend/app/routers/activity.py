@@ -9,8 +9,9 @@ from app.models.download_job import ChapterDownloadJob
 from app.models.novel import Novel
 from app.models.user import User
 from app.models.update_event import NovelUpdateEvent
-from app.schemas.activity import ActivityDay, ActivityEventResponse, ActivitySummary
-from app.services.activity_service import activity_days, activity_events
+from app.schemas.activity import ActivityDay, ActivityEventResponse, ActivitySummary, InboxNovelResponse
+from app.services.activity_service import activity_days, activity_events, catch_up, inbox, mark_novel_read
+from app.services.library_organization_service import owned_novel
 
 router = APIRouter(prefix="/activity", tags=["activity"])
 
@@ -27,6 +28,26 @@ def mark_all_read(library_id: int, db: Session = Depends(get_db), current_user: 
     ).update({NovelUpdateEvent.read_at: datetime.now(UTC)}, synchronize_session=False)
     db.commit()
     return {"updated": updated}
+
+
+@router.get("/inbox", response_model=list[InboxNovelResponse])
+def get_inbox(library_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Unread updates per novel, newest first, counting only followed-category chapters."""
+    return inbox(db, user_id=current_user.id, library_id=library_id)
+
+
+@router.post("/inbox/{novel_id}/read")
+def mark_inbox_novel_read(novel_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    novel = owned_novel(db, current_user, novel_id)
+    updated = mark_novel_read(db, current_user.id, novel.id)
+    db.commit()
+    return {"updated": updated}
+
+
+@router.post("/inbox/{novel_id}/caught-up")
+def mark_inbox_novel_caught_up(novel_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    novel = owned_novel(db, current_user, novel_id)
+    return catch_up(db, current_user.id, novel)
 
 
 @router.get("/feed", response_model=list[ActivityEventResponse])

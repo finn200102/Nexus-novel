@@ -16,6 +16,9 @@ class PersonalWrite(BaseModel):
     user_tags: list[str] = Field(default_factory=list, max_length=60)
     # Omit to keep the stored categories; send a list to replace them.
     followed_categories: list[str] | None = Field(default=None, max_length=20)
+    # Omit to keep the stored auto-download settings.
+    auto_download: bool | None = None
+    keep_ahead: int | None = Field(default=None, ge=1, le=200)
 
 
 @router.get("/novels/{novel_id}")
@@ -34,6 +37,8 @@ def set_personal(novel_id: int, payload: PersonalWrite, db: Session = Depends(ge
         rating=payload.rating,
         user_tags=payload.user_tags,
         followed_categories=payload.followed_categories,
+        auto_download=payload.auto_download,
+        keep_ahead=payload.keep_ahead,
     )
 
 

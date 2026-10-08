@@ -19,6 +19,7 @@ from app.models.download_job import ChapterDownloadJob
 from app.models.reading_progress import ReadingProgress
 from app.models.reading_annotation import ReadingAnnotation
 from app.models.reading_history import ReadingHistory
+from app.services.reading_progress_service import save_reading_progress
 from app.services.download_job_service import claim_job, complete_job, fail_or_retry_job
 
 import os
@@ -578,40 +579,7 @@ def update_reading_progress(
     ).first()
     if not chapter:
         raise HTTPException(status_code=404, detail="Chapter not found")
-    progress = db.query(ReadingProgress).filter(
-        ReadingProgress.user_id == current_user.id,
-        ReadingProgress.novel_id == novel_id,
-    ).first()
-    if not progress:
-        progress = ReadingProgress(user_id=current_user.id, novel_id=novel_id)
-        db.add(progress)
-    progress.chapter_id = chapter.id
-    progress.chapter_number = update.chapter_number
-    progress.position = max(update.position, 0)
-    progress.percent = min(max(update.percent, 0), 100)
-    # Persist a compact history point once per chapter/day. It powers streaks
-    # and velocity without recording raw scrolling or text selection data.
-    from datetime import date
-    today = date.today()
-    history = db.query(ReadingHistory).filter(
-        ReadingHistory.user_id == current_user.id,
-        ReadingHistory.novel_id == novel_id,
-        ReadingHistory.chapter_number == update.chapter_number,
-        func.date(ReadingHistory.reading_date) == today.isoformat(),
-    ).first()
-    if history:
-        history.max_percent = max(history.max_percent or 0, round(progress.percent))
-    else:
-        db.add(ReadingHistory(
-            user_id=current_user.id,
-            novel_id=novel_id,
-            chapter_number=update.chapter_number,
-            reading_date=datetime.combine(today, datetime.min.time()),
-            max_percent=round(progress.percent),
-        ))
-    db.commit()
-    db.refresh(progress)
-    return progress
+    return save_reading_progress(db, user_id=current_user.id, chapter=chapter, position=update.position, percent=update.percent)
 
 
 @router.get("/history/{novel_id:int}")

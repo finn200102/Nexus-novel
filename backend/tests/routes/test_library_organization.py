@@ -310,7 +310,15 @@ def test_personal_data_round_trip_and_validation(client, db, test_user):
     assert client.put(url, json={"rating": 0}, headers=headers).status_code == 422
 
     cleared = client.put(url, json={"notes": "", "rating": None, "user_tags": []}, headers=headers).json()
-    assert cleared == {"novel_id": novel.id, "notes": None, "rating": None, "user_tags": [], "followed_categories": ["story"]}
+    assert cleared == {
+        "novel_id": novel.id,
+        "notes": None,
+        "rating": None,
+        "user_tags": [],
+        "followed_categories": ["story"],
+        "auto_download": False,
+        "keep_ahead": 10,
+    }
 
 
 def test_personal_data_hidden_from_other_users(client, db, test_user):
