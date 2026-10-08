@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from config.database import engine, Base, SessionLocal
 from app.routers import auth, novel, library, chapter, discovery, follow, download, activity, operations, catalog_scrape, audio, saved_search, recommendations, admin_integrations
+from app.routers import user_data
 from app.models.author import Author
 from app.models.chapter import Chapter
 from app.models.genre import Genre
@@ -113,6 +114,7 @@ app.include_router(audio.router)
 app.include_router(saved_search.router)
 app.include_router(recommendations.router)
 app.include_router(admin_integrations.router)
+app.include_router(user_data.router)
 
 
 @app.middleware("http")
