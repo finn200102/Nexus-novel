@@ -7,6 +7,7 @@ import { novelService } from "../services/novelService";
 import { ChapterAudioJob, chapterAudioJobStore, chapterAudioStore, offlineReaderStore } from "../services/offlineReaderStore";
 import { mergeAudioSegments, OpenAICompatibleTtsConfig, splitTextForSynthesis, TtsProviderPresetId, TTS_PROVIDER_PRESETS, TtsRequestError, ttsService } from "../services/ttsService";
 import { audioService, ServerAudioJob } from "../services/audioService";
+import OfflineBadge from "../components/reader/OfflineBadge";
 import "../styles/Reader.css";
 
 interface ChapterContent {
@@ -761,6 +762,7 @@ const Reader: React.FC = () => {
 
   return (
     <div className={readerClass}>
+      <OfflineBadge novelId={novel_id} chapterNumber={chapter.chapter_number} />
       <aside className="reader-sidebar">
         <div className="reader-sidebar__header">
           <p>Chapters</p>

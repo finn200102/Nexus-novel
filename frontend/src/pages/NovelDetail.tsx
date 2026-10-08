@@ -3,6 +3,7 @@ import defaultCoverImage from "../assets/cover.png";
 import { novelService } from "../services/novelService";
 import { chapterService } from "../services/chapterService";
 import ChapterList from "../components/novel/ChapterList";
+import OfflineControl from "../components/novel/OfflineControl";
 import NovelDetails from "../components/novel/NovelDetails";
 import { Novel, NovelFollowSettings } from "../types/novel";
 import { NovelDetailHeroSkeleton } from "../components/common/Skeleton";
@@ -422,6 +423,7 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
               </section>
             </div>
             <div className="novel-detail-chapters">
+              <OfflineControl libraryId={libraryId} novelId={novel.id} />
               <ChapterList novel_id={novel.id} library_id={libraryId} />
             </div>
           </div>
