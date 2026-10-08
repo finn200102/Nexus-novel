@@ -1,0 +1,4 @@
+# Correctness rules only: pyflakes (F), pycodestyle import/runtime errors (E4, E9).
+# E7 style rules are off because the codebase uses one-line compound statements.
+[lint]
+select = ["E4", "E9", "F"]

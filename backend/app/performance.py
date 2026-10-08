@@ -1,8 +1,8 @@
 import asyncio
 import time
 import functools
-from typing import Any, Callable, Optional
-from app.logging_config import get_logger, get_request_id
+from typing import Callable, Optional
+from app.logging_config import get_logger
 
 perf_logger = get_logger("performance")
 

@@ -1,13 +1,5 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import func, desc
-from app.models.novel import Novel
-from app.models.author import Author
-from app.models.library import Library
 from app.models.user import User
-from app.models.tag import Tag
-from app.models.genre import Genre
-from app.models.chapter import Chapter
-from app.schemas.user import UserCreate
 
 def create_user(db: Session, user_data: dict):
     # Remove the is_active default setting

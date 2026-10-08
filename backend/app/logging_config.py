@@ -5,7 +5,6 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 from uuid import uuid4
 from contextvars import ContextVar
-from functools import wraps
 
 request_id_var: ContextVar[Optional[str]] = ContextVar("request_id", default=None)
 user_id_var: ContextVar[Optional[int]] = ContextVar("user_id", default=None)

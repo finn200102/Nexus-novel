@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import io
 import os
 import wave
 from datetime import UTC, datetime, timedelta

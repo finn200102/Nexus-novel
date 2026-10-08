@@ -1,7 +1,4 @@
-import pytest
 from fastapi import status
-import bcrypt
-from app.schemas.user import UserCreate
 from app.services.novel_services import get_novel_by_url
 from app.services.library_services import create_library
 from app.services.user_services import create_user
@@ -96,7 +93,7 @@ def test_add_novel_to_a_second_library(client_with_auth, db):
 def test_add_novel_unauthorized(client_with_auth, db):
     """Test that adding a novel fails without authentication"""
     # Create a user and library
-    user = create_test_user(db)
+    create_test_user(db)
     library = create_test_library(db)
 
     # Test data
@@ -213,7 +210,7 @@ def test_update_novel(client_with_auth, db):
 
     # update novel
     response = client_with_auth.post(
-        f"/novel/update", json=new_novel_data, headers=headers
+        "/novel/update", json=new_novel_data, headers=headers
     )
 
     # Verify nove was updated

@@ -16,33 +16,28 @@ from app.models.chapter import ContentStatus
 from app.models.user import User
 from app.models.novel import Novel
 from app.models.chapter import Chapter
-from app.models.library import Library
 from app.models.follow import UserNovelFollow
 from app.models.update_event import NovelUpdateEvent
 from app.models.download_job import ChapterDownloadJob
 from app.models.metadata_webhook_delivery import MetadataWebhookDelivery
 import app.services.novel_services as novel_services
-from app.services.author_services import create_author, get_author_by_name
 from app.services.chapter_services import (
     create_chapter,
-    get_chapters,
     get_chapters_by_novel_id,
 )
 from app.services.library_services import get_library_by_id
-import app.services.chapter_services as chapter_services
 from app.auth.dependencies import get_current_user
 from app.services import metadata_client
 from app.services.download_job_service import queue_missing_chapters
 from app.logging_config import get_logger
+import asyncio
 import hmac
 import os
 import shutil
-
-logger = get_logger(__name__)
-
-import asyncio
 from datetime import UTC, datetime
 from pydantic import BaseModel, Field
+
+logger = get_logger(__name__)
 
 
 router = APIRouter(
@@ -1057,7 +1052,7 @@ def delete_novel_by_id(
             detail=f"Novel with ID {novel_id} not found",
         )
 
-    library = check_library(db, library_id, current_user)
+    check_library(db, library_id, current_user)
     base_dir = os.environ.get("DOWNLOAD_PATH")
     base_dir = os.path.join(base_dir, str(current_user.username), str(library_id))
     novel_path = os.path.join(base_dir, novel.title)
@@ -1084,7 +1079,7 @@ def update_novel(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Novel with ID {novel.id} not found",
         )
-    library = check_library(db, novel.library_id, current_user)
+    check_library(db, novel.library_id, current_user)
 
     novel = novel_services.update_novel(db, novel.id, novel_data)
     return novel

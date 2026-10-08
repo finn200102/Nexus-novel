@@ -1,27 +1,24 @@
-import os
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
 from app.models.base import BaseModel
 
-from sqlalchemy.ext.declarative import declarative_base
 
 # Import models
-from app.models.base import BaseModel
-from app.models.novel import Novel
-from app.models.user import User
-from app.models.genre import Genre
-from app.models.tag import Tag
-from app.models.library import Library
-from app.models.chapter import Chapter
-from app.models.author import Author
 
 # Load service
-from app.services.library_services import *
+from app.services.library_services import (
+    create_library,
+)
 from app.services.user_services import create_user
 from app.services.novel_services import create_novel
-from app.services.chapter_services import *
+from app.services.chapter_services import (
+    create_chapter,
+    delete_chapter,
+    get_chapter_by_id,
+    update_chapter,
+)
 
 # Load environment variables
 load_dotenv()

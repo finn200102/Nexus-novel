@@ -1,6 +1,4 @@
-import pytest
 from app.auth.jwt import create_access_token
-from app.schemas.library import LibraryCreate
 from app.services.library_services import get_library_by_name
 from app.services.user_services import create_user
 from fastapi import status
@@ -112,7 +110,7 @@ def test_delete_library_by_id(client, db):
     db_library = get_library_by_name(db, "lib1")
 
     assert db_library.name == "lib1"
-    response = client.post(f"/library/delete/{db_library.id}", headers=headers)
+    client.post(f"/library/delete/{db_library.id}", headers=headers)
     db_library = get_library_by_name(db, "lib1")
 
     assert db_library is None
@@ -124,7 +122,7 @@ def test_update_library_by_id(client, db):
 
     assert db_library.name == "lib1"
     library_data = {"name": "lib2", "id": db_library.id}
-    response = client.post(f"/library/update/", json=library_data, headers=headers)
+    client.post("/library/update/", json=library_data, headers=headers)
     db_library = get_library_by_name(db, "lib2")
 
     assert db_library is not None

@@ -4,7 +4,6 @@ from datetime import datetime
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from fastapi.testclient import TestClient
-from fastapi import status
 from jose import jwt
 from dotenv import load_dotenv
 

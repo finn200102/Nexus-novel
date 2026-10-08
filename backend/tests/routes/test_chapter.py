@@ -1,23 +1,20 @@
 import pytest
 from fastapi import status
-import bcrypt
-from app.schemas.user import UserCreate
-from app.services.novel_services import *
+from app.services.novel_services import (
+    create_novel,
+)
 from app.services.chapter_services import (
     get_chapters_by_novel_id,
     get_chapter_by_id,
-    delete_chapter,
 )
 from app.services.library_services import create_library
 from app.services.user_services import create_user
 from app.auth.jwt import create_access_token
-import os
-from pathlib import Path
 from app.routers.chapter import extract_story_id_from_url
 from app.models.download_job import ChapterDownloadJob
 from app.models.chapter import Chapter, ContentStatus
 from app.services.download_job_service import retry_job
-from app.routers.chapter import download_chapter_background, run_queued_download
+from app.routers.chapter import run_queued_download
 from tests.routes.conftest import TestingSessionLocal
 
 
@@ -141,7 +138,6 @@ def test_get_chapter_by_number(client, db):
 def test_delete_chapter_by_id(client, db):
     novel, headers, novel_data, url, library = create_test_novel(db)
     response = add_chapter(client, novel.id, headers)
-    chapter_number = response.json()["chapter_number"]
     chapter_id = response.json()["id"]
 
     response = client.delete(f"chapter/{chapter_id}", headers=headers)
@@ -154,7 +150,6 @@ def test_delete_chapter_by_id(client, db):
 def test_update_chapter(client, db):
     novel, headers, novel_data, url, library = create_test_novel(db)
     response = add_chapter(client, novel.id, headers)
-    chapter_number = response.json()["chapter_number"]
     chapter_id = response.json()["id"]
     chapter_data = {
         "novel_id": novel.id,
@@ -163,7 +158,7 @@ def test_update_chapter(client, db):
         "content_status": "PRESENT",
         "id": chapter_id,
     }
-    response = client.put(f"/chapter/", json=chapter_data, headers=headers)
+    response = client.put("/chapter/", json=chapter_data, headers=headers)
     chapter = get_chapter_by_id(db, chapter_id)
     print(chapter)
     assert chapter is not None

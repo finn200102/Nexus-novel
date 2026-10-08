@@ -20,11 +20,9 @@ from app.models.reading_annotation import ReadingAnnotation
 from app.models.reading_history import ReadingHistory
 from app.services.download_job_service import claim_job, complete_job, fail_or_retry_job
 
-from pathlib import Path
 import os
-import sys
 from dotenv import load_dotenv
-from app.logging_config import get_logger, get_request_id
+from app.logging_config import get_logger
 
 from app.services import metadata_client
 import asyncio
@@ -340,40 +338,6 @@ def get_site_name_from_url(url):
     if "webnovel" in url:
         return "webnovel"
     return None
-
-
-def check_chapter(db, novel_id, chapter_number, current_user):
-    chapter = chapter_services.get_chapter_by_chapter_number(
-        db, chapter_number, novel_id
-    )
-    if not chapter:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Chapter already exists"
-        )
-
-    # Check if novel exists
-    novel = novel_services.get_novel_by_id(db, chapter.novel_id)
-    if not novel:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Novel with ID {chapter.novel_id} not found",
-        )
-
-    # Check if library exists
-    library = library_services.get_library_by_id(db, novel.library_id)
-    if not library:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Library with ID {novel.library_id} not found",
-        )
-
-    # Check if user owns the library
-    if library.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You don't have permission for this library",
-        )
-    return chapter
 
 
 @router.post("/", response_model=ChapterSchema, status_code=status.HTTP_201_CREATED)

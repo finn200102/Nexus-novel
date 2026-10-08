@@ -83,7 +83,7 @@ def _metadata_status() -> ServiceStatus:
             value = ServiceStatus(status="online", detail="Metadata API and database ready", checked_at=checked_at)
         else:
             value = ServiceStatus(status="degraded", detail=f"Readiness returned HTTP {response.status_code}", checked_at=checked_at)
-    except httpx.HTTPError as exc:
+    except httpx.HTTPError:
         value = ServiceStatus(status="offline", detail="Metadata service did not respond before the timeout", checked_at=checked_at)
     _metadata_status_snapshot = (now, value)
     return value

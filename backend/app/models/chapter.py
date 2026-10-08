@@ -5,8 +5,6 @@ from sqlalchemy import (
     Integer,
     BigInteger,
     ForeignKey,
-    Table,
-    Boolean,
     Enum,
     DateTime,
 )

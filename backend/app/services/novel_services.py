@@ -1,9 +1,6 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import func, desc
 from app.models.novel import Novel
 from app.models.tag import Tag
-from app.models.genre import Genre
-from app.models.chapter import Chapter
 
 def create_novel(db: Session, novel_data: dict):
     # extract data if present

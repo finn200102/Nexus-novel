@@ -1,4 +1,3 @@
-from datetime import datetime, timezone
 from typing import Any, Optional
 from enum import Enum
 from app.logging_config import get_logger, get_request_id
