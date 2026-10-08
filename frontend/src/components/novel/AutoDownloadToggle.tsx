@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useId, useState } from "react";
 import { organizationService } from "../../services/organizationService";
+import { Switch } from "../ui";
 
 interface AutoDownloadToggleProps {
   novelId: number;
@@ -8,11 +9,14 @@ interface AutoDownloadToggleProps {
 const KEEP_AHEAD_MIN = 1;
 const KEEP_AHEAD_MAX = 200;
 
+/** One sentence on the Chapters tab: "Keep the next [10] chapters downloaded" with a switch. */
 const AutoDownloadToggle: React.FC<AutoDownloadToggleProps> = ({ novelId }) => {
   const [enabled, setEnabled] = useState(false);
   const [keepAhead, setKeepAhead] = useState(10);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const numberId = useId();
+  const hintId = useId();
 
   useEffect(() => {
     organizationService.getPersonal(novelId)
@@ -44,19 +48,37 @@ const AutoDownloadToggle: React.FC<AutoDownloadToggleProps> = ({ novelId }) => {
     setKeepAhead(Math.min(Math.max(parsed, KEEP_AHEAD_MIN), KEEP_AHEAD_MAX));
   };
 
-  return <section className="organize-panel" aria-labelledby={`auto-download-${novelId}`}>
-    <h2 id={`auto-download-${novelId}`}>Auto-download</h2>
-    <label className="auto-download__toggle">
-      <input type="checkbox" checked={enabled} disabled={saving} onChange={(event) => void save({ auto_download: event.target.checked, keep_ahead: keepAhead })} />
-      Download new chapters automatically
-    </label>
-    <label className="auto-download__keep">
-      Keep ahead
-      <input type="number" min={KEEP_AHEAD_MIN} max={KEEP_AHEAD_MAX} value={keepAhead} disabled={saving} onChange={(event) => onNumberChange(event.target.value)} onBlur={() => void save({ auto_download: enabled, keep_ahead: keepAhead })} />
-      chapters
-    </label>
-    {error && <p role="alert">{error}</p>}
-  </section>;
+  return (
+    <div className="auto-download">
+      <div className="auto-download__text">
+        <p className="auto-download__sentence">
+          <label htmlFor={numberId}>Keep the next</label>{" "}
+          <input
+            id={numberId}
+            className="auto-download__count"
+            type="number"
+            inputMode="numeric"
+            min={KEEP_AHEAD_MIN}
+            max={KEEP_AHEAD_MAX}
+            value={keepAhead}
+            disabled={saving}
+            aria-describedby={hintId}
+            onChange={(event) => onNumberChange(event.target.value)}
+            onBlur={() => void save({ auto_download: enabled, keep_ahead: keepAhead })}
+          />{" "}
+          chapters downloaded
+        </p>
+        <p id={hintId} className="auto-download__hint">New chapters download automatically on the server.</p>
+        {error && <p role="alert" className="auto-download__error">{error}</p>}
+      </div>
+      <Switch
+        checked={enabled}
+        disabled={saving}
+        aria-label="Download new chapters automatically"
+        onChange={(checked) => void save({ auto_download: checked, keep_ahead: keepAhead })}
+      />
+    </div>
+  );
 };
 
 export default AutoDownloadToggle;

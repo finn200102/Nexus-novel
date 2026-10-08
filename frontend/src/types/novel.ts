@@ -33,6 +33,9 @@ export interface Novel {
   scrape_error?: string | null;
   follow_state: "plan_to_read" | "reading" | "on_hold" | "completed" | "dropped" | "ignored";
   followed_at: string | null;
+  /** First followed chapter after the furthest one read (detail and list payloads). */
+  next_unread_chapter_id?: number | null;
+  next_unread_chapter_number?: number | null;
 }
 
 export interface NovelCreate {

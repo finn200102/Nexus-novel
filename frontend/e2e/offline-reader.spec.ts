@@ -61,9 +61,10 @@ test("chapters made available offline open after an offline reload", async ({ pa
   await expect(page).not.toHaveURL(/login|signup/);
 
   await page.goto(`/library/${LIBRARY_ID}/novels/${NOVEL_ID}`);
-  const offline = page.getByRole("region", { name: "Offline reading" });
-  await offline.getByRole("button", { name: "Next 10 chapters" }).click();
-  await expect(offline).toContainText("Saved 10 chapters offline.");
+  // Story page (no catalog id in this fixture, so it renders in place): Chapters tab.
+  await page.getByRole("tab", { name: "Chapters" }).click();
+  await page.getByRole("button", { name: "Save next 10 offline" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Saved 10 chapters offline." })).toBeVisible();
 
   // Let the service worker take control and cache the app shell and modules.
   await page.evaluate(async () => { await navigator.serviceWorker.ready; });

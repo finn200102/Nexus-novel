@@ -58,13 +58,15 @@ test.describe("Nexus real-stack 1.0 UI", () => {
     await importForm.getByRole("button", { name: "Start import" }).click();
     await expect(page.getByRole("list", { name: "Recent imports" })).toBeVisible({ timeout: 30_000 });
 
-    // Novel page: source chip, personal panel, shelves, offline control.
+    // Story page (old library URL redirects to /story/:id): notes, shelves, offline control.
     await page.goto(`/library/${libraryId}/novels/${novelId}`);
+    await expect(page).toHaveURL(/\/story\/\d+\?copy=/);
+    await page.getByRole("tab", { name: "My notes" }).click();
     await expect(page.getByRole("heading", { name: "Your notes" })).toBeVisible();
     await expect(page.getByRole("group", { name: "Your rating" })).toBeVisible();
-    await expect(page.locator("summary", { hasText: /^Shelves/ }).first()).toBeVisible();
-    await expect(page.getByRole("region", { name: "Offline reading" })).toBeVisible();
-    await expect(page.locator(".source-status-chip").first()).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Shelves" })).toBeVisible();
+    await page.getByRole("tab", { name: "Chapters" }).click();
+    await expect(page.getByRole("button", { name: "Save next 10 offline" })).toBeVisible();
 
     // Reader: chapter drawer, paged mode, author's notes setting.
     await page.goto(readerPath!);

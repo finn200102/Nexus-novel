@@ -4,12 +4,14 @@ import { MarkdownLite } from "../common/markdownLite";
 import { organizationService } from "../../services/organizationService";
 import { getUserFacingError } from "../../services/apiClient";
 import { useToast } from "../../context/useToast";
+import { Star } from "lucide-react";
+import { Button, TextArea } from "../ui";
 
 interface PersonalPanelProps {
   novelId: number;
 }
 
-/** Private notes (Markdown subset), a 1-5 star rating and user tags for one novel. */
+/** Private notes (plain text; a Markdown subset is accepted), a 1-5 star rating and user tags for one novel. */
 export const PersonalPanel: React.FC<PersonalPanelProps> = ({ novelId }) => {
   const { addToast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -64,12 +66,12 @@ export const PersonalPanel: React.FC<PersonalPanelProps> = ({ novelId }) => {
     }
   };
 
-  if (loading) return <p className="personal-panel__loading">Loading your notes…</p>;
+  if (loading) return <p className="personal-panel__loading" role="status">Loading your notes…</p>;
 
   return (
     <section className="personal-panel" aria-labelledby={`personal-${novelId}`}>
       <h2 id={`personal-${novelId}`}>Your notes</h2>
-      <p className="personal-panel__hint">Only you can see this. Notes support **bold**, *italic*, `code` and - lists.</p>
+      <p className="personal-panel__hint">Only you can see this.</p>
 
       <div className="personal-panel__rating" role="group" aria-label="Your rating">
         {[1, 2, 3, 4, 5].map((stars) => (
@@ -84,7 +86,7 @@ export const PersonalPanel: React.FC<PersonalPanelProps> = ({ novelId }) => {
               setDirty(true);
             }}
           >
-            ★
+            <Star size={22} aria-hidden="true" fill={rating !== null && rating >= stars ? "currentColor" : "none"} />
           </button>
         ))}
         <span>{rating ? `${rating}/5` : "Not rated"}</span>
@@ -92,21 +94,24 @@ export const PersonalPanel: React.FC<PersonalPanelProps> = ({ novelId }) => {
 
       <div className="personal-panel__notes">
         <div className="personal-panel__notes-head">
-          <label htmlFor={`notes-${novelId}`}>Notes</label>
-          <button type="button" onClick={() => setPreview((value) => !value)} aria-pressed={preview}>
+          <span className="personal-panel__notes-label" aria-hidden="true">Private notes</span>
+          <Button size="sm" variant="ghost" onClick={() => setPreview((value) => !value)} aria-pressed={preview}>
             {preview ? "Edit" : "Preview"}
-          </button>
+          </Button>
         </div>
         {preview ? (
           <div className="personal-panel__preview" aria-label="Notes preview">
             {notes.trim() ? <MarkdownLite source={notes} /> : <p>Nothing written yet.</p>}
           </div>
         ) : (
-          <textarea
+          <TextArea
             id={`notes-${novelId}`}
+            label="Private notes"
+            hideLabel
             value={notes}
             maxLength={20000}
             rows={6}
+            hint="Plain text is fine. **bold**, *italic* and - lists also work."
             onChange={(event) => {
               setNotes(event.target.value);
               setDirty(true);
@@ -126,9 +131,9 @@ export const PersonalPanel: React.FC<PersonalPanelProps> = ({ novelId }) => {
         }}
       />
 
-      <button type="button" className="personal-panel__save" onClick={() => void save()} disabled={saving || !dirty}>
-        {saving ? "Saving…" : "Save notes"}
-      </button>
+      <Button className="personal-panel__save" onClick={() => void save()} disabled={saving || !dirty} loading={saving}>
+        Save notes
+      </Button>
     </section>
   );
 };

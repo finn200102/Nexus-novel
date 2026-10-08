@@ -1,0 +1,101 @@
+import { useCallback, useEffect, useState } from "react";
+import { discoveryService } from "../../services/discoveryService";
+import { novelService } from "../../services/novelService";
+import { storyService, type LibraryEntry } from "../../services/storyService";
+import type { DiscoveredNovel } from "../../types/discovery";
+import type { Novel, NovelFollowSettings } from "../../types/novel";
+
+export interface LibraryCopyRef {
+  libraryId: number;
+  novelId: number;
+}
+
+export interface StoryData {
+  loading: boolean;
+  /** Nothing could be loaded: neither a catalog record nor a library copy. */
+  notFound: boolean;
+  catalog: DiscoveredNovel | null;
+  entries: LibraryEntry[];
+  /** The library copy shown on the page, if any. */
+  copy: LibraryCopyRef | null;
+  novel: Novel | null;
+  followSettings: NovelFollowSettings | null;
+  setNovel: (novel: Novel) => void;
+  setFollowSettings: (settings: NovelFollowSettings) => void;
+  reload: () => Promise<void>;
+}
+
+/**
+ * Loads a story by catalog id: the catalog record, the user's library copies, and the chosen
+ * copy's library data. `preferredCopy` picks among several copies (from `?copy=`); `fallbackCopy`
+ * serves library stories that have no catalog id yet.
+ */
+export function useStoryData(metadataId: number | null, preferredCopy: number | null, fallbackCopy: LibraryCopyRef | null = null): StoryData {
+  const [loading, setLoading] = useState(true);
+  const [catalog, setCatalog] = useState<DiscoveredNovel | null>(null);
+  const [entries, setEntries] = useState<LibraryEntry[]>([]);
+  const [novel, setNovel] = useState<Novel | null>(null);
+  const [followSettings, setFollowSettings] = useState<NovelFollowSettings | null>(null);
+  const [copy, setCopy] = useState<LibraryCopyRef | null>(null);
+  const fallbackLibrary = fallbackCopy?.libraryId ?? null;
+  const fallbackNovel = fallbackCopy?.novelId ?? null;
+
+  const load = useCallback(async (isActive: () => boolean = () => true) => {
+    setLoading(true);
+    let nextCatalog: DiscoveredNovel | null = null;
+    let nextEntries: LibraryEntry[] = [];
+    if (metadataId) {
+      const [catalogResult, membershipResult] = await Promise.allSettled([
+        discoveryService.getNovelById(metadataId),
+        storyService.membership(metadataId),
+      ]);
+      if (catalogResult.status === "fulfilled" && catalogResult.value && "id" in catalogResult.value) nextCatalog = catalogResult.value;
+      if (membershipResult.status === "fulfilled") nextEntries = membershipResult.value.library_entries;
+    }
+    const chosen = nextEntries.find((entry) => entry.novel_id === preferredCopy) ?? nextEntries[0];
+    const nextCopy = chosen
+      ? { libraryId: chosen.library_id, novelId: chosen.novel_id }
+      : fallbackLibrary && fallbackNovel
+        ? { libraryId: fallbackLibrary, novelId: fallbackNovel }
+        : null;
+
+    let nextNovel: Novel | null = null;
+    let nextSettings: NovelFollowSettings | null = null;
+    if (nextCopy) {
+      const [novelResult, settingsResult] = await Promise.allSettled([
+        novelService.getNovelById(nextCopy.libraryId, nextCopy.novelId),
+        novelService.getFollowSettings(nextCopy.libraryId, nextCopy.novelId),
+      ]);
+      if (novelResult.status === "fulfilled" && novelResult.value && "id" in novelResult.value) nextNovel = novelResult.value as Novel;
+      if (settingsResult.status === "fulfilled") nextSettings = settingsResult.value;
+    }
+    if (!isActive()) return;
+    setCatalog(nextCatalog);
+    setEntries(nextEntries);
+    setCopy(nextNovel ? nextCopy : null);
+    setNovel(nextNovel);
+    setFollowSettings(nextSettings);
+    setLoading(false);
+  }, [metadataId, preferredCopy, fallbackLibrary, fallbackNovel]);
+
+  useEffect(() => {
+    let active = true;
+    void load(() => active);
+    return () => {
+      active = false;
+    };
+  }, [load]);
+
+  return {
+    loading,
+    notFound: !loading && !catalog && !novel,
+    catalog,
+    entries,
+    copy,
+    novel,
+    followSettings,
+    setNovel,
+    setFollowSettings,
+    reload: useCallback(() => load(), [load]),
+  };
+}

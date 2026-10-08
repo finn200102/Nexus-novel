@@ -32,6 +32,68 @@ const pathAndQuery = (route: Route) => {
   return `${url.pathname.replace(/^\/api(?=\/|$)/, "")}${url.search}`;
 };
 
+const STORY_CATALOG = {
+  4: {
+    id: 4, title: "The Quiet Ledger", author: "Mara Thorne", author_id: 1, source_url: "https://www.royalroad.com/fiction/4/the-quiet-ledger",
+    novel_site: "royalroad", img_url: null, word_count: 412000, views: 120000, favorites: 3400, follows: 5100, reviews: 80, rating: 4.6,
+    status: "Ongoing", chapter_count: 3, created_at: "2025-03-02T12:00:00Z", updated_at: "2026-07-26T10:00:00Z",
+    description: "Orren Vael keeps the books for a guild of second-rate mages, and he would like it to stay that way.",
+    tags: ["Progression", "Slow burn", "Political intrigue"], genres: ["Fantasy"], fandoms: [],
+  },
+  5: {
+    id: 5, title: "The Cartographer's Apprentice", author: "Ilse Marrow", author_id: 2, source_url: "https://www.scribblehub.com/series/5/",
+    novel_site: "scribblehub", img_url: null, word_count: 98000, views: null, favorites: null, follows: null, reviews: null, rating: null,
+    status: null, chapter_count: 21, created_at: "2026-01-02T12:00:00Z", updated_at: "2026-07-20T10:00:00Z",
+    description: "A mapmaker's apprentice charts a city that redraws itself.", tags: ["Adventure"], genres: [], fandoms: [],
+  },
+} as const;
+
+const STORY_CHAPTERS = [
+  { id: 101, novel_id: 11, chapter_number: 1, title: "A Correction, Filed in Triplicate", content_status: "PRESENT", category: "story" },
+  { id: 102, novel_id: 11, chapter_number: 2, title: "Interest Compounds", content_status: "PRESENT", category: "story" },
+  { id: 103, novel_id: 11, chapter_number: 3, title: "The Second Column", content_status: "MISSING", category: "story" },
+  { id: 104, novel_id: 11, chapter_number: 4, title: "Author's note", content_status: "MISSING", category: "author_note" },
+];
+
+/** Story page fixtures; undefined when the path is not a story request. */
+const storyFixture = (path: string): unknown => {
+  const [pathname] = path.split("?");
+  const catalog = pathname.match(/^\/discovery\/novels\/(4|5)(\/[a-z-]+)?$/);
+  if (catalog) {
+    const id = Number(catalog[1]) as 4 | 5;
+    switch (catalog[2]) {
+      case undefined: return STORY_CATALOG[id];
+      case "/analysis": return { state: "completed", signals: [{ family: "point_of_view", value: "third person", confidence: 0.8, evidence: {}, model_version: "fixture" }] };
+      case "/similar": return { results: [{ novel_id: id === 4 ? 5 : 4, title: STORY_CATALOG[id === 4 ? 5 : 4].title, author: "Fixture Author", score: 0.7, explanation: "Shared tags", reasons: ["Both follow a reluctant expert"] }] };
+      case "/editions": return { id: 1, title: "The Quiet Ledger", editions: [{ id: 1, novel_id: id, edition_kind: "original", language: "en" }] };
+      case "/story-guide": return { chapters_analyzed: 0, through_chapter: 0, characters: [], chapters: [] };
+      default: return undefined;
+    }
+  }
+  if (pathname === "/stories/4") {
+    return { metadata_id: 4, library_entries: [{ novel_id: 11, library_id: 1, library_name: "Reading Library", title: "The Quiet Ledger", follow_state: "reading", scrape_status: "completed" }] };
+  }
+  if (pathname === "/stories/5") return { metadata_id: 5, library_entries: [] };
+  if (pathname === "/novel/11") {
+    const base = STORY_CATALOG[4];
+    return {
+      ...base, id: 11, library_id: 1, metadata_id: 4, url: base.source_url, novel_site: "royalroad", cover_image: null, story_id: 4,
+      author_site_id: null, publish_date: "2025-03-02T12:00:00Z", updated_date: base.updated_at, analyzed_at: null, analysis_type: null,
+      analyzed_chapter_count: null, parsed_at: "2026-07-26T11:50:00Z", scrape_status: "completed", scrape_error: null,
+      follow_state: "reading", followed_at: "2026-07-01T12:00:00Z", next_unread_chapter_number: 2, next_unread_chapter_id: 102,
+    };
+  }
+  if (pathname === "/novel/11/follow") {
+    return { novel_id: 11, follow_state: "reading", download_policy: "none", download_count: 1, notification_policy: "immediate", notification_count: 1 };
+  }
+  if (pathname === "/chapter/11") return STORY_CHAPTERS;
+  if (pathname === "/chapter/progress/11") return { chapter_number: 1 };
+  if (pathname === "/personal/novels/11") {
+    return { novel_id: 11, notes: "Re-read the guild audit arc.", rating: 4, user_tags: ["cozy"], followed_categories: ["story"], auto_download: true, keep_ahead: 5 };
+  }
+  return undefined;
+};
+
 // Pass the browser context instead of a page when a service worker is active:
 // requests the worker makes are only visible to context routes.
 export async function installMockApi(page: Page | BrowserContext, options: MockApiOptions = {}): Promise<MockApi> {
@@ -185,6 +247,12 @@ export async function installMockApi(page: Page | BrowserContext, options: MockA
     }
     if (!options.admin && path.startsWith("/catalog-scrapes")) {
       await json(route, { detail: "Administrator access is required." }, 403);
+      return;
+    }
+    // Story page (D9): catalog story 4 is in library 1 as novel 11; story 5 is catalog-only.
+    const story = storyFixture(path);
+    if (story !== undefined) {
+      await json(route, story);
       return;
     }
     if (path === "/library/" || path === "/library") {

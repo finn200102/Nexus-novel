@@ -61,31 +61,29 @@ test.describe("Nexus real-stack chapter downloads", () => {
     const novel = (await importResponse.json()) as { id: number };
     expect(novel.id).toBeTruthy();
 
-    await page.goto(`/library/${libraryId}/novels/${novel.id}`);
+    // The old library URL redirects to the story page; chapters live in the Chapters tab.
+    await page.goto(`/library/${libraryId}/novels/${novel.id}?tab=chapters`);
+    const rows = page.locator(".story-chapter");
 
-    // Metadata/chapter creation is asynchronous after import. Reloading the detail
+    // Metadata/chapter creation is asynchronous after import. Reloading the story
     // page gives us the same visible state a user sees while keeping the wait bounded.
     await expect
       .poll(
         async () => {
-          const chapter = page.locator(".chapter-item").first();
-          if (!(await chapter.count())) return "NO_CHAPTER";
-          return (await chapter.locator(".chapter-status").textContent())?.trim() || "UNKNOWN";
+          await page.reload();
+          return (await rows.count()) > 0 ? "READY" : "NO_CHAPTER";
         },
         { timeout: 120_000, intervals: [2_000, 4_000, 8_000] },
       )
-      .not.toBe("NO_CHAPTER");
+      .toBe("READY");
 
     // The fixture manifest intentionally leaves chapters missing. Select the
     // first row that exposes the real UI download/retry control so an already
     // present chapter cannot make this acceptance test skip the request.
-    const firstChapter = page
-      .locator(".chapter-item")
-      .filter({ has: page.locator("button") })
-      .first();
+    const firstChapter = rows.filter({ has: page.getByRole("button", { name: /Download|Retry/ }) }).first();
     await expect(firstChapter, "The imported fixture needs a downloadable chapter row.").toBeVisible();
-    const targetChapterLabel = ((await firstChapter.locator(".chapter-number").textContent()) || "").trim();
-    expect(targetChapterLabel).toMatch(/^Chapter\s+\d+/);
+    const targetChapter = await firstChapter.getAttribute("data-chapter");
+    expect(targetChapter).toMatch(/^\d+$/);
 
     await firstChapter.getByRole("button", { name: /Download|Retry/ }).click();
     await expect
@@ -93,25 +91,18 @@ test.describe("Nexus real-stack chapter downloads", () => {
       .toBeGreaterThan(0);
     expect(downloadResponses.at(-1)?.status).toBeLessThan(500);
 
+    const target = page.locator(`.story-chapter[data-chapter="${targetChapter}"]`);
     await expect
       .poll(
         async () => {
           await page.reload();
-          const status = page
-            .locator(".chapter-item")
-            .filter({ hasText: targetChapterLabel })
-            .locator(".chapter-status");
-          return (await status.textContent())?.trim() || "UNKNOWN";
+          return (await target.getAttribute("data-status")) || "UNKNOWN";
         },
         { timeout: 180_000, intervals: [2_000, 4_000, 8_000] },
       )
       .toSatisfy((status: string) => terminalStatuses.has(status));
 
-    const finalStatus = (await page
-      .locator(".chapter-item")
-      .filter({ hasText: targetChapterLabel })
-      .locator(".chapter-status")
-      .textContent())?.trim();
+    const finalStatus = await target.getAttribute("data-status");
     expect(terminalStatuses.has(finalStatus || ""), `Unexpected final chapter status: ${finalStatus}`).toBeTruthy();
     expect(downloadResponses.some((response) => response.status >= 500), downloadResponses.map((response) => `${response.status} ${response.url}`).join("\n")).toBeFalsy();
   });

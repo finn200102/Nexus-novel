@@ -1,5 +1,5 @@
 import { lazy, Suspense, type ReactNode } from "react";
-import { BrowserRouter as Router, Navigate, Route, Routes, useParams } from "react-router-dom";
+import { BrowserRouter as Router, Navigate, Route, Routes } from "react-router-dom";
 import Layout from "./components/layout/Layout";
 import ReaderLayout from "./components/layout/ReaderLayout";
 import { SectionLayout } from "./components/layout/SectionLayout";
@@ -10,10 +10,9 @@ import Home from "./pages/Home";
 import Signup from "./pages/Signup";
 import Login from "./pages/Login";
 import LibraryRoute from "./pages/LibraryRoute";
-import NovelDetail from "./pages/NovelDetail";
 import Reader from "./pages/Reader";
 import Discover from "./pages/Discover";
-import DiscoverNovelDetail from "./pages/DiscoverNovelDetail";
+import Story, { LibraryStoryRedirect } from "./pages/Story";
 import Updates from "./pages/Updates";
 import Operations from "./pages/Operations";
 import ScrapeJobs from "./pages/ScrapeJobs";
@@ -39,12 +38,6 @@ const ProtectedRoute = ({ children }: { children: ReactNode }) => {
 const Titled = ({ title, children }: { title: string; children: ReactNode }) => {
   usePageTitle(title);
   return <>{children}</>;
-};
-
-/** Library story page until the unified story page (D9). */
-const LibraryStory = () => {
-  const { libraryId, novelId } = useParams<{ libraryId: string; novelId: string }>();
-  return <NovelDetail key={`${libraryId}-${novelId}`} libraryId={Number(libraryId)} novelId={Number(novelId)} />;
 };
 
 const SETTINGS_LINKS = [
@@ -77,12 +70,13 @@ export function AppRoutes() {
         <Route index element={<Titled title="Home"><Home /></Titled>} />
         <Route path="discover" element={<Discover />} />
         <Route path="discover/:site" element={<Discover />} />
-        {/* storyId = catalog id; the library variant joins it in D9. */}
-        <Route path="story/:novelId" element={<DiscoverNovelDetail />} />
+        {/* storyId = catalog (metadata) id; library copies join in via /stories/:id (D9). */}
+        <Route path="story/:storyId" element={<Story />} />
         <Route path="story/:metadataId/guide" element={<Titled title="Story Guide"><StoryGuide /></Titled>} />
         <Route path="story/:metadataId/guide/review" element={<Titled title="Story Guide review"><StoryGuideReview /></Titled>} />
         <Route path="library" element={<LibraryRoute />} />
-        <Route path="library/:libraryId/novels/:novelId" element={<LibraryStory />} />
+        {/* Old library story URL: redirects to /story/:catalogId?copy=:novelId. */}
+        <Route path="library/:libraryId/novels/:novelId" element={<LibraryStoryRedirect />} />
 
         <Route path="updates">
           <Route index element={<Updates tab="new" />} />

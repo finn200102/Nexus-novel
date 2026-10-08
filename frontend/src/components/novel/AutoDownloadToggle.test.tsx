@@ -26,7 +26,7 @@ describe("AutoDownloadToggle", () => {
 
   it("saves only the download settings, not the notes, rating or tags", async () => {
     render(<AutoDownloadToggle novelId={7} />);
-    const toggle = await screen.findByRole("checkbox", { name: /Download new chapters automatically/ });
+    const toggle = await screen.findByRole("switch", { name: /Download new chapters automatically/ });
 
     fireEvent.click(toggle);
 
