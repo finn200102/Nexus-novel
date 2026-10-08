@@ -23,6 +23,7 @@ SHELF_NAME_MAX = 120
 USER_TAG_MAX = 60
 USER_TAG_LIMIT = 30
 SORT_OPTIONS = ("default", "updated_since_read", "personal_rating")
+DEFAULT_FOLLOWED_CATEGORIES = ("story",)
 
 
 def owned_novel(db: Session, user: User, novel_id: int) -> Novel:
@@ -173,13 +174,49 @@ def novel_ids_on_shelf(db: Session, user: User, shelf_id: int) -> set[int]:
 def get_personal(db: Session, user: User, novel_id: int) -> dict:
     row = db.query(NovelPersonalData).filter(NovelPersonalData.user_id == user.id, NovelPersonalData.novel_id == novel_id).first()
     tags = [t.tag for t in db.query(NovelUserTag).filter(NovelUserTag.user_id == user.id, NovelUserTag.novel_id == novel_id).order_by(NovelUserTag.tag).all()]
-    return {"novel_id": novel_id, "notes": row.notes if row else None, "rating": row.rating if row else None, "user_tags": tags}
+    return {
+        "novel_id": novel_id,
+        "notes": row.notes if row else None,
+        "rating": row.rating if row else None,
+        "user_tags": tags,
+        "followed_categories": followed_categories_of(row),
+    }
 
 
-def set_personal(db: Session, user: User, novel_id: int, *, notes: str | None, rating: int | None, user_tags: list[str]) -> dict:
+def followed_categories_of(row: NovelPersonalData | None) -> list[str]:
+    """The categories a user follows for a novel; story chapters unless set otherwise."""
+    return list(row.followed_categories) if row and row.followed_categories else list(DEFAULT_FOLLOWED_CATEGORIES)
+
+
+def clean_followed_categories(categories: list[str]) -> list[str]:
+    cleaned: list[str] = []
+    for category in categories:
+        value = (category or "").strip().lower()
+        if value and value not in cleaned:
+            cleaned.append(value)
+    if not cleaned or any(len(value) > 32 for value in cleaned):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Follow at least one category (max 32 characters each)",
+        )
+    return cleaned
+
+
+def set_personal(
+    db: Session,
+    user: User,
+    novel_id: int,
+    *,
+    notes: str | None,
+    rating: int | None,
+    user_tags: list[str],
+    followed_categories: list[str] | None = None,
+) -> dict:
+    """``followed_categories=None`` leaves the stored categories untouched."""
     owned_novel(db, user, novel_id)
     if rating is not None and not 1 <= rating <= 5:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Rating must be between 1 and 5")
+    categories = clean_followed_categories(followed_categories) if followed_categories is not None else None
     cleaned_tags: list[str] = []
     for tag in user_tags:
         value = clean_user_tag(tag)
@@ -195,6 +232,8 @@ def set_personal(db: Session, user: User, novel_id: int, *, notes: str | None, r
         db.add(row)
     row.notes = text
     row.rating = rating
+    if categories is not None:
+        row.followed_categories = categories
     db.query(NovelUserTag).filter(NovelUserTag.user_id == user.id, NovelUserTag.novel_id == novel_id).delete(synchronize_session=False)
     for tag in cleaned_tags:
         db.add(NovelUserTag(user_id=user.id, novel_id=novel_id, tag=tag))

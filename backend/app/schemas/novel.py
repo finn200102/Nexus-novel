@@ -38,6 +38,8 @@ class Novel(BaseModel):
     parsed_at: Optional[datetime] = None
     follow_state: Literal["plan_to_read", "reading", "on_hold", "completed", "dropped", "ignored"] = "plan_to_read"
     followed_at: Optional[datetime] = None
+    next_unread_chapter_id: Optional[int] = None
+    next_unread_chapter_number: Optional[int] = None
     created_at: datetime
     updated_at: datetime
 

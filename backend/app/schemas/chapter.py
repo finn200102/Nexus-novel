@@ -39,6 +39,7 @@ class Chapter(BaseModel):
     download_finished_at: Optional[datetime] = None
     download_error: Optional[str] = None
     retry_count: int = 0
+    category: str = "story"
     created_at: datetime
     updated_at: datetime
 

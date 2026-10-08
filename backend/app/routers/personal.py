@@ -14,6 +14,8 @@ class PersonalWrite(BaseModel):
     notes: str | None = Field(default=None, max_length=20000)
     rating: int | None = Field(default=None, ge=1, le=5)
     user_tags: list[str] = Field(default_factory=list, max_length=60)
+    # Omit to keep the stored categories; send a list to replace them.
+    followed_categories: list[str] | None = Field(default=None, max_length=20)
 
 
 @router.get("/novels/{novel_id}")
@@ -24,7 +26,15 @@ def get_personal(novel_id: int, db: Session = Depends(get_db), current_user: Use
 
 @router.put("/novels/{novel_id}")
 def set_personal(novel_id: int, payload: PersonalWrite, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return organization.set_personal(db, current_user, novel_id, notes=payload.notes, rating=payload.rating, user_tags=payload.user_tags)
+    return organization.set_personal(
+        db,
+        current_user,
+        novel_id,
+        notes=payload.notes,
+        rating=payload.rating,
+        user_tags=payload.user_tags,
+        followed_categories=payload.followed_categories,
+    )
 
 
 @router.get("/tags")

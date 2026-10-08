@@ -1,4 +1,4 @@
-from sqlalchemy import Column, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Column, ForeignKey, Integer, String, Text, UniqueConstraint
 
 from app.models.base import BaseModel
 
@@ -15,6 +15,8 @@ class NovelPersonalData(BaseModel):
     novel_id = Column(Integer, ForeignKey("novels.id", ondelete="CASCADE"), nullable=False)
     notes = Column(Text, nullable=True)
     rating = Column(Integer, nullable=True)
+    # Chapter categories the user follows for this novel; NULL means ["story"].
+    followed_categories = Column(JSON, nullable=True)
 
 
 class NovelUserTag(BaseModel):

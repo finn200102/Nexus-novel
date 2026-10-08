@@ -27,6 +27,7 @@ from app.services.chapter_services import (
     get_chapters_by_novel_id,
 )
 from app.services.library_services import get_library_by_id
+from app.services.reading_order import attach_next_unread
 from app.auth.dependencies import get_current_user
 from app.services import metadata_client
 from app.services.download_job_service import queue_missing_chapters
@@ -405,6 +406,7 @@ def scrape_novel_background(
                     "site_chapter_id": chapter_meta.get("chapter_id"),
                     "word_count": chapter_meta.get("word_count"),
                     "content_status": ContentStatus.MISSING,
+                    "category": chapter_meta.get("category") or "story",
                 }
                 create_chapter(db, chapter_data)
 
@@ -664,6 +666,7 @@ async def refresh_novel_metadata(
                 "site_chapter_id": chapter_meta.get("chapter_id"),
                 "word_count": chapter_meta.get("word_count"),
                 "content_status": ContentStatus.MISSING,
+                "category": chapter_meta.get("category") or "story",
             }
             create_chapter(db, chapter_data)
 
@@ -990,6 +993,7 @@ async def get_novels(
                 )
 
     db.commit()
+    attach_next_unread(db, current_user.id, novels)
 
     return novels
 
@@ -1052,6 +1056,7 @@ async def get_novel_by_id(
                             "site_chapter_id": chapter_meta.get("chapter_id"),
                             "word_count": chapter_meta.get("word_count"),
                             "content_status": ContentStatus.MISSING,
+                            "category": chapter_meta.get("category") or "story",
                         }
                         create_chapter(db, chapter_data)
 
@@ -1064,6 +1069,7 @@ async def get_novel_by_id(
                 novel_id=novel_id,
             )
 
+    attach_next_unread(db, current_user.id, [novel])
     return novel
 
 
