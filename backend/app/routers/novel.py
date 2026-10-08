@@ -33,6 +33,7 @@ from app.auth.dependencies import get_current_user
 from app.services import metadata_client
 from app.services.download_job_service import queue_missing_chapters
 from app.logging_config import get_logger
+from app.services.novel_title import clean_title
 import asyncio
 import hmac
 import os
@@ -390,7 +391,7 @@ def scrape_novel_background(
             story_id = scraped_data.get("story_id")
 
             novel_data = {
-                "title": scraped_data.get("title"),
+                "title": clean_title(scraped_data.get("title"), scraped_data.get("source_url")),
                 "author": scraped_data.get("author"),
                 "author_site_id": scraped_data.get("author_id"),
                 "source_url": scraped_data.get("source_url"),
@@ -557,8 +558,7 @@ async def add_novel(
             detail="Failed to add novel: No metadata ID returned",
         )
 
-    title_from_url = novel.url.split("/")[-1] if novel.url else "New Novel"
-    title = title_from_url.replace("-", " ").title()
+    title = clean_title(None, novel.url) or "New Novel"
 
     novel_data = {
         "title": title,
@@ -643,7 +643,7 @@ async def refresh_novel_metadata(
     story_id = refreshed_data.get("story_id")
 
     novel_data = {
-        "title": refreshed_data.get("title"),
+        "title": clean_title(refreshed_data.get("title"), refreshed_data.get("source_url")),
         "author": refreshed_data.get("author"),
         "author_site_id": refreshed_data.get("author_id"),
         "source_url": refreshed_data.get("source_url"),
@@ -791,7 +791,7 @@ async def rescrape_novel(
                     story_id = chapters_data[0].get("story_id")
 
             novel_data = {
-                "title": refreshed_data.get("title"),
+                "title": clean_title(refreshed_data.get("title"), refreshed_data.get("source_url")),
                 "author": refreshed_data.get("author"),
                 "author_site_id": refreshed_data.get("author_id"),
                 "source_url": refreshed_data.get("source_url"),
@@ -991,7 +991,7 @@ async def get_novels(
                 metadata = await metadata_client.get_novel_metadata(novel.metadata_id)
                 if metadata and metadata.get("title"):
                     novel_data = {
-                        "title": metadata.get("title"),
+                        "title": clean_title(metadata.get("title"), metadata.get("source_url") or novel.url),
                         "author": metadata.get("author"),
                         "author_site_id": metadata.get("author_id"),
                         "source_url": metadata.get("source_url"),
@@ -1043,7 +1043,7 @@ async def get_novel_by_id(
             metadata = await metadata_client.get_novel_metadata(novel.metadata_id)
             if metadata and metadata.get("title"):
                 novel_data = {
-                    "title": metadata.get("title"),
+                    "title": clean_title(metadata.get("title"), metadata.get("source_url") or novel.url),
                     "author": metadata.get("author"),
                     "author_site_id": metadata.get("author_id"),
                     "source_url": metadata.get("source_url"),

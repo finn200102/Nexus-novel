@@ -27,6 +27,7 @@ from app.models.novel import Novel
 from app.models.user import User
 from app.routers.novel import get_site_name_from_url, scrape_novel_background, supported_src
 from app.services import metadata_client
+from app.services.novel_title import clean_title
 import app.services.novel_services as novel_services
 
 logger = get_logger(__name__)
@@ -236,7 +237,7 @@ async def _process_item(db: Session, job: ImportJob, item: ImportJobItem, sessio
         if metadata_id is None:
             item.status, item.reason = "failed", failure
             return
-        title = item.title or url.rstrip("/").split("/")[-1].replace("-", " ").title()
+        title = clean_title(item.title, url) or "Untitled story"
         novel = novel_services.create_novel(db, {
             "title": title, "url": url, "library_id": job.library_id, "metadata_id": metadata_id,
             "novel_site": site, "scrape_status": "pending",
