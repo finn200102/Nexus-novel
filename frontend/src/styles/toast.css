@@ -1,101 +1,88 @@
-/* src/styles/toast.css */
+/* Toasts (design-proposal.md §4.6): bottom centre, above the phone tab bar, max 3. */
 
 .toast-container {
   position: fixed;
-  bottom: 2rem;
-  right: 2rem;
+  left: 50%;
+  bottom: calc(var(--sp-5) + var(--tabbar-height, 0px) + env(safe-area-inset-bottom, 0px));
+  z-index: var(--z-toast);
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  z-index: 9999;
+  gap: var(--sp-2);
+  width: min(480px, calc(100vw - 2 * var(--sp-4)));
+  transform: translateX(-50%);
   pointer-events: none;
+}
+
+.toast-region {
+  display: contents;
 }
 
 .toast {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 1rem 1.25rem;
-  background: var(--bg-glass);
-  backdrop-filter: var(--blur-glass);
-  -webkit-backdrop-filter: var(--blur-glass);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-glass);
-  color: var(--text-main);
-  font-family: var(--font-sans);
-  font-size: 0.95rem;
-  min-width: 300px;
-  max-width: 450px;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-2) var(--sp-3) var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--elev-2);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
   pointer-events: auto;
-  animation: toast-slide-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-.toast--success {
-  border-left: 4px solid var(--status-success);
-}
-
-.toast--error {
-  border-left: 4px solid var(--status-error);
-}
-
-.toast--warning {
-  border-left: 4px solid var(--status-warning);
-}
-
-.toast--info {
-  border-left: 4px solid var(--accent-primary);
+  animation: toast-in var(--dur-2) var(--ease-enter);
 }
 
 .toast__icon {
-  font-size: 1.1rem;
-  flex-shrink: 0;
+  flex: none;
+  width: 20px;
+  height: 20px;
 }
-
-.toast--success .toast__icon { color: var(--status-success); }
-.toast--error .toast__icon { color: var(--status-error); }
-.toast--warning .toast__icon { color: var(--status-warning); }
-.toast--info .toast__icon { color: var(--accent-primary); }
+.toast--success .toast__icon { color: var(--success); }
+.toast--error .toast__icon { color: var(--danger); }
+.toast--warning .toast__icon { color: var(--warning); }
+.toast--info .toast__icon { color: var(--info); }
+.toast--error { border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); }
 
 .toast__message {
   flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
+
+.toast__action {
+  flex: none;
+  min-height: var(--control-sm);
+  padding: 0 var(--sp-3);
+  border-radius: var(--r-sm);
+  color: var(--accent);
+  font-weight: 600;
+}
+.toast__action:hover { background: var(--surface-2); }
 
 .toast__close {
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  font-size: 1.5rem;
-  line-height: 1;
-  padding: 0;
-  cursor: pointer;
-  transition: var(--transition-fast);
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: var(--control-sm);
+  height: var(--control-sm);
+  border-radius: var(--r-sm);
+  color: var(--text-2);
+}
+.toast__close:hover { background: var(--surface-2); color: var(--text); }
+.toast__close svg { width: 18px; height: 18px; }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-.toast__close:hover {
-  color: var(--text-main);
+@media (prefers-reduced-motion: reduce) {
+  .toast { animation-name: toast-fade; }
+  @keyframes toast-fade { from { opacity: 0; } to { opacity: 1; } }
 }
 
-@keyframes toast-slide-in {
-  from {
-    transform: translateX(100%) translateY(10px);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0) translateY(0);
-    opacity: 1;
-  }
-}
-
-@media (max-width: 600px) {
-  .toast-container {
-    bottom: 1rem;
-    right: 1rem;
-    left: 1rem;
-  }
-  
-  .toast {
-    width: 100%;
-    min-width: 0;
-  }
+@media (pointer: coarse) {
+  .toast__close { width: var(--touch-min); height: var(--touch-min); }
+  .toast__action { min-height: var(--touch-min); }
 }

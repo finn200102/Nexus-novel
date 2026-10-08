@@ -214,6 +214,7 @@
 
 /* Cover fallback hues (white title text ≥ 7:1 on each) */
 :root {
+  --on-cover: #ffffff;
   --cover-1: #3f4c6b;
   --cover-2: #6b3f4f;
   --cover-3: #2f5d50;
