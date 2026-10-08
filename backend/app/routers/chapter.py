@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, status, HTTPException, BackgroundTasks, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 from config.database import SessionLocal as SessionFactory
 from config.database import get_db
