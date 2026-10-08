@@ -124,6 +124,10 @@ class Settings(BaseSettings):
     )
     METADATA_API_KEY: str = Field(default="", description="Internal Nexus Server API key")
     METADATA_ADMIN_API_KEY: str = Field(default="", description="Internal Nexus Server administrator key")
+    NOTIFY_ALLOW_PRIVATE_HOSTS: bool = Field(
+        default=False,
+        description="Allow notification targets on private networks (e.g. a LAN ntfy server); any user could then reach them",
+    )
     # Web Push identity. Leave the keys empty to use the pair persisted in
     # DOWNLOAD_PATH; set both to supply your own (the public key must match).
     VAPID_PRIVATE_KEY: str = Field(default="", description="VAPID private key (raw base64url); empty = persisted pair")

@@ -93,7 +93,7 @@ def test_invalid_channel_url_is_refused_without_echoing_it(client, auth_headers)
 
 
 def test_channel_can_be_disabled_relabelled_and_deleted(client, auth_headers, db):
-    channel = client.post("/notifications/channels", json={"url": "json://localhost:9/"}, headers=auth_headers).json()
+    channel = client.post("/notifications/channels", json={"url": "json://notify.example.test:9/"}, headers=auth_headers).json()
 
     patched = client.patch(f"/notifications/channels/{channel['id']}", json={"enabled": False, "label": "Server"}, headers=auth_headers)
 
@@ -105,7 +105,7 @@ def test_channel_can_be_disabled_relabelled_and_deleted(client, auth_headers, db
 
 
 def test_other_users_channels_are_not_visible(client, auth_headers, db):
-    channel = client.post("/notifications/channels", json={"url": "json://localhost:9/"}, headers=auth_headers).json()
+    channel = client.post("/notifications/channels", json={"url": "json://notify.example.test:9/"}, headers=auth_headers).json()
     intruder = other_user_headers(db)
 
     assert client.patch(f"/notifications/channels/{channel['id']}", json={"enabled": False}, headers=intruder).status_code == 404
@@ -114,7 +114,7 @@ def test_other_users_channels_are_not_visible(client, auth_headers, db):
 
 
 def test_test_endpoint_returns_a_result_per_channel(client, auth_headers):
-    client.post("/notifications/channels", json={"url": "json://localhost:9/", "label": "Dead"}, headers=auth_headers)
+    client.post("/notifications/channels", json={"url": "json://notify.example.test:9/", "label": "Dead"}, headers=auth_headers)
     client.post("/notifications/channels", json={"url": "json://localhost:10/", "label": "Off", "enabled": False}, headers=auth_headers)
 
     with patch("app.services.notification_delivery.send_apprise", return_value=False) as send:
@@ -125,16 +125,44 @@ def test_test_endpoint_returns_a_result_per_channel(client, auth_headers):
     assert [row["label"] for row in channels] == ["Dead"]
     assert channels[0]["ok"] is False
     assert channels[0]["error"] == "Delivery failed"
-    assert channels[0]["url_hint"] == "json://localhost:9/..."
+    assert channels[0]["url_hint"] == "json://notify.example.test:9/..."
     send.assert_called_once()
-    assert send.call_args.args[0] == "json://localhost:9/"
+    assert send.call_args.args[0] == "json://notify.example.test:9/"
 
 
 def test_test_endpoint_survives_a_raising_channel(client, auth_headers):
-    client.post("/notifications/channels", json={"url": "json://localhost:9/"}, headers=auth_headers)
+    client.post("/notifications/channels", json={"url": "json://notify.example.test:9/"}, headers=auth_headers)
 
     with patch("app.services.notification_delivery.send_apprise", side_effect=OSError("refused")):
         response = client.post("/notifications/test", headers=auth_headers)
 
     assert response.status_code == 200
     assert response.json()["channels"][0]["error"] == "Delivery raised an error"
+
+
+def test_targets_on_private_networks_are_refused(client, auth_headers, monkeypatch):
+    for url in ("json://localhost:9/", "json://127.0.0.1/", "ntfys://10.0.0.5/topic", "form://169.254.169.254/"):
+        response = client.post("/notifications/channels", json={"url": url}, headers=auth_headers)
+        assert response.status_code == 422, url
+    response = client.post(
+        "/notifications/push/subscriptions",
+        json={"endpoint": "https://192.168.1.10/push/abc", "keys": KEYS},
+        headers=auth_headers,
+    )
+    assert response.status_code == 422
+
+    from config.settings import settings
+
+    monkeypatch.setattr(settings, "NOTIFY_ALLOW_PRIVATE_HOSTS", True)
+    response = client.post("/notifications/channels", json={"url": "ntfys://10.0.0.5/topic"}, headers=auth_headers)
+    assert response.status_code == 201
+
+
+def test_delivery_rechecks_the_destination(monkeypatch):
+    import pytest
+
+    from app.services import notification_delivery
+    from app.services.outbound_url import BlockedDestination
+
+    with pytest.raises(BlockedDestination):
+        notification_delivery.send_apprise("json://127.0.0.1:9/", "t", "b")

@@ -15,6 +15,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from pywebpush import WebPushException, webpush
+
+from app.services.outbound_url import check_public_url
 from sqlalchemy.orm import Session
 
 from config.settings import settings
@@ -42,6 +44,7 @@ def _now() -> datetime:
 
 def send_web_push(subscription: PushSubscription, payload: dict) -> None:
     """Send one Web Push message. Raises WebPushException on failure."""
+    check_public_url(subscription.endpoint)
     webpush(
         subscription_info={
             "endpoint": subscription.endpoint,
@@ -74,6 +77,7 @@ def send_apprise(url: str, title: str, body: str) -> bool:
     plugin = instantiate_apprise(url)
     if plugin is None:
         return False
+    check_public_url(url)
     client = apprise.Apprise()
     client.add(plugin)
     return bool(client.notify(title=title, body=body))

@@ -18,6 +18,7 @@ from app.schemas.notification import (
 )
 from app.services.notification_crypto import encrypt_url, url_hint
 from app.services.notification_delivery import instantiate_apprise, send_test
+from app.services.outbound_url import BlockedDestination, check_public_url
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
@@ -42,6 +43,10 @@ def _validated_apprise_url(url: str) -> str:
     # treat as a remote config file is refused.
     if instantiate_apprise(url) is None:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Not a supported Apprise URL")
+    try:
+        check_public_url(url)
+    except BlockedDestination as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     return url
 
 
@@ -89,6 +94,10 @@ def subscribe_push(
 ):
     if not body.endpoint.startswith("https://"):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Push endpoints must use HTTPS")
+    try:
+        check_public_url(body.endpoint)
+    except BlockedDestination as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     subscription = db.query(PushSubscription).filter(PushSubscription.endpoint == body.endpoint).first()
     if subscription is None:
         subscription = PushSubscription(endpoint=body.endpoint)
