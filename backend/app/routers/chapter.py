@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, status, HTTPException, BackgroundTasks, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -528,6 +528,38 @@ def export_novel_epub(
     package = BytesIO(epub_service.render_epub(novel, chapters))
     filename = f"{(novel.title or 'nexus-novel').replace(' ', '-').lower()}.epub"
     return StreamingResponse(package, media_type="application/epub+zip", headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+@router.get("/progress/recent")
+def list_recent_reading_progress(
+    limit: int = Query(6, ge=1, le=20),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Last-read novels for the Home "Continue reading" row, newest first."""
+    library_ids = [library.id for library in current_user.libraries]
+    if not library_ids:
+        return []
+    rows = (
+        db.query(ReadingProgress, Novel)
+        .join(Novel, Novel.id == ReadingProgress.novel_id)
+        .filter(ReadingProgress.user_id == current_user.id, Novel.library_id.in_(library_ids))
+        .order_by(ReadingProgress.updated_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            "novel_id": novel.id,
+            "novel_title": novel.title,
+            "library_id": novel.library_id,
+            "chapter_number": progress.chapter_number,
+            "position": progress.position,
+            "percent": progress.percent,
+            "updated_at": progress.updated_at,
+        }
+        for progress, novel in rows
+    ]
 
 
 @router.put("/progress/{novel_id:int}", response_model=ReadingProgressResponse)

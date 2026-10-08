@@ -296,6 +296,27 @@ def test_reading_progress_is_persisted_per_user(client, db):
     assert response.json()["chapter_number"] == 1
 
 
+def test_recent_reading_progress_lists_the_users_last_read_novels(client, db):
+    novel, headers, _, _, _ = create_test_novel(db)
+    add_chapter(client, novel.id, headers)
+    client.put(
+        f"/chapter/progress/{novel.id}",
+        json={"chapter_number": 1, "position": 90, "percent": 12.5},
+        headers=headers,
+    )
+
+    response = client.get("/chapter/progress/recent?limit=3", headers=headers)
+    assert response.status_code == status.HTTP_200_OK
+    rows = response.json()
+    assert [row["novel_id"] for row in rows] == [novel.id]
+    assert rows[0]["chapter_number"] == 1
+    assert rows[0]["percent"] == 12.5
+    assert rows[0]["novel_title"] == novel.title
+
+    response = client.get("/chapter/progress/recent?limit=0", headers=headers)
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
 def test_reading_annotations_are_private_and_positioned(client, db):
     novel, headers, _, _, _ = create_test_novel(db)
     add_chapter(client, novel.id, headers)
