@@ -17,6 +17,7 @@ from datetime import UTC
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.models.chapter import Chapter
@@ -68,7 +69,12 @@ def put_progress(
     user: User = Depends(get_kosync_user),
 ):
     document = update.document.strip().lower()
-    build = db.query(EpubBuild).filter(EpubBuild.partial_md5 == document).order_by(EpubBuild.id.desc()).first()
+    build = (
+        db.query(EpubBuild)
+        .filter(or_(EpubBuild.partial_md5 == document, EpubBuild.partial_md5_lua == document))
+        .order_by(EpubBuild.id.desc())
+        .first()
+    )
     novel = _owned_novel(db, user, build.novel_id) if build is not None else None
     if build is None or novel is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unknown document. Download it from the OPDS catalog first.")

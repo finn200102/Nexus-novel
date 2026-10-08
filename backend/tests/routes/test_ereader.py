@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import random
 import zipfile
 from datetime import datetime
 from io import BytesIO
@@ -15,7 +16,7 @@ from app.models.follow import UserNovelFollow
 from app.models.library import Library
 from app.models.novel import Novel
 from app.models.reading_progress import ReadingProgress
-from app.services.epub_service import partial_md5
+from app.services.epub_service import partial_md5, partial_md5_lua
 from config.settings import settings
 
 ATOM = "{http://www.w3.org/2005/Atom}"
@@ -283,11 +284,17 @@ def test_epub_cache_rebuilds_when_a_chapter_is_added(client, auth_headers, reade
 
 
 def test_partial_md5_samples_follow_koreader_offsets():
-    data = bytes(range(256)) * 200  # 51200 bytes
+    data = random.Random(7).randbytes(51200)  # not periodic, so the sample offsets differ
     expected = hashlib.md5()
     for offset in (256, 1024, 4096, 16384):
         expected.update(data[offset : offset + 1024])
     assert partial_md5(data) == expected.hexdigest()
+
+    lua = hashlib.md5()
+    for offset in (0, 1024, 4096, 16384):
+        lua.update(data[offset : offset + 1024])
+    assert partial_md5_lua(data) == lua.hexdigest()
+    assert partial_md5(data) != partial_md5_lua(data)
 
 
 # ---- kosync ----------------------------------------------------------------
@@ -332,6 +339,23 @@ def test_kosync_round_trip_updates_reading_progress(client, auth_headers, reader
     assert progress.chapter_number == 2
     assert progress.percent == pytest.approx(40)
     assert db.query(KosyncProgress).filter(KosyncProgress.user_id == reader.id).count() == 1
+
+
+def test_kosync_accepts_either_partial_md5_variant(client, auth_headers, reader, library, db):
+    opds_secret = make_app_password(client, auth_headers, "opds")
+    kosync_secret = make_app_password(client, auth_headers, "kosync")
+    novel = add_novel(db, library, "Variants", chapters=2)
+    epub = client.get(f"/opds/novels/{novel.id}.epub", headers=basic(reader.username, opds_secret)).content
+    sync_headers = {"x-auth-user": reader.username, "x-auth-key": _kosync_key(kosync_secret)}
+
+    lua_document = partial_md5_lua(epub)
+    put = client.put(
+        "/kosync/syncs/progress",
+        json={"document": lua_document, "progress": "", "percentage": 1.0},
+        headers=sync_headers,
+    )
+    assert put.status_code == 200
+    assert client.get(f"/kosync/syncs/progress/{lua_document}", headers=sync_headers).json()["percentage"] == 1.0
 
 
 def test_kosync_unknown_document_and_registration(client, auth_headers, reader):

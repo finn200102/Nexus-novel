@@ -35,7 +35,11 @@ class EpubBuild(BaseModel):
 
     novel_id = Column(Integer, ForeignKey("novels.id", ondelete="CASCADE"), nullable=False, index=True)
     fingerprint = Column(String(64), nullable=False)
+    # Two sampling variants: the first KOReader sample is at offset 256 (1024 >> 2,
+    # used for partial_md5) or at 0 (what LuaJIT yields for 1024 << -2, used for
+    # partial_md5_lua). Kosync accepts either.
     partial_md5 = Column(String(32), nullable=False, index=True)
+    partial_md5_lua = Column(String(32), nullable=True, index=True)
     size_bytes = Column(Integer, nullable=False)
     file_name = Column(String(255), nullable=False)
     # Chapter numbers in spine order; spine index N is KOReader's DocFragment[N+1].

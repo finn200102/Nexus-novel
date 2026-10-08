@@ -70,19 +70,24 @@ def fingerprint(novel: Novel, rows: list) -> str:
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
 
 
-def partial_md5(data: bytes) -> str:
-    """KOReader's ``util.partialMD5``: 1 KiB samples at offsets 1024 << 2i for i in -1..10.
-
-    A sample that cannot be read ends the sequence. The -1 offset is taken as
-    1024 >> 2 = 256 here.
-    """
+def _sampled_md5(data: bytes, first_offset: int) -> str:
     digest = hashlib.md5()
     for i in range(-1, 11):
-        offset = 256 if i == -1 else 1024 << (2 * i)
+        offset = first_offset if i == -1 else 1024 << (2 * i)
         if offset >= len(data):
             break
         digest.update(data[offset : offset + 1024])
     return digest.hexdigest()
+
+
+def partial_md5(data: bytes) -> str:
+    """KOReader's ``util.partialMD5`` with the first sample at offset 256."""
+    return _sampled_md5(data, 256)
+
+
+def partial_md5_lua(data: bytes) -> str:
+    """The same sampling with the first sample at offset 0, as LuaJIT computes it."""
+    return _sampled_md5(data, 0)
 
 
 def render_epub(novel: Novel, chapters: list[Chapter]) -> bytes:
@@ -138,6 +143,10 @@ def ensure_build(db: Session, novel: Novel) -> BuiltEpub:
 
     build = db.query(EpubBuild).filter(EpubBuild.novel_id == novel.id, EpubBuild.fingerprint == fp).first()
     if build is not None and path.is_file():
+        if build.partial_md5_lua is None:
+            # Builds made before the LuaJIT variant existed are backfilled from the file.
+            build.partial_md5_lua = partial_md5_lua(path.read_bytes())
+            db.commit()
         return BuiltEpub(build=build, path=path)
 
     chapters = downloaded_chapters(db, novel.id)
@@ -154,6 +163,7 @@ def ensure_build(db: Session, novel: Novel) -> BuiltEpub:
         build = EpubBuild(novel_id=novel.id, fingerprint=fp)
         db.add(build)
     build.partial_md5 = partial_md5(data)
+    build.partial_md5_lua = partial_md5_lua(data)
     build.size_bytes = len(data)
     build.file_name = file_name
     build.spine = [chapter.chapter_number for chapter in chapters]
