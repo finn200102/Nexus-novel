@@ -19,8 +19,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   return (
     <div className="layout-shell">
       <Navbar onRequestCreateLibrary={() => setShowLibraryModal(true)} />
-      <SourceStatusBanner />
       <main className="layout-main">
+        <SourceStatusBanner />
         <div className="app-container">
           <div className="app-content">{children}</div>
         </div>

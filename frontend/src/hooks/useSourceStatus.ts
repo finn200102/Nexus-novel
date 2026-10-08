@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import { sourceStatusService, SourceStatus } from "../services/sourceStatusService";
 
-const REFRESH_MS = 60_000;
+/** How often an open, visible tab re-checks source health. */
+const POLL_MS = 60_000;
+/** Concurrent consumers (banner, chip) share one request inside this window. */
+const SHARE_MS = 30_000;
 let shared: { at: number; promise: Promise<SourceStatus[]> } | null = null;
 
 /** Forget the shared result, e.g. on sign-out or between tests. */
@@ -10,7 +13,7 @@ export const resetSourceStatusCache = () => {
 };
 
 const loadShared = (): Promise<SourceStatus[]> => {
-  if (!shared || Date.now() - shared.at > REFRESH_MS) {
+  if (!shared || Date.now() - shared.at > SHARE_MS) {
     const promise = sourceStatusService.list();
     shared = { at: Date.now(), promise };
     promise.catch(() => {
@@ -20,7 +23,12 @@ const loadShared = (): Promise<SourceStatus[]> => {
   return shared.promise;
 };
 
-/** Source health for the sites the signed-in user reads from. Shared and refreshed every 60 s. */
+const isHidden = () => typeof document !== "undefined" && document.visibilityState === "hidden";
+
+/**
+ * Source health for the sites the signed-in user reads from. Polled every 60 s
+ * while the tab is visible, and refreshed as soon as the tab becomes visible again.
+ */
 export const useSourceStatus = (enabled: boolean): SourceStatus[] => {
   const [sites, setSites] = useState<SourceStatus[]>([]);
 
@@ -31,10 +39,20 @@ export const useSourceStatus = (enabled: boolean): SourceStatus[] => {
       return;
     }
     let active = true;
-    loadShared()
-      .then((list) => { if (active) setSites(list); })
-      .catch(() => { if (active) setSites([]); });
-    return () => { active = false; };
+    const refresh = () => {
+      if (isHidden()) return;
+      loadShared()
+        .then((list) => { if (active) setSites(list); })
+        .catch(() => { if (active) setSites([]); });
+    };
+    refresh();
+    const timer = window.setInterval(refresh, POLL_MS);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", refresh);
+    };
   }, [enabled]);
 
   return sites;

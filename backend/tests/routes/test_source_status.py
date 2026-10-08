@@ -42,7 +42,34 @@ def test_summarize_drops_expired_cooldown_and_maps_states():
     expired = (NOW - timedelta(minutes=1)).isoformat()
     assert summarize_site("ao3", {"status": "operational", "rate_limit_until": expired}, NOW)["state"] == "ok"
     assert summarize_site("ao3", {"status": "offline", "circuit_state": "open"}, NOW)["state"] == "down"
-    assert summarize_site("ao3", {"status": "degraded", "circuit_state": "half-open"}, NOW)["state"] == "degraded"
+    # Half-open alone is not degraded: it needs a failure in the last 10 minutes.
+    assert summarize_site("ao3", {"status": "degraded", "circuit_state": "half-open"}, NOW)["state"] == "ok"
+
+
+def test_summarize_degraded_only_for_recent_unrecovered_failure():
+    recent = (NOW - timedelta(minutes=3)).isoformat()
+    old = (NOW - timedelta(minutes=11)).isoformat()
+    newer_success = (NOW - timedelta(minutes=1)).isoformat()
+    half_open = {"circuit_state": "half-open", "last_failure_at": recent}
+    assert summarize_site("ao3", half_open, NOW)["state"] == "degraded"
+    assert summarize_site("ao3", {**half_open, "last_failure_at": old}, NOW)["state"] == "ok"
+    assert summarize_site("ao3", {**half_open, "last_success_at": newer_success}, NOW)["state"] == "ok"
+    closed = {"circuit_state": "closed", "last_failure_at": recent}
+    assert summarize_site("ao3", closed, NOW)["state"] == "ok"
+
+
+def test_summarize_labels_every_supported_site():
+    expected = {
+        "sufficientvelocity": "Sufficient Velocity",
+        "questionablequesting": "Questionable Questing",
+        "scribblehub": "ScribbleHub",
+        "spacebattles": "SpaceBattles",
+        "webnovel": "WebNovel",
+        "archive": "Archive of Our Own",
+        "fanfiction": "FanFiction.net",
+    }
+    for site, label in expected.items():
+        assert summarize_site(site, {}, NOW)["label"] == label
 
 
 def test_summarize_hides_internal_fields():

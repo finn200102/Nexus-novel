@@ -1,6 +1,6 @@
 """Reader-facing source health: a readable summary of each site the user reads from."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
@@ -15,10 +15,17 @@ logger = get_logger("source_status")
 SITE_LABELS = {
     "fanfiction": "FanFiction.net",
     "royalroad": "Royal Road",
-    "scribblehub": "Scribble Hub",
+    "scribblehub": "ScribbleHub",
+    "spacebattles": "SpaceBattles",
     "webnovel": "WebNovel",
-    "ao3": "AO3",
+    "archive": "Archive of Our Own",
+    "ao3": "Archive of Our Own",
+    "sufficientvelocity": "Sufficient Velocity",
+    "questionablequesting": "Questionable Questing",
 }
+
+# A half-open circuit only counts as "degraded" if it failed this recently.
+DEGRADED_WINDOW = timedelta(minutes=10)
 
 
 def user_sites(db: Session, user: User) -> list[str]:
@@ -32,7 +39,7 @@ def user_sites(db: Session, user: User) -> list[str]:
     return sorted({row[0].strip().lower() for row in rows if row[0] and row[0].strip()})
 
 
-def _parse_until(value: str | None) -> datetime | None:
+def _parse_time(value: str | None) -> datetime | None:
     if not value:
         return None
     try:
@@ -45,7 +52,7 @@ def _parse_until(value: str | None) -> datetime | None:
 def summarize_site(site: str, health: dict, now: datetime) -> dict:
     """Map one metadata health row to ok|degraded|rate_limited|down without internals."""
     label = SITE_LABELS.get(site, site)
-    until = _parse_until(health.get("rate_limit_until"))
+    until = _parse_time(health.get("rate_limit_until"))
     if (until and until > now) or health.get("status") == "rate_limited":
         active_until = until if until and until > now else None
         return {
@@ -57,9 +64,20 @@ def summarize_site(site: str, health: dict, now: datetime) -> dict:
         }
     if health.get("status") == "offline" or health.get("circuit_state") == "open":
         return {"site": site, "label": label, "state": "down", "until": None, "message": f"{label} is unavailable right now."}
-    if health.get("status") == "degraded" or health.get("circuit_state") == "half-open":
+    if _is_degraded(health, now):
         return {"site": site, "label": label, "state": "degraded", "until": None, "message": f"{label} is responding slowly; updates may be delayed."}
     return {"site": site, "label": label, "state": "ok", "until": None, "message": f"{label} is working normally."}
+
+
+def _is_degraded(health: dict, now: datetime) -> bool:
+    """Degraded only while the circuit is half-open after a recent failure, and no success since."""
+    if health.get("circuit_state") != "half-open":
+        return False
+    failed_at = _parse_time(health.get("last_failure_at"))
+    if failed_at is None or now - failed_at > DEGRADED_WINDOW:
+        return False
+    succeeded_at = _parse_time(health.get("last_success_at"))
+    return not (succeeded_at and succeeded_at > failed_at)
 
 
 async def sites_status(db: Session, user: User, now: datetime | None = None) -> dict:

@@ -637,5 +637,5 @@ async def source_health() -> list[dict]:
         return cached
     response = await _request("GET", "/api/jobs/source-health", timeout=INTERACTIVE_TIMEOUT)
     data = response.json()
-    cache.set(cache_key, data, ttl=60)
+    cache.set(cache_key, data, ttl=30)
     return data

@@ -1,5 +1,5 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import SourceStatusBanner from "./SourceStatusBanner";
 import SourceStatusChip from "./SourceStatusChip";
 import { sourceStatusService, SourceStatus, describeSourceStatus } from "../../services/sourceStatusService";
@@ -26,30 +26,96 @@ describe("source status text", () => {
   });
 });
 
+const degraded: SourceStatus = {
+  site: "royalroad",
+  label: "Royal Road",
+  state: "degraded",
+  until: null,
+  message: "Royal Road is responding slowly; updates may be delayed.",
+};
+const down: SourceStatus = {
+  site: "archive",
+  label: "Archive of Our Own",
+  state: "down",
+  until: null,
+  message: "Archive of Our Own is unavailable right now.",
+};
+
 describe("SourceStatusBanner", () => {
   beforeEach(() => {
-    sessionStorage.clear();
+    localStorage.clear();
     resetSourceStatusCache();
     vi.restoreAllMocks();
   });
 
-  it("shows only unhealthy sites", async () => {
-    vi.spyOn(sourceStatusService, "list").mockResolvedValue([healthy, rateLimited]);
-    render(<SourceStatusBanner />);
-    expect(await screen.findByText(/rate-limiting us/)).toBeTruthy();
-    expect(screen.queryByText(/AO3/)).toBeNull();
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
-  it("hides a notice for the session once dismissed", async () => {
-    vi.spyOn(sourceStatusService, "list").mockResolvedValue([rateLimited]);
+  it("renders nothing when every site is ok", async () => {
+    vi.spyOn(sourceStatusService, "list").mockResolvedValue([healthy]);
+    const { container } = render(<SourceStatusBanner />);
+    await act(async () => { await Promise.resolve(); });
+    expect(container.textContent).toBe("");
+  });
+
+  it("does not show a banner for a degraded site", async () => {
+    vi.spyOn(sourceStatusService, "list").mockResolvedValue([degraded]);
+    const { container } = render(<SourceStatusBanner />);
+    await act(async () => { await Promise.resolve(); });
+    expect(container.querySelector(".source-status-banner")).toBeNull();
+  });
+
+  it("shows a single slim strip for a rate-limited site and ignores healthy ones", async () => {
+    vi.spyOn(sourceStatusService, "list").mockResolvedValue([healthy, rateLimited]);
+    const { container } = render(<SourceStatusBanner />);
+    expect(await screen.findByText(/rate-limiting us/)).toBeTruthy();
+    expect(screen.queryByText(/AO3/)).toBeNull();
+    expect(container.querySelectorAll(".source-status-banner")).toHaveLength(1);
+  });
+
+  it("collapses several affected sites into one line with details", async () => {
+    vi.spyOn(sourceStatusService, "list").mockResolvedValue([rateLimited, down]);
+    render(<SourceStatusBanner />);
+    expect(await screen.findByText("2 sources are having problems")).toBeTruthy();
+    expect(screen.queryByText(/unavailable right now/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Details" }));
+    expect(screen.getByText(/unavailable right now/)).toBeTruthy();
+    expect(screen.getByText(/rate-limiting us/)).toBeTruthy();
+  });
+
+  it("removes the strip automatically once the site recovers", async () => {
+    vi.useFakeTimers();
+    const list = vi
+      .spyOn(sourceStatusService, "list")
+      .mockResolvedValueOnce([rateLimited])
+      .mockResolvedValue([healthy]);
+    render(<SourceStatusBanner />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(screen.getByText(/rate-limiting us/)).toBeTruthy();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+    expect(list).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText(/rate-limiting us/)).toBeNull();
+  });
+
+  it("stays hidden for a dismissed site and state, and returns when the state changes", async () => {
+    const list = vi.spyOn(sourceStatusService, "list").mockResolvedValue([rateLimited]);
     const { unmount } = render(<SourceStatusBanner />);
     fireEvent.click(await screen.findByRole("button", { name: "Dismiss FanFiction.net notice" }));
     expect(screen.queryByText(/rate-limiting us/)).toBeNull();
+    expect(JSON.parse(localStorage.getItem("nexus:source-status-dismissed") || "[]")).toEqual(["fanfiction:rate_limited"]);
     unmount();
 
     render(<SourceStatusBanner />);
-    await waitFor(() => expect(sourceStatusService.list).toHaveBeenCalled());
+    await waitFor(() => expect(list).toHaveBeenCalled());
     expect(screen.queryByText(/rate-limiting us/)).toBeNull();
+    cleanup();
+    resetSourceStatusCache();
+
+    list.mockResolvedValue([{ ...rateLimited, state: "down", message: "FanFiction.net is unavailable right now." }]);
+    render(<SourceStatusBanner />);
+    expect(await screen.findByText(/unavailable right now/)).toBeTruthy();
   });
 
   it("renders nothing when the service call fails", async () => {

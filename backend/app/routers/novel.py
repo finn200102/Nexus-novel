@@ -380,8 +380,11 @@ def scrape_novel_background(
                 metadata_client.wait_for_scrape_complete(metadata_id), loop
             )
             if scraped_data.get("status") == "error":
+                # "description" is the story blurb, not an error: never surface it.
+                error_message = scraped_data.get("last_error") or scraped_data.get("error")
                 raise RuntimeError(
-                    scraped_data.get("description") or "Metadata scrape failed"
+                    error_message if isinstance(error_message, str) and error_message.strip()
+                    else "Metadata scrape failed"
                 )
 
             story_id = scraped_data.get("story_id")
