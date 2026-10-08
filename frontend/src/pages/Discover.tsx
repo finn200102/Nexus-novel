@@ -2,8 +2,8 @@ import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { BookOpen, Plus, RefreshCw, Search, SlidersHorizontal, X } from "lucide-react";
 import { discoveryService } from "../services/discoveryService";
-import { useLibraryContext } from "../context/LibraryContext";
-import { useToast } from "../context/ToastContext";
+import { useLibraryContext } from "../context/useLibraryContext";
+import { useToast } from "../context/useToast";
 import { DiscoveredNovel, DiscoveryFilters, FandomInfo } from "../types/discovery";
 import { Novel } from "../types/novel";
 import NovelCard from "../components/novel/NovelCard";
@@ -46,6 +46,17 @@ const EMPTY_FILTERS: DiscoveryFilters = {
   sortOrder: "desc",
 };
 
+const parseDiscoverUrl = (locationSearch: string) => {
+  const queryParams = new URLSearchParams(locationSearch);
+  const searchFromUrl = queryParams.get("q") || "";
+  const similarToFromUrl = Number(queryParams.get("similar_to")) || null;
+  const filtersFromUrl = (() => {
+    try { return { ...EMPTY_FILTERS, ...JSON.parse(queryParams.get("filters") || "{}") } as DiscoveryFilters; }
+    catch { return EMPTY_FILTERS; }
+  })();
+  return { searchFromUrl, similarToFromUrl, filtersFromUrl };
+};
+
 const Discover: React.FC = () => {
   const { site } = useParams<{ site?: string }>();
   const navigate = useNavigate();
@@ -71,13 +82,7 @@ const Discover: React.FC = () => {
   const coordinatorRef = React.useRef(new RequestCoordinator());
   const hasSnapshotRef = React.useRef(false);
   const locationSearch = window.location.search;
-  const queryParams = new URLSearchParams(locationSearch);
-  const searchFromUrl = queryParams.get("q") || "";
-  const similarToFromUrl = Number(queryParams.get("similar_to")) || null;
-  const filtersFromUrl = (() => {
-    try { return { ...EMPTY_FILTERS, ...JSON.parse(queryParams.get("filters") || "{}") } as DiscoveryFilters; }
-    catch { return EMPTY_FILTERS; }
-  })();
+  const { searchFromUrl, similarToFromUrl } = parseDiscoverUrl(locationSearch);
 
   const currentSite = site || "all";
 
@@ -88,18 +93,6 @@ const Discover: React.FC = () => {
     }, 180);
     return () => window.clearTimeout(timer);
   }, [currentSite, filters.fandom, filtersOpen]);
-
-  useEffect(() => {
-    setNovels([]);
-    hasSnapshotRef.current = false;
-    setNextCursor(null);
-    setHasMore(true);
-    setSearch(searchFromUrl);
-    setFilters(filtersFromUrl);
-    setAppliedFilters(filtersFromUrl);
-    void fetchNovels(currentSite, 1, searchFromUrl, filtersFromUrl, similarToFromUrl);
-    return () => cancelPendingRequests("/discovery/novels/");
-  }, [currentSite, locationSearch]);
 
   useEffect(() => {
     void savedSearchService.list().then(setSavedSearches).catch(() => setSavedSearches([]));
@@ -180,6 +173,25 @@ const Discover: React.FC = () => {
     void fetchNovels(currentSite, 2, search, appliedFilters, similarToFromUrl);
     }
   };
+
+  // The URL effect below must run only when the site or query string changes.
+  // It reads the latest fetchNovels through a ref so it does not re-run on
+  // every search/filter edit.
+  const fetchNovelsRef = React.useRef(fetchNovels);
+  fetchNovelsRef.current = fetchNovels;
+
+  useEffect(() => {
+    const fromUrl = parseDiscoverUrl(locationSearch);
+    setNovels([]);
+    hasSnapshotRef.current = false;
+    setNextCursor(null);
+    setHasMore(true);
+    setSearch(fromUrl.searchFromUrl);
+    setFilters(fromUrl.filtersFromUrl);
+    setAppliedFilters(fromUrl.filtersFromUrl);
+    void fetchNovelsRef.current(currentSite, 1, fromUrl.searchFromUrl, fromUrl.filtersFromUrl, fromUrl.similarToFromUrl);
+    return () => cancelPendingRequests("/discovery/novels/");
+  }, [currentSite, locationSearch]);
 
   useAdaptivePolling(() => fetchNovels(currentSite, 1, searchFromUrl, appliedFilters, similarToFromUrl), true, {
     // Discover has no active job to monitor; refreshing it aggressively only

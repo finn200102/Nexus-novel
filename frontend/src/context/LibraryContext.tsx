@@ -1,7 +1,5 @@
 import React, {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useState,
@@ -9,21 +7,9 @@ import React, {
 import { libraryService } from "../services/libraryService";
 import { Library } from "../types/library";
 import { useAuth } from "./AuthContext";
-
-interface LibraryContextValue {
-  libraries: Library[];
-  activeLibrary: Library | null;
-  activeLibraryId: number | null;
-  isLoading: boolean;
-  error: string | null;
-  refreshLibraries: () => Promise<void>;
-  selectLibrary: (libraryId: number) => void;
-  createLibrary: (name: string) => Promise<Library | null>;
-}
+import { LibraryContext, LibraryContextValue } from "./LibraryContextObject";
 
 const STORAGE_KEY = "nexus.activeLibrary";
-
-const LibraryContext = createContext<LibraryContextValue | undefined>(undefined);
 
 const getStoredLibraryId = (): number | null => {
   if (typeof window === "undefined") {
@@ -158,12 +144,4 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({
   return (
     <LibraryContext.Provider value={value}>{children}</LibraryContext.Provider>
   );
-};
-
-export const useLibraryContext = () => {
-  const context = useContext(LibraryContext);
-  if (!context) {
-    throw new Error("useLibraryContext must be used within LibraryProvider");
-  }
-  return context;
 };

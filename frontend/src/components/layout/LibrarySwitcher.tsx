@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useLibraryContext } from "../../context/LibraryContext";
+import { useLibraryContext } from "../../context/useLibraryContext";
 
 interface LibrarySwitcherProps {
   onCreateLibrary?: () => void;

@@ -1,7 +1,7 @@
 import React, { FormEvent, useEffect, useState } from "react";
 import axios from "axios";
 import { novelService } from "../../services/novelService";
-import { useToast } from "../../context/ToastContext";
+import { useToast } from "../../context/useToast";
 import "../../styles/novel-form.css";
 
 interface CreateNovelProps {

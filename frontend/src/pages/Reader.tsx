@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Pause, Play, RotateCcw, SkipBack, SkipForward, Trash2, Volume2, WandSparkles } from "lucide-react";
@@ -267,33 +267,20 @@ const Reader: React.FC = () => {
     });
   }, [chapter, progress]);
 
+  const chapterContent = chapter?.content;
   useEffect(() => {
     const content = contentRef.current;
-    if (!content || !chapter || !Number.isFinite(citationOffset) || citationOffset < 0) return;
+    if (!content || chapterContent === undefined || !Number.isFinite(citationOffset) || citationOffset < 0) return;
     // Evidence stores source-character offsets. The reader renders normalized
     // paragraphs, so navigate proportionally rather than claiming a brittle,
     // exact DOM range after source formatting changes.
-    const ratio = Math.min(1, citationOffset / Math.max(chapter.content.length, 1));
+    const ratio = Math.min(1, citationOffset / Math.max(chapterContent.length, 1));
     const frame = window.requestAnimationFrame(() => {
       content.scrollTop = ratio * Math.max(content.scrollHeight - content.clientHeight, 0);
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [chapter?.id, chapter?.content, citationOffset]);
+  }, [chapter?.id, chapterContent, citationOffset]);
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
-      if (event.key === "ArrowLeft") goToChapter(chapter_number - 1);
-      if (event.key === "ArrowRight") goToChapter(chapter_number + 1);
-      if (event.key.toLowerCase() === "b") void addAnnotation("bookmark");
-      if (event.key.toLowerCase() === "j") goToChapter(chapter_number + 1);
-      if (event.key.toLowerCase() === "k") goToChapter(chapter_number - 1);
-      if (event.key === "[") setFontScale((value) => Math.max(0.85, value - 0.1));
-      if (event.key === "]") setFontScale((value) => Math.min(1.3, value + 0.1));
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [chapter_number]);
 
   useEffect(() => {
     const fetchChapters = async () => {
@@ -345,9 +332,9 @@ const Reader: React.FC = () => {
     };
   }, [chapter, novel_id, restoredPosition]);
 
-  const goToChapter = (target: number) => {
+  const goToChapter = useCallback((target: number) => {
     navigate(`/library/${library_id}/novels/${novel_id}/${target}`);
-  };
+  }, [library_id, novel_id, navigate]);
 
   const decreaseFont = () => setFontScale((prev) => Math.max(0.85, prev - 0.1));
   const increaseFont = () => setFontScale((prev) => Math.min(1.3, prev + 0.1));
@@ -497,25 +484,28 @@ const Reader: React.FC = () => {
     audioControllerRef.current?.abort();
   };
 
+  const chapterId = chapter?.id;
   useEffect(() => {
-    if (!chapter) return;
+    if (chapterId === undefined) return;
     let active = true;
-    audioService.list(chapter.id).then((jobs) => {
+    audioService.list(chapterId).then((jobs) => {
       if (active) setServerAudioJob(jobs[0] || null);
     }).catch(() => undefined);
     return () => { active = false; };
-  }, [chapter?.id]);
+  }, [chapterId]);
 
+  const serverAudioJobId = serverAudioJob?.id;
+  const serverAudioJobStatus = serverAudioJob?.status;
   useEffect(() => {
-    if (!serverAudioJob || !["queued", "processing", "retry_wait"].includes(serverAudioJob.status)) return;
+    if (serverAudioJobId === undefined || !["queued", "processing", "retry_wait"].includes(serverAudioJobStatus ?? "")) return;
     const timer = window.setInterval(() => {
-      audioService.get(serverAudioJob.id).then((job) => {
+      audioService.get(serverAudioJobId).then((job) => {
         setServerAudioJob(job);
         if (job.audio_ready) setChapterAudioReady(true);
       }).catch(() => undefined);
     }, 3000);
     return () => window.clearInterval(timer);
-  }, [serverAudioJob?.id, serverAudioJob?.status]);
+  }, [serverAudioJobId, serverAudioJobStatus]);
 
   const loadChapterAudioPlayer = async (): Promise<HTMLAudioElement | null> => {
     if (!chapter) return null;
@@ -665,7 +655,7 @@ const Reader: React.FC = () => {
     window.speechSynthesis.speak(utterance);
   };
 
-  const addAnnotation = async (annotationType: "bookmark" | "note") => {
+  const addAnnotation = useCallback(async (annotationType: "bookmark" | "note") => {
     if (!chapter || !contentRef.current) return;
     const content = contentRef.current;
     const maxScroll = Math.max(content.scrollHeight - content.clientHeight, 1);
@@ -686,7 +676,22 @@ const Reader: React.FC = () => {
     } catch (err) {
       console.error("Failed to save reader annotation", err);
     }
-  };
+  }, [chapter, novel_id]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+      if (event.key === "ArrowLeft") goToChapter(chapter_number - 1);
+      if (event.key === "ArrowRight") goToChapter(chapter_number + 1);
+      if (event.key.toLowerCase() === "b") void addAnnotation("bookmark");
+      if (event.key.toLowerCase() === "j") goToChapter(chapter_number + 1);
+      if (event.key.toLowerCase() === "k") goToChapter(chapter_number - 1);
+      if (event.key === "[") setFontScale((value) => Math.max(0.85, value - 0.1));
+      if (event.key === "]") setFontScale((value) => Math.min(1.3, value + 0.1));
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [chapter_number, goToChapter, addAnnotation]);
 
   const removeAnnotation = async (id: number) => {
     await chapterService.deleteReadingAnnotation(id);

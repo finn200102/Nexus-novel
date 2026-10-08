@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Check, Link2, RefreshCw, RotateCw, Send, ShieldCheck, X } from "lucide-react";
 import { adminIntegrationService, MergeReview, WebhookDelivery, WebhookSubscription } from "../services/adminIntegrationService";
 import { getUserFacingError } from "../services/apiClient";
-import { useToast } from "../context/ToastContext";
+import { useToast } from "../context/useToast";
 import "../styles/integrations.css";
 
 const DEFAULT_EVENTS = ["import.completed", "source_refreshed", "chapter.found", "download.completed", "download.failed", "source_returned_from_hiatus", "metadata.merge", "source.degraded", "source.recovered", "job.state_changed"];

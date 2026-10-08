@@ -12,7 +12,7 @@ import {
   StoryGuide as StoryGuideData,
   insightService,
 } from "../services/insightService";
-import { useToast } from "../context/ToastContext";
+import { useToast } from "../context/useToast";
 import "../styles/novel-detail.css";
 import "../styles/story-guide.css";
 
@@ -157,25 +157,26 @@ const StoryGuide: React.FC = () => {
   }, [id, requestedCutoff]);
 
   useEffect(() => { void load(); }, [load]);
+  const safeThroughChapter = projection?.safe_through_chapter;
   useEffect(() => {
-    if (!projection || projection.safe_through_chapter < 1) { setRecentChanges(null); return; }
+    if (safeThroughChapter === undefined || safeThroughChapter < 1) { setRecentChanges(null); return; }
     // Keep the guide usable with an older Novel API (and lightweight test
     // doubles) while the optional change-feed endpoint rolls out.
     if (typeof insightService.storyGuideChanges !== "function") { setRecentChanges(null); return; }
     let cancelled = false;
-    void insightService.storyGuideChanges(id, Math.max(0, projection.safe_through_chapter - 1), projection.safe_through_chapter)
+    void insightService.storyGuideChanges(id, Math.max(0, safeThroughChapter - 1), safeThroughChapter)
       .then((result) => { if (!cancelled) setRecentChanges(result); })
       .catch(() => { if (!cancelled) setRecentChanges(null); });
     return () => { cancelled = true; };
-  }, [id, projection?.safe_through_chapter]);
+  }, [id, safeThroughChapter]);
   useEffect(() => {
-    if (!projection || projection.safe_through_chapter < 1 || typeof insightService.storyGuideRelationshipTimeline !== "function") { setRelationshipTimeline(null); return; }
+    if (safeThroughChapter === undefined || safeThroughChapter < 1 || typeof insightService.storyGuideRelationshipTimeline !== "function") { setRelationshipTimeline(null); return; }
     let cancelled = false;
-    void insightService.storyGuideRelationshipTimeline(id, projection.safe_through_chapter)
+    void insightService.storyGuideRelationshipTimeline(id, safeThroughChapter)
       .then((result) => { if (!cancelled) setRelationshipTimeline(result); })
       .catch(() => { if (!cancelled) setRelationshipTimeline(null); });
     return () => { cancelled = true; };
-  }, [id, projection?.safe_through_chapter]);
+  }, [id, safeThroughChapter]);
   useEffect(() => {
     if (!processingStates.has(guide?.guide_status || "") && projection?.coverage.state !== "analyzing") return undefined;
     const timer = window.setInterval(() => void load(true), 3000);

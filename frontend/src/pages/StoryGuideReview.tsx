@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { adminIntegrationService, GuideReviewAssertion, GuideReviewHistoryItem } from "../services/adminIntegrationService";
-import { useToast } from "../context/ToastContext";
+import { useToast } from "../context/useToast";
 import "../styles/novel-detail.css";
 
 const StoryGuideReview: React.FC = () => {
@@ -23,8 +23,8 @@ const StoryGuideReview: React.FC = () => {
       setItems(queue.data || queue.assertions || []);
       setHistory(audit.data || audit.history || []);
       setError(null);
-    } catch (caught: any) {
-      setError(caught?.response?.status === 403 ? "This editorial workbench is available to Nexus administrators only." : "The review service is temporarily unavailable. Reader-facing guide pages remain unaffected.");
+    } catch (caught) {
+      setError((caught as { response?: { status?: number } } | null)?.response?.status === 403 ? "This editorial workbench is available to Nexus administrators only." : "The review service is temporarily unavailable. Reader-facing guide pages remain unaffected.");
     } finally { setLoading(false); }
   }, [novelId]);
 

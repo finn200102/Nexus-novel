@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Activity, AlertTriangle, CheckCircle2, Clock3, Database, Download, RefreshCw, Server, XCircle } from "lucide-react";
-import { useLibraryContext } from "../context/LibraryContext";
+import { useLibraryContext } from "../context/useLibraryContext";
 import { activityService, MetadataJob, OperationsSummary, RefreshSchedule, SourceHealth, SourcePolicySummary } from "../services/activityService";
 import { cancelPendingRequests, getUserFacingError, isRequestCancelled } from "../services/apiClient";
 import { RequestCoordinator, useAdaptivePolling } from "../services/requestResilience";
@@ -8,6 +8,7 @@ import "../styles/operations.css";
 
 const Operations: React.FC = () => {
   const { activeLibrary } = useLibraryContext();
+  const activeLibraryId = activeLibrary?.id;
   const [summary, setSummary] = useState<OperationsSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -21,7 +22,7 @@ const Operations: React.FC = () => {
   const hasSummaryRef = React.useRef(false);
 
   const load = useCallback(async () => {
-    if (!activeLibrary) {
+    if (activeLibraryId === undefined) {
       setSummary(null);
       setLoading(false);
       return;
@@ -29,8 +30,8 @@ const Operations: React.FC = () => {
     if (!hasSummaryRef.current) setLoading(true);
     try {
       const nextSummary = await coordinatorRef.current.run(
-        `operations-summary:${activeLibrary.id}`,
-        () => activityService.getOperationsSummary(activeLibrary.id)
+        `operations-summary:${activeLibraryId}`,
+        () => activityService.getOperationsSummary(activeLibraryId)
       );
       setSummary(nextSummary);
       hasSummaryRef.current = true;
@@ -42,7 +43,7 @@ const Operations: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [activeLibrary?.id]);
+  }, [activeLibraryId]);
 
   const loadControls = useCallback(async () => {
     try {

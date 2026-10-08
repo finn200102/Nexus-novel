@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import LibrarySwitcher from "./LibrarySwitcher";
-import { useLibraryContext } from "../../context/LibraryContext";
+import { useLibraryContext } from "../../context/useLibraryContext";
 import { useAuth } from "../../context/AuthContext";
 import { activityService, OperationsSummary } from "../../services/activityService";
 import { novelService } from "../../services/novelService";
@@ -39,6 +39,7 @@ const Navbar: React.FC<NavbarProps> = ({ onRequestCreateLibrary }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { activeLibrary } = useLibraryContext();
+  const activeLibraryId = activeLibrary?.id;
   const { isAuthenticated, user, logout } = useAuth();
   const [query, setQuery] = useState("");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -47,25 +48,25 @@ const Navbar: React.FC<NavbarProps> = ({ onRequestCreateLibrary }) => {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
 
   React.useEffect(() => {
-    if (!activeLibrary) {
+    if (activeLibraryId === undefined) {
       setMetadataStatus("unknown");
       return;
     }
     let cancelled = false;
-    activityService.getOperationsSummary(activeLibrary.id)
+    activityService.getOperationsSummary(activeLibraryId)
       .then((summary) => { if (!cancelled) setMetadataStatus(summary.metadata_server.status); })
       .catch(() => { if (!cancelled) setMetadataStatus("offline"); });
     return () => { cancelled = true; };
-  }, [activeLibrary?.id]);
+  }, [activeLibraryId]);
 
   React.useEffect(() => {
-    if (!activeLibrary) { setNotifications([]); return; }
+    if (activeLibraryId === undefined) { setNotifications([]); return; }
     let cancelled = false;
-    novelService.getUpdateEvents(activeLibrary.id, true)
+    novelService.getUpdateEvents(activeLibraryId, true)
       .then((items) => { if (!cancelled) setNotifications(items); })
       .catch(() => { if (!cancelled) setNotifications([]); });
     return () => { cancelled = true; };
-  }, [activeLibrary?.id]);
+  }, [activeLibraryId]);
 
   const markNotificationRead = async (event: NovelUpdateEvent) => {
     try {

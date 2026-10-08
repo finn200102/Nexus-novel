@@ -10,7 +10,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { useLibraryContext } from "../context/LibraryContext";
+import { useLibraryContext } from "../context/useLibraryContext";
 import { novelService } from "../services/novelService";
 import { activityService, OperationsSummary } from "../services/activityService";
 import { Novel, NovelUpdateEvent } from "../types/novel";
@@ -23,6 +23,7 @@ const formatCompact = (value: number) =>
 const Home: React.FC = () => {
   const navigate = useNavigate();
   const { activeLibrary, libraries, isLoading: librariesLoading, selectLibrary } = useLibraryContext();
+  const activeLibraryId = activeLibrary?.id;
   const [novels, setNovels] = useState<Novel[]>([]);
   const [updates, setUpdates] = useState<NovelUpdateEvent[]>([]);
   const [loading, setLoading] = useState(false);
@@ -31,16 +32,16 @@ const Home: React.FC = () => {
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
-      if (!activeLibrary) {
+      if (activeLibraryId === undefined) {
         setNovels([]);
         return;
       }
       setLoading(true);
       try {
         const [data, updateData, operationsData] = await Promise.all([
-          novelService.getAllNovels(activeLibrary.id, ""),
-          novelService.getUpdateEvents(activeLibrary.id, true),
-          activityService.getOperationsSummary(activeLibrary.id),
+          novelService.getAllNovels(activeLibraryId, ""),
+          novelService.getUpdateEvents(activeLibraryId, true),
+          activityService.getOperationsSummary(activeLibraryId),
         ]);
         if (!cancelled) {
           setNovels(Array.isArray(data) ? data : []);
@@ -57,7 +58,7 @@ const Home: React.FC = () => {
     };
     load();
     return () => { cancelled = true; };
-  }, [activeLibrary?.id]);
+  }, [activeLibraryId]);
 
   const recent = useMemo(
     () => [...novels].sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at)).slice(0, 6),

@@ -6,7 +6,7 @@ import ChapterList from "../components/novel/ChapterList";
 import NovelDetails from "../components/novel/NovelDetails";
 import { Novel, NovelFollowSettings } from "../types/novel";
 import { NovelDetailHeroSkeleton } from "../components/common/Skeleton";
-import { useToast } from "../context/ToastContext";
+import { useToast } from "../context/useToast";
 import { Bell } from "lucide-react";
 import { insightService, CanonicalWork, InsightSignal, SimilarNovel, StoryGuide } from "../services/insightService";
 import "../styles/novel-detail.css";

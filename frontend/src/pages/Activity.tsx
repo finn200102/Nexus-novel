@@ -1,24 +1,25 @@
 import React, { useEffect, useState } from "react";
 import { CalendarDays, CheckCircle2, Download, RefreshCw } from "lucide-react";
-import { useLibraryContext } from "../context/LibraryContext";
+import { useLibraryContext } from "../context/useLibraryContext";
 import { activityService } from "../services/activityService";
 import type { ActivityDay, ActivityEvent } from "../types/activity";
 import "../styles/activity.css";
 
 const Activity: React.FC = () => {
   const { activeLibrary } = useLibraryContext();
+  const activeLibraryId = activeLibrary?.id;
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [days, setDays] = useState<ActivityDay[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!activeLibrary) { setEvents([]); setDays([]); setLoading(false); return; }
+    if (activeLibraryId === undefined) { setEvents([]); setDays([]); setLoading(false); return; }
     setLoading(true);
-    Promise.all([activityService.getFeed(activeLibrary.id), activityService.getCalendar(activeLibrary.id)])
+    Promise.all([activityService.getFeed(activeLibraryId), activityService.getCalendar(activeLibraryId)])
       .then(([feed, calendar]) => { setEvents(feed); setDays(calendar); })
       .catch((error) => console.error("Failed to load activity", error))
       .finally(() => setLoading(false));
-  }, [activeLibrary?.id]);
+  }, [activeLibraryId]);
 
   return <div className="activity-page">
     <header className="activity-page__header"><div><p className="library-workspace__eyebrow">Activity</p><h1>Updates & activity</h1><p>Follow changes, source failures, and download progress in one place.</p></div><RefreshCw size={20} aria-hidden="true" /></header>

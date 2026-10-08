@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import NovelList from "../components/novel/NovelList";
 import CreateNovelForm from "../components/novel/CreateNovelForm";
-import { useLibraryContext } from "../context/LibraryContext";
+import { useLibraryContext } from "../context/useLibraryContext";
 import "../styles/library.css";
 
 interface LibraryPageProps {

@@ -22,14 +22,22 @@ export type AudioProviderConfig = {
   execution_mode: "browser" | "server";
 };
 
+// The server never receives the provider id or the browser/server execution mode.
+function toServerProviderRequest(provider: AudioProviderConfig) {
+  const request: Partial<AudioProviderConfig> = { ...provider };
+  delete request.id;
+  delete request.execution_mode;
+  return { id: provider.id, request };
+}
+
 export const audioService = {
   async providers() { return (await apiClient.get("/audio/providers")).data; },
   async check(provider: AudioProviderConfig) {
-    const { id, execution_mode: _executionMode, ...request } = provider;
+    const { id, request } = toServerProviderRequest(provider);
     return (await apiClient.post(`/audio/providers/${id}/check`, { provider_id: id, ...request })).data;
   },
   async preview(provider: AudioProviderConfig) {
-    const { id, execution_mode: _executionMode, ...request } = provider;
+    const { id, request } = toServerProviderRequest(provider);
     return (await apiClient.post(`/audio/providers/${id}/preview`, { provider_id: id, ...request })).data;
   },
   async create(input: { library_id: number; novel_id: number; chapter_number: number; provider: AudioProviderConfig }): Promise<ServerAudioJob> {

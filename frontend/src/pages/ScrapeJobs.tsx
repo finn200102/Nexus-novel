@@ -8,7 +8,7 @@ import { novelService } from "../services/novelService";
 import { FandomInfo } from "../types/discovery";
 import { cancelPendingRequests, getUserFacingError, isRequestCancelled } from "../services/apiClient";
 import { RequestCoordinator, useAdaptivePolling } from "../services/requestResilience";
-import { useLibraryContext } from "../context/LibraryContext";
+import { useLibraryContext } from "../context/useLibraryContext";
 import "../styles/scrape-jobs.css";
 
 const labels: Record<string, string> = {
@@ -70,8 +70,9 @@ const ScrapeJobs: React.FC = () => {
       .catch((reason) => setError(getUserFacingError(reason, "Catalog capabilities are temporarily unavailable.")));
     return () => cancelPendingRequests("/catalog-scrapes");
   }, []);
+  const fandomsSupported = supports(capability, "fandoms");
   useEffect(() => {
-    if (!supports(capability, "fandoms")) { setFandoms([]); return; }
+    if (!fandomsSupported) { setFandoms([]); return; }
     const timer = window.setTimeout(() => {
       const term = [query.fandom_a, query.fandom_b].filter(Boolean).join(" ");
       void coordinator.current.run(`catalog-fandoms:${site}:${query.media}:${term}`, () => discoveryService.getFandoms(site, term))
@@ -79,7 +80,7 @@ const ScrapeJobs: React.FC = () => {
         .catch(() => setFandoms([]));
     }, 180);
     return () => window.clearTimeout(timer);
-  }, [site, capability?.filters.join(","), query.fandom_a, query.fandom_b, query.media]);
+  }, [site, fandomsSupported, query.fandom_a, query.fandom_b, query.media]);
 
   const selectSite = (next: string) => {
     const nextCapability = registry.find((item) => item.site === next);
