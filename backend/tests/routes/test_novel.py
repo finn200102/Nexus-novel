@@ -1,3 +1,4 @@
+from app.models.user import User
 from fastapi import status
 from app.services.novel_services import get_novel_by_url
 from app.services.library_services import create_library
@@ -6,6 +7,10 @@ from tests.auth_helpers import bearer_headers
 
 
 def create_test_user(db):
+    # Reuse the account when a test asks for it twice: usernames are unique.
+    existing = db.query(User).filter(User.username == "user1").first()
+    if existing:
+        return existing
     user_data = {}
     user_data["username"] = "user1"
     user_data["password"] = "1234"
