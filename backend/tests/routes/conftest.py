@@ -5,15 +5,14 @@ from datetime import datetime
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from fastapi.testclient import TestClient
-from jose import jwt
 from dotenv import load_dotenv
 
 from app.main import app
+from tests import auth_helpers
 from config.database import get_db
 from app.models.base import BaseModel
 from app.models.user import User
 from app.models.library import Library
-from config.settings import settings
 
 load_dotenv()
 
@@ -27,9 +26,11 @@ TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engin
 def db():
     BaseModel.metadata.create_all(bind=engine)
     db = TestingSessionLocal()
+    auth_helpers.current_db = db
     try:
         yield db
     finally:
+        auth_helpers.current_db = None
         db.rollback()
         db.close()
         BaseModel.metadata.drop_all(bind=engine)
@@ -45,13 +46,8 @@ def test_user(db):
 
 
 @pytest.fixture
-def auth_headers(test_user):
-    token = jwt.encode(
-        {"sub": test_user.username, "user_id": test_user.id},
-        settings.SECRET_KEY,
-        algorithm=settings.ALGORITHM,
-    )
-    return {"Authorization": f"Bearer {token}"}
+def auth_headers(db, test_user):
+    return auth_helpers.bearer_headers(test_user.id, db)
 
 
 @pytest.fixture

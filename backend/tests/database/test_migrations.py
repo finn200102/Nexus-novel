@@ -100,7 +100,7 @@ def test_pre_alembic_sqlite_database_is_upgraded_once(sqlite_engine):
     upgrade_database(sqlite_engine)
 
     assert current_revision(sqlite_engine) == head_revision()
-    assert {"is_admin"} <= column_names(sqlite_engine, "users")
+    assert {"is_admin", "is_disabled"} <= column_names(sqlite_engine, "users")
     assert {"metadata_id", "scrape_status", "followed_at"} <= column_names(sqlite_engine, "novels")
     assert {"retry_count", "download_error"} <= column_names(sqlite_engine, "chapters")
     assert set(Base.metadata.tables) <= set(inspect(sqlite_engine).get_table_names())

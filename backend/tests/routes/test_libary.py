@@ -1,4 +1,4 @@
-from app.auth.jwt import create_access_token
+from tests.auth_helpers import bearer_headers
 from app.services.library_services import get_library_by_name
 from app.services.user_services import create_user
 from fastapi import status
@@ -14,8 +14,7 @@ def create_test_user(db):
 
 def get_auth_headers(user_id):
     """Generate authorization headers for a user"""
-    token = create_access_token(data={"sub": str(user_id)})
-    return {"Authorization": f"Bearer {token}"}
+    return bearer_headers(user_id)
 
 
 def add_library_response(client, db):

@@ -2,7 +2,7 @@ from fastapi import status
 from app.services.novel_services import get_novel_by_url
 from app.services.library_services import create_library
 from app.services.user_services import create_user
-from app.auth.jwt import create_access_token
+from tests.auth_helpers import bearer_headers
 
 
 def create_test_user(db):
@@ -22,8 +22,7 @@ def create_test_library(db):
 
 def get_auth_headers(user_id):
     """Generate authorization headers for a user"""
-    token = create_access_token(data={"sub": str(user_id)})
-    return {"Authorization": f"Bearer {token}"}
+    return bearer_headers(user_id)
 
 
 def add_novel_resources(client, db):

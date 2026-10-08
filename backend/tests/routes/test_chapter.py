@@ -9,7 +9,7 @@ from app.services.chapter_services import (
 )
 from app.services.library_services import create_library
 from app.services.user_services import create_user
-from app.auth.jwt import create_access_token
+from tests.auth_helpers import bearer_headers
 from app.routers.chapter import extract_story_id_from_url
 from app.models.download_job import ChapterDownloadJob
 from app.models.chapter import Chapter, ContentStatus
@@ -50,8 +50,7 @@ def create_test_novel(db):
 
 def get_auth_headers(user_id):
     """Generate authorization headers for a user"""
-    token = create_access_token(data={"sub": str(user_id)})
-    return {"Authorization": f"Bearer {token}"}
+    return bearer_headers(user_id)
 
 
 def test_manual_download_retry_starts_a_new_attempt_cycle(db):

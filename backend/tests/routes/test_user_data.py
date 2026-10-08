@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.auth.jwt import create_access_token
+from tests.auth_helpers import bearer_headers
 from app.models.chapter import Chapter
 from app.models.follow import UserNovelFollow
 from app.models.library import Library
@@ -18,7 +18,7 @@ ROYAL_ROAD_URL = "https://www.royalroad.com/fiction/21220/mother-of-learning"
 
 
 def _headers(user: User) -> dict[str, str]:
-    return {"Authorization": f"Bearer {create_access_token({'sub': str(user.id)})}"}
+    return bearer_headers(user.id)
 
 
 @pytest.fixture

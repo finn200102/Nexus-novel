@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, patch
 
 from app.models.novel import Novel
 from app.models.reading_progress import ReadingProgress
-from app.auth.jwt import create_access_token
+from tests.auth_helpers import bearer_headers
 
 
 def _add_novel(db, *, library_id: int, metadata_id: int) -> Novel:
@@ -23,7 +23,7 @@ def _guide_response(*, cutoff: int) -> dict:
 
 
 def _headers(user_id: int) -> dict[str, str]:
-    return {"Authorization": f"Bearer {create_access_token({'sub': str(user_id)})}"}
+    return bearer_headers(user_id)
 
 
 def test_story_guide_clamps_requested_cutoff_to_reading_progress(

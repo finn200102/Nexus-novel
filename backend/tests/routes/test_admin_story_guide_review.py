@@ -2,12 +2,12 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.auth.jwt import create_access_token
+from tests.auth_helpers import bearer_headers
 from app.models.user import User
 
 
 def _headers(user_id: int) -> dict[str, str]:
-    return {"Authorization": f"Bearer {create_access_token({'sub': str(user_id)})}"}
+    return bearer_headers(user_id)
 
 
 @pytest.fixture

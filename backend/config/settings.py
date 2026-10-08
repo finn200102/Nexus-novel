@@ -4,7 +4,6 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
-from typing import Optional
 
 # Values that have shipped as defaults in code, Compose files or docs. A token
 # signed with any of them can be forged by anyone, so they are never used.
@@ -56,10 +55,17 @@ class Settings(BaseSettings):
         description="Secret key for JWT token generation",
     )
     ALGORITHM: str = Field(default="HS256", description="Algorithm for JWT tokens")
-    # Long enough that readers are not signed out mid-session; there is no
-    # refresh token yet, so an expired token always means a new login.
+    # Access tokens are short-lived; the browser renews them with the
+    # HttpOnly refresh cookie, which rotates on every use.
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(
-        default=60 * 24 * 30, description="JWT token expiration in minutes"
+        default=15, description="JWT access token expiration in minutes"
+    )
+    REFRESH_TOKEN_EXPIRE_DAYS: int = Field(
+        default=30, description="Refresh token lifetime; each use starts a new period"
+    )
+    REFRESH_COOKIE_SECURE: str = Field(
+        default="auto",
+        description="Mark the refresh cookie Secure: auto (when the request came over HTTPS), true or false",
     )
     RUN_MIGRATIONS_ON_STARTUP: bool = Field(
         default=True, description="Run Alembic upgrade head when the API or worker starts"

@@ -4,6 +4,7 @@ Alembic autogenerate and the schema tests rely on this module; add new model
 modules here.
 """
 
+from .account import AuthAttempt, InstanceSetting, InviteCode, PasswordResetToken, RefreshToken, UserSession
 from .audio_job import ChapterAudioJob, ChapterAudioPart
 from .author import Author
 from .chapter import Chapter
@@ -22,6 +23,12 @@ from .update_event import NovelUpdateEvent
 from .user import User
 
 __all__ = [
+    "AuthAttempt",
+    "InstanceSetting",
+    "InviteCode",
+    "PasswordResetToken",
+    "RefreshToken",
+    "UserSession",
     "Author",
     "Chapter",
     "ChapterAudioJob",

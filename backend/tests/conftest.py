@@ -12,6 +12,12 @@ os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 os.environ["RUN_MIGRATIONS_ON_STARTUP"] = "false"
 
 
+from app.auth import passwords  # noqa: E402
+
+# Minimum bcrypt cost: the auth tests hash many passwords.
+passwords.BCRYPT_ROUNDS = 4
+
+
 def pytest_sessionfinish(session, exitstatus):
     path = TEST_DATABASE_URL.removeprefix("sqlite:///")
     if os.path.exists(path):
