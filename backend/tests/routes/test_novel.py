@@ -1,3 +1,4 @@
+from app.models.library import Library
 from app.models.user import User
 from fastapi import status
 from app.services.novel_services import get_novel_by_url
@@ -195,6 +196,30 @@ def test_delete_novel_by_id(client_with_auth, db):
     # Verify nove was deleted
     db_novel = get_novel_by_url(db, url).first()
     assert db_novel is None
+
+
+def test_delete_novel_rejects_novel_from_another_library(client_with_auth, db):
+    response, headers, novel_data, url, library = add_novel_resources(
+        client_with_auth, db
+    )
+    assert response.status_code == status.HTTP_201_CREATED
+    victim_novel = get_novel_by_url(db, url).first()
+
+    attacker = User(username="attacker", password="hashed_password_here")
+    db.add(attacker)
+    db.commit()
+    db.refresh(attacker)
+    attacker_library = Library(name="mine", user_id=attacker.id)
+    db.add(attacker_library)
+    db.commit()
+
+    response = client_with_auth.post(
+        f"/novel/delete/{victim_novel.id}?library_id={attacker_library.id}",
+        headers=bearer_headers(attacker.id),
+    )
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert get_novel_by_url(db, url).first() is not None
 
 
 def test_update_novel(client_with_auth, db):

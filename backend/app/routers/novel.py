@@ -1104,18 +1104,22 @@ def delete_novel_by_id(
     current_user: User = Depends(get_current_user),
 ):
     novel = novel_services.get_novel_by_id(db, novel_id)
-    if not novel:
+    # The novel must live in the caller's library; otherwise any user could
+    # delete another user's novel by pairing its id with their own library.
+    if not novel or novel.library_id != library_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Novel with ID {novel_id} not found",
         )
 
     check_library(db, library_id, current_user)
-    base_dir = os.environ.get("DOWNLOAD_PATH")
-    base_dir = os.path.join(base_dir, str(current_user.username), str(library_id))
-    novel_path = os.path.join(base_dir, novel.title)
+    base_dir = os.path.realpath(
+        os.path.join(os.environ.get("DOWNLOAD_PATH", "/data/downloads"), str(current_user.username), str(library_id))
+    )
+    # Titles come from source sites; keep the folder strictly inside base_dir.
+    novel_path = os.path.realpath(os.path.join(base_dir, novel.title or ""))
 
-    if os.path.isdir(novel_path):
+    if os.path.dirname(novel_path) == base_dir and os.path.isdir(novel_path):
         shutil.rmtree(novel_path)
     else:
         logger.debug("Directory does not exist", path=novel_path)
