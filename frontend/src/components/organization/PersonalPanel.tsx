@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { ChipInput } from "../common/ChipInput";
 import { MarkdownLite } from "../common/markdownLite";
 import { organizationService } from "../../services/organizationService";
@@ -20,12 +20,15 @@ export const PersonalPanel: React.FC<PersonalPanelProps> = ({ novelId }) => {
   const [preview, setPreview] = useState(false);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
+  // What the server last returned, so a save sends only what changed.
+  const stored = useRef<{ notes: string | null; rating: number | null; tags: string[] }>({ notes: null, rating: null, tags: [] });
 
   useEffect(() => {
     let active = true;
     Promise.all([organizationService.getPersonal(novelId), organizationService.tagSuggestions("")])
       .then(([personal, known]) => {
         if (!active) return;
+        stored.current = { notes: personal.notes, rating: personal.rating, tags: personal.user_tags };
         setNotes(personal.notes ?? "");
         setRating(personal.rating);
         setTags(personal.user_tags);
@@ -42,13 +45,17 @@ export const PersonalPanel: React.FC<PersonalPanelProps> = ({ novelId }) => {
   const save = async () => {
     setSaving(true);
     try {
-      const saved = await organizationService.savePersonal(novelId, {
-        notes: notes.trim() ? notes : null,
-        rating,
-        user_tags: tags,
-      });
+      const changes: { notes?: string | null; rating?: number | null; user_tags?: string[] } = {};
+      const nextNotes = notes.trim() ? notes : null;
+      if (nextNotes !== stored.current.notes) changes.notes = nextNotes;
+      if (rating !== stored.current.rating) changes.rating = rating;
+      if (tags.join("\n") !== stored.current.tags.join("\n")) changes.user_tags = tags;
+      if (Object.keys(changes).length > 0) {
+        const saved = await organizationService.savePersonal(novelId, changes);
+        stored.current = { notes: saved.notes, rating: saved.rating, tags: saved.user_tags };
+        setTags(saved.user_tags);
+      }
       setDirty(false);
-      setTags(saved.user_tags);
       addToast("Saved your notes.", "success");
     } catch (error) {
       addToast(getUserFacingError(error, "Could not save your notes."), "error");

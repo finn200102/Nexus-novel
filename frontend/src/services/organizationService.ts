@@ -40,9 +40,10 @@ export const organizationService = {
   async getPersonal(novelId: number): Promise<PersonalData> {
     return (await apiClient.get<PersonalData>(`/personal/novels/${novelId}`)).data;
   },
+  // Partial update: only the fields passed are changed on the server.
   async savePersonal(
     novelId: number,
-    data: { notes: string | null; rating: number | null; user_tags: string[]; auto_download?: boolean; keep_ahead?: number },
+    data: Partial<{ notes: string | null; rating: number | null; user_tags: string[]; auto_download: boolean; keep_ahead: number }>,
   ): Promise<PersonalData> {
     return (await apiClient.put<PersonalData>(`/personal/novels/${novelId}`, data)).data;
   },

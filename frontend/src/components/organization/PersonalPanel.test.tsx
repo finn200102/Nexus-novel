@@ -24,9 +24,9 @@ describe("PersonalPanel", () => {
     vi.mocked(organizationService.tagSuggestions).mockResolvedValue(["cozy", "slow burn"]);
     vi.mocked(organizationService.savePersonal).mockImplementation(async (_id, data) => ({
       novel_id: 7,
-      notes: data.notes,
-      rating: data.rating,
-      user_tags: data.user_tags,
+      notes: data.notes !== undefined ? data.notes : "Loved **the** cast",
+      rating: data.rating !== undefined ? data.rating : 3,
+      user_tags: data.user_tags ?? ["cozy"],
     }));
   });
 
@@ -45,15 +45,23 @@ describe("PersonalPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Rate 5 stars" }));
     fireEvent.click(screen.getByRole("button", { name: "Save notes" }));
     await waitFor(() =>
-      expect(organizationService.savePersonal).toHaveBeenLastCalledWith(7, {
-        notes: "Loved **the** cast",
-        rating: 5,
-        user_tags: ["cozy"],
-      }),
+      expect(organizationService.savePersonal).toHaveBeenLastCalledWith(7, { rating: 5 }),
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Rate 5 stars" }));
     expect(screen.getByText("Not rated")).toBeTruthy();
+  });
+
+  it("sends only the fields that changed", async () => {
+    renderWithToasts(<PersonalPanel novelId={7} />);
+    await screen.findByDisplayValue("Loved **the** cast");
+
+    fireEvent.change(screen.getByDisplayValue("Loved **the** cast"), { target: { value: "Still loved it" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save notes" }));
+
+    await waitFor(() => expect(organizationService.savePersonal).toHaveBeenCalledWith(7, { notes: "Still loved it" }));
+    expect(vi.mocked(organizationService.savePersonal).mock.calls[0][1]).not.toHaveProperty("rating");
+    expect(vi.mocked(organizationService.savePersonal).mock.calls[0][1]).not.toHaveProperty("user_tags");
   });
 
   it("renders the Markdown preview without injecting raw HTML", async () => {

@@ -23,19 +23,12 @@ const AutoDownloadToggle: React.FC<AutoDownloadToggleProps> = ({ novelId }) => {
       .catch(() => setError("Could not load download settings."));
   }, [novelId]);
 
-  // The personal endpoint replaces notes, rating and tags on every save, so
-  // send the stored values back alongside the auto-download settings.
+  // The endpoint takes partial updates, so only the download settings are sent.
   const save = async (next: { auto_download: boolean; keep_ahead: number }) => {
     setSaving(true);
     setError(null);
     try {
-      const current = await organizationService.getPersonal(novelId);
-      await organizationService.savePersonal(novelId, {
-        notes: current.notes,
-        rating: current.rating,
-        user_tags: current.user_tags,
-        ...next,
-      });
+      await organizationService.savePersonal(novelId, next);
       setEnabled(next.auto_download);
       setKeepAhead(next.keep_ahead);
     } catch {
