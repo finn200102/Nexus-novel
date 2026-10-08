@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useLibraryContext } from "../context/useLibraryContext";
+import AccountDataPanel from "../components/account/AccountDataPanel";
 import { novelService } from "../services/novelService";
 import { activityService, OperationsSummary } from "../services/activityService";
 import { Novel, NovelUpdateEvent } from "../types/novel";
@@ -183,6 +184,8 @@ const Home: React.FC = () => {
           {!librariesLoading && libraries.length === 0 && <p className="dashboard-panel__status">No libraries yet.</p>}
         </div>
       </section>
+
+      <AccountDataPanel />
     </div>
   );
 };
