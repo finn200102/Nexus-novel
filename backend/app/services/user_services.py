@@ -1,3 +1,4 @@
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.models.user import User
 
@@ -15,10 +16,11 @@ def create_user(db: Session, user_data: dict):
 
 def get_user_by_username(db: Session, username):
     """
-    Returns Users that match that username
+    Returns Users whose username matches, ignoring case (usernames are unique
+    case-insensitively)
     """
 
-    users = db.query(User).filter(User.username == username)
+    users = db.query(User).filter(func.lower(User.username) == func.lower(username))
     return users
 
 def get_user_by_id(db: Session, id):

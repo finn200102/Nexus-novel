@@ -82,6 +82,28 @@ def test_open_signup_creates_regular_users_and_rejects_duplicates(client):
     assert "Username already registered" in duplicate.json()["detail"]
 
 
+def test_usernames_are_unique_regardless_of_case(client, db):
+    headers = admin_client(client)
+    set_signup_mode(client, headers, "open")
+    assert signup(client, "Reader").status_code == status.HTTP_201_CREATED
+
+    duplicate = signup(client, "READER")
+    assert duplicate.status_code == status.HTTP_400_BAD_REQUEST
+    assert "Username already registered" in duplicate.json()["detail"]
+    assert db.query(User).filter(User.username.ilike("reader")).count() == 1
+
+
+def test_login_ignores_username_case(client, db):
+    created = signup(client, "MixedCase").json()
+    client.cookies.clear()
+
+    response = login(client, "mixedcase")
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["id"] == created["id"]
+    assert get_user_by_username(db, "MIXEDCASE").first().id == created["id"]
+
+
 def test_invite_mode_requires_a_valid_unused_invite(client):
     headers = admin_client(client)
     set_signup_mode(client, headers, "invite")

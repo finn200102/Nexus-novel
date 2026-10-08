@@ -1,9 +1,12 @@
-from sqlalchemy import Boolean, Column, DateTime, String
+from sqlalchemy import Boolean, Column, DateTime, Index, String, text
 from sqlalchemy.orm import relationship
 from app.models.base import BaseModel
 
 class User(BaseModel):
     __tablename__ = "users"
+    # Usernames are unique regardless of case; signup and login compare
+    # lower(username).
+    __table_args__ = (Index("ux_users_username_lower", text("lower(username)"), unique=True),)
 
     username = Column(String(100), nullable=False, index=True)
     password = Column(String(255), nullable=False, index=True)

@@ -12,6 +12,7 @@ import threading
 from pathlib import Path
 
 import pytest
+from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from alembic.script import ScriptDirectory
@@ -205,3 +206,22 @@ def test_concurrent_starts_migrate_once(postgres_engine):
     assert errors == []
     assert current_revision(postgres_engine) == head_revision()
     assert schema_drift(postgres_engine) == []
+
+
+def test_case_colliding_usernames_block_the_unique_username_migration(sqlite_engine):
+    with sqlite_engine.begin() as connection:
+        command.upgrade(alembic_config(connection), "0009")
+        connection.execute(text("INSERT INTO users (username, password) VALUES ('Reader', 'x'), ('reader', 'y'), ('solo', 'z')"))
+
+    with pytest.raises(RuntimeError) as excinfo:
+        upgrade_database(sqlite_engine)
+
+    message = str(excinfo.value)
+    assert "'Reader' / 'reader'" in message
+    assert "solo" not in message
+    assert current_revision(sqlite_engine) == "0009"
+
+    with sqlite_engine.begin() as connection:
+        connection.execute(text("DELETE FROM users WHERE username = 'Reader'"))
+    upgrade_database(sqlite_engine)
+    assert current_revision(sqlite_engine) == head_revision()
