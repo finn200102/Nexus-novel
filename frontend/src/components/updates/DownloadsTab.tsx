@@ -1,17 +1,18 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { novelService } from "../services/novelService";
-import { chapterService } from "../services/chapterService";
-import { useLibraryContext } from "../context/useLibraryContext";
-import { useToast } from "../context/useToast";
-import { Novel } from "../types/novel";
-import type { DownloadJob } from "../types/activity";
-import { downloadService } from "../services/downloadService";
-import defaultCoverImage from "../assets/cover.png";
-import "../styles/library.css";
-import "../styles/novel-list.css";
-import "../styles/download-manager.css";
-import { displayTitle } from "../utils/displayTitle";
+import { novelService } from "../../services/novelService";
+import { chapterService } from "../../services/chapterService";
+import { useLibraryContext } from "../../context/useLibraryContext";
+import { useToast } from "../../context/useToast";
+import { Novel } from "../../types/novel";
+import type { DownloadJob } from "../../types/activity";
+import { downloadService } from "../../services/downloadService";
+import defaultCoverImage from "../../assets/cover.png";
+import "../../styles/library.css";
+import "../../styles/novel-list.css";
+import "../../styles/download-manager.css";
+import { displayTitle } from "../../utils/displayTitle";
+import { EmptyState } from "../ui";
 
 interface NovelDownloadStatus {
   novel: Novel;
@@ -40,7 +41,12 @@ interface FailedChapter {
   finished_at: string | null;
 }
 
-const Downloads: React.FC = () => {
+interface DownloadsTabProps {
+  jobs: DownloadJob[];
+  setJobs: React.Dispatch<React.SetStateAction<DownloadJob[]>>;
+}
+
+const DownloadsTab: React.FC<DownloadsTabProps> = ({ jobs, setJobs }) => {
   const navigate = useNavigate();
   const { activeLibraryId } = useLibraryContext();
   const { addToast } = useToast();
@@ -48,7 +54,6 @@ const Downloads: React.FC = () => {
   const [novelStatuses, setNovelStatuses] = useState<NovelDownloadStatus[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [expandedNovel, setExpandedNovel] = useState<number | null>(null);
-  const [jobs, setJobs] = useState<DownloadJob[]>([]);
 
   const fetchDownloadStatuses = useCallback(async () => {
     if (!activeLibraryId) {
@@ -58,7 +63,6 @@ const Downloads: React.FC = () => {
 
     try {
       const novels = await novelService.getAllNovels(activeLibraryId);
-      setJobs(await downloadService.listJobs(activeLibraryId));
       console.log("DownloadPage: Fetched novels:", novels.length);
       const statusesPromises = novels.map(async (novel) => {
         try {
@@ -161,6 +165,22 @@ const Downloads: React.FC = () => {
     }
   };
 
+  const jobTitle = (job: DownloadJob) => {
+    const match = novelStatuses.find((item) => item.novel.id === job.novel_id);
+    return match ? displayTitle(match.novel) : `Chapter ${job.chapter_id}`;
+  };
+
+  const jobStatusText = (job: DownloadJob) => {
+    switch (job.status) {
+      case "queued": return job.attempt_count > 1 ? "Retrying" : "Waiting";
+      case "processing": return job.attempt_count > 1 ? "Retrying" : "Saving";
+      case "retry_wait": return `Retrying · attempt ${job.attempt_count + 1} of ${job.max_attempts}`;
+      case "failed": return "Failed";
+      case "cancelled": return "Cancelled";
+      default: return "Saved";
+    }
+  };
+
   const getNovelProgress = (status: NovelDownloadStatus) => {
     return status.total > 0
       ? Math.round((status.present / status.total) * 100)
@@ -168,43 +188,19 @@ const Downloads: React.FC = () => {
   };
 
   if (loading) {
-    return (
-      <div className="library-workspace">
-        <header className="library-workspace__header">
-          <div>
-            <p className="library-workspace__eyebrow">Downloads</p>
-            <h1>Download Manager</h1>
-          </div>
-        </header>
-        <div className="discover-loading">Loading download statuses...</div>
-      </div>
-    );
+    return <p className="updates-empty">Loading downloads…</p>;
   }
 
   return (
-    <div className="library-workspace">
-      <header className="library-workspace__header">
-        <div>
-          <p className="library-workspace__eyebrow">Downloads</p>
-          <h1>Download Manager</h1>
-          <p className="library-workspace__summary">
-            Monitor and manage all your chapter downloads across novels.
-          </p>
-        </div>
-      </header>
+    <div className="updates-downloads">
 
       {!hasActivity && novelStatuses.length === 0 && (
-        <div className="discover-empty">
-          <p>No active downloads or downloads with chapters found.</p>
-          <p className="discover-empty__hint">
-            Start downloading chapters from a novel to see them here.
-          </p>
-        </div>
+        <EmptyState level={3} title="No downloads yet" description="Start downloading chapters from a story to see them here." />
       )}
 
-      {jobs.length > 0 && <section className="downloads-job-panel" aria-label="Durable download queue">
-        <div className="downloads-section-header"><h2>Durable queue</h2><span>{jobs.filter((job) => ["queued", "processing", "retry_wait"].includes(job.status)).length} active</span></div>
-        <div className="downloads-job-list">{jobs.slice(0, 25).map((job) => <article key={job.id} className="downloads-job-row"><div><strong>Chapter {job.chapter_id}</strong><small>{job.status.replace(/_/g, " ")} · attempt {job.attempt_count}/{job.max_attempts}</small>{job.error && <small className="downloads-chapter-error">{job.error}</small>}</div><div className="downloads-chapter-actions">{["failed", "cancelled", "retry_wait"].includes(job.status) && <button className="downloads-btn downloads-btn--small downloads-btn--retry" onClick={() => updateJob(job, "retry")}>Retry</button>}{["queued", "processing", "retry_wait"].includes(job.status) && <button className="downloads-btn downloads-btn--small" onClick={() => updateJob(job, "cancel")}>Cancel</button>}</div></article>)}</div>
+      {jobs.length > 0 && <section className="downloads-job-panel" aria-label="Download queue">
+        <div className="downloads-section-header"><h2>Queue</h2><span>{jobs.filter((job) => ["queued", "processing", "retry_wait"].includes(job.status)).length} active</span></div>
+        <div className="downloads-job-list">{jobs.slice(0, 25).map((job) => <article key={job.id} className="downloads-job-row"><div><strong>{jobTitle(job)}</strong><small>{jobStatusText(job)}</small>{job.error && <small className="downloads-chapter-error">{job.error}</small>}</div><div className="downloads-chapter-actions">{["failed", "cancelled", "retry_wait"].includes(job.status) && <button className="downloads-btn downloads-btn--small downloads-btn--retry" onClick={() => updateJob(job, "retry")}>Retry</button>}{["queued", "processing", "retry_wait"].includes(job.status) && <button className="downloads-btn downloads-btn--small" onClick={() => updateJob(job, "cancel")}>Cancel</button>}</div></article>)}</div>
       </section>}
 
       {novelStatuses.map((status) => {
@@ -396,4 +392,4 @@ const Downloads: React.FC = () => {
   );
 };
 
-export default Downloads;
+export default DownloadsTab;

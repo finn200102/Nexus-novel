@@ -14,8 +14,7 @@ import NovelDetail from "./pages/NovelDetail";
 import Reader from "./pages/Reader";
 import Discover from "./pages/Discover";
 import DiscoverNovelDetail from "./pages/DiscoverNovelDetail";
-import Downloads from "./pages/Downloads";
-import Activity from "./pages/Activity";
+import Updates from "./pages/Updates";
 import Operations from "./pages/Operations";
 import ScrapeJobs from "./pages/ScrapeJobs";
 import Integrations from "./pages/Integrations";
@@ -48,10 +47,6 @@ const LibraryStory = () => {
   return <NovelDetail key={`${libraryId}-${novelId}`} libraryId={Number(libraryId)} novelId={Number(novelId)} />;
 };
 
-const UPDATES_LINKS = [
-  { label: "New chapters", to: "/updates" },
-  { label: "Downloads", to: "/updates/downloads" },
-];
 const SETTINGS_LINKS = [
   { label: "Account", to: "/settings/account" },
   { label: "Notifications", to: "/settings/notifications" },
@@ -89,12 +84,13 @@ export function AppRoutes() {
         <Route path="library" element={<LibraryRoute />} />
         <Route path="library/:libraryId/novels/:novelId" element={<LibraryStory />} />
 
-        <Route path="updates" element={<SectionLayout label="Updates sections" links={UPDATES_LINKS} />}>
-          <Route index element={<Titled title="Updates"><Activity /></Titled>} />
-          <Route path="downloads" element={<Titled title="Downloads"><Downloads /></Titled>} />
-          {/* Problems tab arrives with D11. */}
-          <Route path="problems" element={<Navigate replace to="/updates" />} />
+        <Route path="updates">
+          <Route index element={<Updates tab="new" />} />
+          <Route path="downloads" element={<Updates tab="downloads" />} />
+          <Route path="problems" element={<Updates tab="problems" />} />
         </Route>
+        <Route path="activity" element={<Navigate replace to="/updates" />} />
+        <Route path="downloads" element={<Navigate replace to="/updates/downloads" />} />
 
         <Route path="settings" element={<SectionLayout label="Settings sections" links={SETTINGS_LINKS} />}>
           <Route index element={<Navigate replace to="account" />} />
