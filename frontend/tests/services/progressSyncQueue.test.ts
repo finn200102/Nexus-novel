@@ -5,6 +5,7 @@ import {
   enqueueProgress,
   flushProgressQueue,
   getQueuedProgress,
+  MAX_HTTP_ATTEMPTS,
   PROGRESS_QUEUE_KEY,
   QueuedProgress,
 } from "../../src/services/progressSyncQueue";
@@ -57,7 +58,7 @@ describe("progress sync queue", () => {
       if (item.novelId === 1) throw httpError(500);
     });
     expect(await flushProgressQueue(send)).toBe(1);
-    expect(getQueuedProgress()).toEqual([entry(1, 10)]);
+    expect(getQueuedProgress()).toEqual([{ ...entry(1, 10), attempts: 1 }]);
   });
 
   it("does not remove a save that was replaced while it was being sent", async () => {
@@ -78,5 +79,34 @@ describe("progress sync queue", () => {
   it("ignores corrupt storage instead of crashing", () => {
     localStorage.setItem(PROGRESS_QUEUE_KEY, "{not json");
     expect(getQueuedProgress()).toEqual([]);
+  });
+  it("drops an entry the server keeps rejecting after MAX_HTTP_ATTEMPTS, with a warning", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    enqueueProgress(entry(1, 10));
+    const send = vi.fn(async () => { throw httpError(400); });
+    for (let attempt = 0; attempt < MAX_HTTP_ATTEMPTS; attempt += 1) {
+      await flushProgressQueue(send);
+    }
+    expect(getQueuedProgress()).toEqual([]);
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
+  it("keeps an entry below the retry cap", async () => {
+    enqueueProgress(entry(1, 10));
+    const send = vi.fn(async () => { throw httpError(500); });
+    for (let attempt = 0; attempt < MAX_HTTP_ATTEMPTS - 1; attempt += 1) {
+      await flushProgressQueue(send);
+    }
+    expect(getQueuedProgress()[0].attempts).toBe(MAX_HTTP_ATTEMPTS - 1);
+  });
+
+  it("never counts network errors toward the retry cap", async () => {
+    enqueueProgress(entry(1, 10));
+    const send = vi.fn(async () => { throw networkError(); });
+    for (let attempt = 0; attempt < MAX_HTTP_ATTEMPTS + 2; attempt += 1) {
+      await flushProgressQueue(send);
+    }
+    expect(getQueuedProgress()).toEqual([entry(1, 10)]);
   });
 });

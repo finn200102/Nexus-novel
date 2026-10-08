@@ -8,7 +8,12 @@ export interface QueuedProgress {
   percent: number;
   /** Client time of the save; the newest save for a novel wins. */
   ts: number;
+  /** Failed sends that returned an HTTP error so far. */
+  attempts?: number;
 }
+
+/** An entry the server rejects this many times is dropped so it cannot retry forever. */
+export const MAX_HTTP_ATTEMPTS = 5;
 
 export const PROGRESS_QUEUE_KEY = "nexus-reader-progress-queue";
 
@@ -16,7 +21,8 @@ const isEntry = (value: unknown): value is QueuedProgress => {
   if (!value || typeof value !== "object") return false;
   const entry = value as Record<string, unknown>;
   return typeof entry.novelId === "number" && typeof entry.chapter === "number"
-    && typeof entry.position === "number" && typeof entry.percent === "number" && typeof entry.ts === "number";
+    && typeof entry.position === "number" && typeof entry.percent === "number" && typeof entry.ts === "number"
+    && (entry.attempts === undefined || typeof entry.attempts === "number");
 };
 
 const readQueue = (): QueuedProgress[] => {
@@ -59,13 +65,28 @@ export const dropQueuedProgress = (novelId: number): void => {
   }
 };
 
+/** Count an HTTP failure for this entry; drop it after MAX_HTTP_ATTEMPTS. Newer saves are left alone. */
+const recordHttpFailure = (entry: QueuedProgress): void => {
+  const queue = readQueue();
+  const current = queue.find((item) => item.novelId === entry.novelId);
+  if (!current || current.ts !== entry.ts) return;
+  const attempts = (current.attempts ?? 0) + 1;
+  if (attempts >= MAX_HTTP_ATTEMPTS) {
+    console.warn(`Dropping queued progress for novel ${entry.novelId} after ${attempts} rejected attempts`);
+    writeQueue(queue.filter((item) => item.novelId !== entry.novelId));
+    return;
+  }
+  writeQueue(queue.map((item) => (item.novelId === entry.novelId ? { ...item, attempts } : item)));
+};
+
 let flushing: Promise<number> | null = null;
 
 /**
  * Send queued saves oldest first. An entry is removed only after its send
  * succeeds and only if no newer save replaced it meanwhile. A network error
- * stops the flush; an HTTP error keeps that entry and moves on, so one bad
- * entry cannot block the others. Nothing is dropped on failure.
+ * stops the flush and keeps every entry. An HTTP error moves on so one bad
+ * entry cannot block the others; after MAX_HTTP_ATTEMPTS such errors the
+ * entry is dropped with a console warning.
  */
 export const flushProgressQueue = (send: (entry: QueuedProgress) => Promise<unknown>): Promise<number> => {
   if (flushing) return flushing;
@@ -77,6 +98,7 @@ export const flushProgressQueue = (send: (entry: QueuedProgress) => Promise<unkn
         await send(entry);
       } catch (error) {
         if (isNetworkError(error)) break;
+        recordHttpFailure(entry);
         continue;
       }
       const current = readQueue().find((item) => item.novelId === entry.novelId);

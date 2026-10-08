@@ -2,12 +2,22 @@ import apiClient from "./apiClient";
 import axios from "axios";
 import { dropQueuedProgress, enqueueProgress, installProgressSync, QueuedProgress } from "./progressSyncQueue";
 import { isNetworkError } from "./networkErrors";
+import { markServerReachable, markServerUnreachable } from "./serverReachability";
 
-const sendProgress = (entry: QueuedProgress) => apiClient.put(`/chapter/progress/${entry.novelId}`, {
-  chapter_number: entry.chapter,
-  position: entry.position,
-  percent: entry.percent,
-});
+const sendProgress = async (entry: QueuedProgress) => {
+  try {
+    const response = await apiClient.put(`/chapter/progress/${entry.novelId}`, {
+      chapter_number: entry.chapter,
+      position: entry.position,
+      percent: entry.percent,
+    });
+    markServerReachable();
+    return response;
+  } catch (error) {
+    if (isNetworkError(error)) markServerUnreachable();
+    throw error;
+  }
+};
 
 export const chapterService = {
   async getChapters(novelId: number) {
@@ -70,8 +80,10 @@ export const chapterService = {
       const response = await apiClient.get(
         `/chapter/content/library/${libraryId}/${novelId}/${chapterNumber}`
       );
+      markServerReachable();
       return response.data;
     } catch (error) {
+      if (isNetworkError(error)) markServerUnreachable();
       if (axios.isAxiosError(error) && error.response?.status !== 401) {
         this.handleError(error, "Error fetching chapters");
       }
