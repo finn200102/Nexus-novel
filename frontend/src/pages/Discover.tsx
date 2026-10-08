@@ -15,9 +15,13 @@ import { cancelPendingRequests, getUserFacingError, isRequestCancelled } from ".
 import { RequestCoordinator, useAdaptivePolling } from "../services/requestResilience";
 import { SavedSearch, savedSearchService } from "../services/savedSearchService";
 import CreateNovelForm from "../components/novel/CreateNovelForm";
+import { LiveSearchPanel } from "../components/discovery/LiveSearchPanel";
+import { ImportJobsPanel } from "../components/discovery/ImportJobsPanel";
+import { LiveResult } from "../services/liveSearchService";
 import defaultCoverImage from "../assets/cover.png";
 import "../styles/library.css";
 import "../styles/novel-list.css";
+import "../styles/live-search.css";
 
 const SITE_OPTIONS = [
   { value: "all", label: "All Sites" },
@@ -72,6 +76,7 @@ const Discover: React.FC = () => {
   const [fandomDraft, setFandomDraft] = useState("");
   const [appliedFilters, setAppliedFilters] = useState<DiscoveryFilters>(EMPTY_FILTERS);
   const [isImportOpen, setIsImportOpen] = useState(false);
+  const [mode, setMode] = useState<"catalog" | "live" | "import">("catalog");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
   const [lastRefreshAt, setLastRefreshAt] = useState<Date | null>(null);
@@ -259,6 +264,19 @@ const Discover: React.FC = () => {
     }
   };
 
+  const handleAddLiveResult = async (result: LiveResult) => {
+    if (!activeLibraryId) {
+      addToast("Please select a library first", "warning");
+      return;
+    }
+    try {
+      await discoveryService.addToLibrary(activeLibraryId, result.source_url);
+      addToast(`"${result.title}" added to your library!`, "success");
+    } catch (err) {
+      addToast(getUserFacingError(err, "Failed to add novel to library"), "error");
+    }
+  };
+
   const handleNovelClick = (novel: DiscoveredNovel) => {
     navigate(`/discover/${currentSite}/${novel.id}`);
   };
@@ -361,6 +379,16 @@ const Discover: React.FC = () => {
         </span>
       </div>
 
+      <div className="discover-segmented discover-mode" role="tablist" aria-label="Discover mode">
+        <button type="button" role="tab" aria-selected={mode === "catalog"} className={mode === "catalog" ? "is-active" : ""} onClick={() => setMode("catalog")}>Catalog</button>
+        <button type="button" role="tab" aria-selected={mode === "live"} className={mode === "live" ? "is-active" : ""} onClick={() => setMode("live")}>Search the sites</button>
+        <button type="button" role="tab" aria-selected={mode === "import"} className={mode === "import" ? "is-active" : ""} onClick={() => setMode("import")}>Bulk import</button>
+      </div>
+
+      {mode === "live" && <LiveSearchPanel onAdd={handleAddLiveResult} />}
+      {mode === "import" && <ImportJobsPanel libraryId={activeLibraryId ?? null} onError={(message) => addToast(message, "error")} />}
+
+      {mode === "catalog" && (<>
       <div className="discover-toolbar">
         <form className="discover-toolbar__search" onSubmit={submitSearch}>
           <Search size={19} aria-hidden="true" />
@@ -647,6 +675,7 @@ const Discover: React.FC = () => {
           {renderPagination()}
         </>
       )}
+      </>)}
 
       {activeLibraryId && (
         <CreateNovelForm
