@@ -20,6 +20,7 @@ import { organizationService } from "../services/organizationService";
 import type { Shelf } from "../types/organization";
 import "../styles/novel-detail.css";
 import "../styles/organization.css";
+import { displayTitle } from "../utils/displayTitle";
 
 interface NovelDetailProps {
   novelId: number;
@@ -290,7 +291,7 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
             <div className="novel-hero__cover">
               <img
                 src={coverImageSrc}
-                alt={`Cover for ${novel.title}`}
+                alt={`Cover for ${displayTitle(novel)}`}
                 className="novel-hero__image"
                 referrerPolicy="no-referrer"
                 loading="lazy"
@@ -307,7 +308,7 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
                 {getScrapeStatusIndicator()}
                 <SourceStatusChip site={novel.novel_site} />
               </div>
-              <h1 className="novel-hero__title">{novel.title}</h1>
+              <h1 className="novel-hero__title">{displayTitle(novel)}</h1>
               {novel.author && (
                 <p className="novel-hero__author">by {novel.author} <HideButton kind="author" value={novel.author} /></p>
               )}

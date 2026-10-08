@@ -2,6 +2,7 @@ import React from "react";
 import defaultCoverImage from "../../assets/cover.png";
 import { Novel } from "../../types/novel";
 import "../../styles/novel-card.css";
+import { displayTitle } from "../../utils/displayTitle";
 
 interface NovelCardProps {
   novel: Novel;
@@ -80,7 +81,7 @@ const NovelCard: React.FC<NovelCardProps> = ({
       <div className="novel-card__cover">
         <img
           src={coverImageSrc}
-          alt={`Cover for ${novel.title}`}
+          alt={`Cover for ${displayTitle(novel)}`}
           className="novel-card__image"
           referrerPolicy="no-referrer"
           onError={(e) => {
@@ -101,7 +102,7 @@ const NovelCard: React.FC<NovelCardProps> = ({
             </span>
           )}
         </div>
-        <h3 className="novel-card__title">{novel.title}</h3>
+        <h3 className="novel-card__title">{displayTitle(novel)}</h3>
         <div className="novel-card__meta">
           <span className="novel-card__author">{novel.author || "Unknown Author"}</span>
           <div className="novel-card__stats">

@@ -11,6 +11,7 @@ import defaultCoverImage from "../assets/cover.png";
 import "../styles/library.css";
 import "../styles/novel-list.css";
 import "../styles/download-manager.css";
+import { displayTitle } from "../utils/displayTitle";
 
 interface NovelDownloadStatus {
   novel: Novel;
@@ -221,14 +222,14 @@ const Downloads: React.FC = () => {
               <div className="downloads-novel-cover">
                 <img
                   src={status.novel.img_url || status.novel.cover_image || defaultCoverImage}
-                  alt={status.novel.title}
+                  alt={displayTitle(status.novel)}
                   onError={(e) => {
                     (e.target as HTMLImageElement).src = "";
                   }}
                 />
               </div>
               <div className="downloads-novel-info">
-                <h3 className="downloads-novel-title">{status.novel.title}</h3>
+                <h3 className="downloads-novel-title">{displayTitle(status.novel)}</h3>
                 <div className="downloads-novel-meta">
                   <span className="downloads-novel-site">
                     {status.novel.novel_site?.toUpperCase() || "UNKNOWN"}

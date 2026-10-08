@@ -19,8 +19,9 @@ import LibrarySwitcher from "./LibrarySwitcher";
 import { useLibraryContext } from "../../context/useLibraryContext";
 import { useAuth } from "../../context/AuthContext";
 import { activityService, OperationsSummary } from "../../services/activityService";
-import { novelService } from "../../services/novelService";
-import type { NovelUpdateEvent } from "../../types/novel";
+import { useUnreadUpdates } from "../../hooks/useUnreadUpdates";
+import { displayTitle } from "../../utils/displayTitle";
+import type { InboxNovel } from "../../types/activity";
 
 interface NavbarProps {
   onRequestCreateLibrary?: () => void;
@@ -50,7 +51,7 @@ const Navbar: React.FC<NavbarProps> = ({ onRequestCreateLibrary }) => {
   const [query, setQuery] = useState("");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [metadataStatus, setMetadataStatus] = useState<OperationsSummary["metadata_server"]["status"] | "unknown">("unknown");
-  const [notifications, setNotifications] = useState<NovelUpdateEvent[]>([]);
+  const unread = useUnreadUpdates(activeLibraryId);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
 
   React.useEffect(() => {
@@ -65,27 +66,18 @@ const Navbar: React.FC<NavbarProps> = ({ onRequestCreateLibrary }) => {
     return () => { cancelled = true; };
   }, [activeLibraryId]);
 
-  React.useEffect(() => {
-    if (activeLibraryId === undefined) { setNotifications([]); return; }
-    let cancelled = false;
-    novelService.getUpdateEvents(activeLibraryId, true)
-      .then((items) => { if (!cancelled) setNotifications(items); })
-      .catch(() => { if (!cancelled) setNotifications([]); });
-    return () => { cancelled = true; };
-  }, [activeLibraryId]);
-
-  const markNotificationRead = async (event: NovelUpdateEvent) => {
+  const markNotificationRead = async (row: InboxNovel) => {
     try {
-      await novelService.markUpdateEventRead(event.id);
-      setNotifications((current) => current.filter((item) => item.id !== event.id));
+      await activityService.markInboxRead(row.novel_id);
+      await unread.reload();
     } catch { /* Activity page remains available if marking fails. */ }
   };
 
   const markAllNotificationsRead = async () => {
-    if (!activeLibrary || notifications.length === 0) return;
+    if (!activeLibrary || unread.count === 0) return;
     try {
       await activityService.markAllRead(activeLibrary.id);
-      setNotifications([]);
+      await unread.reload();
     } catch { /* Activity page remains available if marking fails. */ }
   };
 
@@ -179,9 +171,9 @@ const Navbar: React.FC<NavbarProps> = ({ onRequestCreateLibrary }) => {
           </button>
           <div className="app-topbar__notifications">
             <button type="button" className="app-topbar__bell" title="Notifications" aria-label="Notifications" aria-expanded={notificationsOpen} onClick={() => setNotificationsOpen((open) => !open)}>
-              <Bell size={18} aria-hidden="true" />{notifications.length > 0 && <span className="app-topbar__notification-count">{notifications.length > 9 ? "9+" : notifications.length}</span>}
+              <Bell size={18} aria-hidden="true" />{unread.count > 0 && <span className="app-topbar__notification-count">{unread.count > 9 ? "9+" : unread.count}</span>}
             </button>
-            {notificationsOpen && <div className="app-topbar__notification-menu" role="dialog" aria-label="Unread notifications"><strong>Unread updates</strong>{notifications.length === 0 && <p>No new story updates.</p>}{notifications.slice(0, 6).map((event) => <button type="button" key={event.id} onClick={() => void markNotificationRead(event)}><span>{event.message}</span><small>Chapter {event.first_chapter_number ?? "new"} · Mark read</small></button>)}{notifications.length > 0 && <button type="button" className="app-topbar__notification-all" onClick={() => void markAllNotificationsRead()}>Mark all read</button>}<button type="button" className="app-topbar__notification-all" onClick={() => { setNotificationsOpen(false); navigate("/activity"); }}>Open activity</button></div>}
+            {notificationsOpen && <div className="app-topbar__notification-menu" role="dialog" aria-label="Unread notifications"><strong>Unread updates</strong>{unread.count === 0 && <p>No new story updates.</p>}{unread.rows.slice(0, 6).map((row) => <button type="button" key={row.novel_id} onClick={() => void markNotificationRead(row)}><span>{displayTitle({ title: row.title })}</span><small>{row.new_chapter_count} new · Mark read</small></button>)}{unread.count > 0 && <button type="button" className="app-topbar__notification-all" onClick={() => void markAllNotificationsRead()}>Mark all read</button>}<button type="button" className="app-topbar__notification-all" onClick={() => { setNotificationsOpen(false); navigate("/activity"); }}>Open activity</button></div>}
           </div>
           <button type="button" className="app-topbar__add" onClick={triggerAddNovel}>
             <Plus size={17} aria-hidden="true" /> Add story

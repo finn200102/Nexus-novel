@@ -118,6 +118,15 @@ def inbox(db: Session, *, user_id: int, library_id: int) -> list[dict]:
     return rows
 
 
+def unread_story_count(db: Session, *, user_id: int, library_id: int) -> int:
+    """The one unread-updates count: story groups in the inbox.
+
+    Bell badge, Home "New chapters", Activity inbox and the operations summary
+    all use this so they can never disagree.
+    """
+    return len(inbox(db, user_id=user_id, library_id=library_id))
+
+
 def mark_novel_read(db: Session, user_id: int, novel_id: int) -> int:
     """Mark the novel's unread visible events read. Does not commit."""
     ids = [event.id for event, _ in _unread_visible_events(db, user_id, novel_id=novel_id).all()]

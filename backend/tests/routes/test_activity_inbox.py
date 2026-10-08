@@ -297,3 +297,25 @@ def test_metadata_webhook_resync_updates_existing_chapter_category(client, db, t
     assert response.status_code == 200
     db.refresh(existing)
     assert existing.category == "story"
+
+
+def test_inbox_count_endpoint_and_operations_match_inbox_rows(client, db, test_user, test_library):
+    headers = bearer_headers(test_user.id)
+    first = _novel(db, test_library, "First")
+    _chapter(db, first, 1)
+    _event(db, test_user, first, [1], minutes_ago=2)
+    second = _novel(db, test_library, "Second")
+    _chapter(db, second, 3)
+    _event(db, test_user, second, [3], minutes_ago=1)
+    _event(db, test_user, second, [3], minutes_ago=0)
+    read = _novel(db, test_library, "Read")
+    _chapter(db, read, 4)
+    _event(db, test_user, read, [4], read=True)
+
+    rows = client.get(f"/activity/inbox?library_id={test_library.id}", headers=headers).json()
+    count = client.get(f"/activity/inbox/count?library_id={test_library.id}", headers=headers).json()
+    summary = client.get(f"/operations/summary?library_id={test_library.id}", headers=headers).json()
+
+    assert len(rows) == 2
+    assert count == {"count": 2}
+    assert summary["unread_updates"] == 2

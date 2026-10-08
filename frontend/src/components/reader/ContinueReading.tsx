@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import apiClient from "../../services/apiClient";
 import "./readerExtras.css";
+import { displayTitle } from "../../utils/displayTitle";
 
 export interface RecentProgress {
   novel_id: number;
@@ -43,7 +44,7 @@ const ContinueReading: React.FC<{ limit?: number }> = ({ limit = 8 }) => {
             className="continue-reading__card"
             onClick={() => navigate(`/library/${item.library_id}/novels/${item.novel_id}/${item.chapter_number}`)}
           >
-            <strong>{item.novel_title}</strong>
+            <strong>{displayTitle({ title: item.novel_title })}</strong>
             <span>Chapter {item.chapter_number} · {Math.round(item.percent)}%</span>
           </button>
         ))}

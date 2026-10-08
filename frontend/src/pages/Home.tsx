@@ -14,7 +14,10 @@ import { useLibraryContext } from "../context/useLibraryContext";
 import AccountDataPanel from "../components/account/AccountDataPanel";
 import { novelService } from "../services/novelService";
 import { activityService, OperationsSummary } from "../services/activityService";
-import { Novel, NovelUpdateEvent } from "../types/novel";
+import { Novel } from "../types/novel";
+import type { InboxNovel } from "../types/activity";
+import { useUnreadUpdates } from "../hooks/useUnreadUpdates";
+import { displayTitle } from "../utils/displayTitle";
 import defaultCoverImage from "../assets/cover.png";
 import ContinueReading from "../components/reader/ContinueReading";
 import "../styles/home.css";
@@ -27,7 +30,7 @@ const Home: React.FC = () => {
   const { activeLibrary, libraries, isLoading: librariesLoading, selectLibrary } = useLibraryContext();
   const activeLibraryId = activeLibrary?.id;
   const [novels, setNovels] = useState<Novel[]>([]);
-  const [updates, setUpdates] = useState<NovelUpdateEvent[]>([]);
+  const unread = useUnreadUpdates(activeLibraryId);
   const [loading, setLoading] = useState(false);
   const [operations, setOperations] = useState<OperationsSummary | null>(null);
 
@@ -40,14 +43,12 @@ const Home: React.FC = () => {
       }
       setLoading(true);
       try {
-        const [data, updateData, operationsData] = await Promise.all([
+        const [data, operationsData] = await Promise.all([
           novelService.getAllNovels(activeLibraryId, ""),
-          novelService.getUpdateEvents(activeLibraryId, true),
           activityService.getOperationsSummary(activeLibraryId),
         ]);
         if (!cancelled) {
           setNovels(Array.isArray(data) ? data : []);
-          setUpdates(Array.isArray(updateData) ? updateData : []);
           setOperations(operationsData);
         }
       } catch (error) {
@@ -80,14 +81,14 @@ const Home: React.FC = () => {
     goToLibrary();
   };
 
-  const openUpdate = async (update: NovelUpdateEvent) => {
+  const openUpdate = async (row: InboxNovel) => {
     try {
-      await novelService.markUpdateEventRead(update.id);
-      setUpdates((current) => current.filter((item) => item.id !== update.id));
+      await activityService.markInboxRead(row.novel_id);
+      await unread.reload();
     } catch (error) {
       console.error("Failed to mark update read", error);
     }
-    navigate(`/library/${activeLibrary?.id}/novels/${update.novel_id}`);
+    navigate(`/library/${activeLibrary?.id}/novels/${row.novel_id}`);
   };
 
   const metricCards = [
@@ -140,7 +141,7 @@ const Home: React.FC = () => {
                 <img src={novel.img_url || novel.cover_image || defaultCoverImage} alt="" referrerPolicy="no-referrer" onError={(event) => { event.currentTarget.src = defaultCoverImage; }} />
                 <span className="continue-card__body">
                   <span className="continue-card__source">{novel.novel_site || "Source"}</span>
-                  <strong>{novel.title}</strong>
+                  <strong>{displayTitle(novel)}</strong>
                   <small>{novel.author || "Unknown author"}</small>
                   <span className="continue-card__progress"><i /><em>{novel.chapter_count || 0} chapters</em></span>
                 </span>
@@ -154,7 +155,7 @@ const Home: React.FC = () => {
           <div className="activity-list">
             <div><span className="activity-list__icon"><Database size={16} /></span><p><strong>Metadata server</strong><small>{operations?.metadata_server.detail || "Checking metadata readiness…"}</small></p><b className={`status-${operations?.metadata_server.status || "unknown"}`}>{operations?.metadata_server.status || "Checking"}</b></div>
             <div><span className="activity-list__icon"><Download size={16} /></span><p><strong>Downloads</strong><small>{operations ? `${operations.downloads.queued} queued · ${operations.downloads.running} running · ${operations.downloads.failed} failed` : "Checking download queue…"}</small></p><button type="button" onClick={() => navigate("/downloads")}>Open</button></div>
-            <div><span className="activity-list__icon"><Play size={16} /></span><p><strong>Followed stories</strong><small>{operations ? `${operations.reading_stories} reading · ${operations.unread_updates} unread updates` : "Checking follow state…"}</small></p><button type="button" onClick={goToLibrary} disabled={!activeLibrary}>Open</button></div>
+            <div><span className="activity-list__icon"><Play size={16} /></span><p><strong>Followed stories</strong><small>{operations ? `${operations.reading_stories} reading · ${unread.count} unread updates` : "Checking follow state…"}</small></p><button type="button" onClick={goToLibrary} disabled={!activeLibrary}>Open</button></div>
             <div><span className="activity-list__icon"><Bell size={16} /></span><p><strong>Source health</strong><small>{operations ? `${operations.source_failures} recent source failures · ${operations.refresh_schedules} refresh schedules` : "Checking source health…"}</small></p><b className={operations?.source_failures ? "status-degraded" : "status-online"}>{operations?.source_failures ? "Attention" : "Healthy"}</b></div>
           </div>
         </section>
@@ -162,12 +163,12 @@ const Home: React.FC = () => {
         <section className="dashboard-panel dashboard-panel--activity">
           <header className="dashboard-panel__header"><div><p>Updates</p><h2>New chapters</h2></div><Bell size={18} aria-hidden="true" /></header>
           <div className="activity-list">
-            {updates.length === 0 && <p className="dashboard-panel__status">No unread story updates.</p>}
-            {updates.slice(0, 5).map((update) => (
-              <div key={update.id}>
+            {unread.rows.length === 0 && <p className="dashboard-panel__status">No unread story updates.</p>}
+            {unread.rows.slice(0, 5).map((row) => (
+              <div key={row.novel_id}>
                 <span className="activity-list__icon"><BookMarked size={16} /></span>
-                <p><strong>{update.message}</strong><small>Chapters {update.first_chapter_number}–{update.last_chapter_number}</small></p>
-                <button type="button" onClick={() => openUpdate(update)}>Open</button>
+                <p><strong>{displayTitle({ title: row.title })}</strong><small>{row.new_chapter_count} new · first is chapter {row.first_new_chapter_number}</small></p>
+                <button type="button" onClick={() => openUpdate(row)}>Open</button>
               </div>
             ))}
           </div>

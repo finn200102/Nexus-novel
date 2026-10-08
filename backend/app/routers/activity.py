@@ -10,7 +10,7 @@ from app.models.novel import Novel
 from app.models.user import User
 from app.models.update_event import NovelUpdateEvent
 from app.schemas.activity import ActivityDay, ActivityEventResponse, ActivitySummary, InboxNovelResponse
-from app.services.activity_service import activity_days, activity_events, catch_up, inbox, mark_novel_read
+from app.services.activity_service import activity_days, activity_events, catch_up, inbox, mark_novel_read, unread_story_count
 from app.services.library_organization_service import owned_novel
 
 router = APIRouter(prefix="/activity", tags=["activity"])
@@ -34,6 +34,12 @@ def mark_all_read(library_id: int, db: Session = Depends(get_db), current_user: 
 def get_inbox(library_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Unread updates per novel, newest first, counting only followed-category chapters."""
     return inbox(db, user_id=current_user.id, library_id=library_id)
+
+
+@router.get("/inbox/count")
+def get_inbox_count(library_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Unread-updates count (story groups), same number as the inbox rows."""
+    return {"count": unread_story_count(db, user_id=current_user.id, library_id=library_id)}
 
 
 @router.post("/inbox/{novel_id}/read")

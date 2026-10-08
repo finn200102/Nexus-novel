@@ -15,6 +15,7 @@ from app.models.follow import UserNovelFollow
 from app.models.novel import Novel
 from app.models.update_event import NovelUpdateEvent
 from app.models.user import User
+from app.services.activity_service import unread_story_count
 from app.schemas.operations import OperationCounts, OperationsSummary, ServiceStatus
 
 router = APIRouter(prefix="/operations", tags=["operations"])
@@ -136,17 +137,7 @@ def summary(
     followed_stories = followed_query.count()
     reading_stories = followed_query.filter(UserNovelFollow.state == "reading").count()
 
-    unread_updates = (
-        db.query(NovelUpdateEvent)
-        .join(Novel, Novel.id == NovelUpdateEvent.novel_id)
-        .filter(
-            NovelUpdateEvent.user_id == current_user.id,
-            Novel.library_id == library_id,
-            NovelUpdateEvent.read_at.is_(None),
-            NovelUpdateEvent.notification_visible.is_(True),
-        )
-        .count()
-    )
+    unread_updates = unread_story_count(db, user_id=current_user.id, library_id=library_id)
     source_failures = (
         db.query(NovelUpdateEvent)
         .join(Novel, Novel.id == NovelUpdateEvent.novel_id)

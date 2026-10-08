@@ -26,6 +26,7 @@ from collections import defaultdict
 from datetime import UTC, date, datetime, time
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
+from urllib.parse import unquote, urlsplit
 
 from app.models.chapter import Chapter
 from app.models.library import Library
@@ -436,13 +437,23 @@ def _import_blocklist(db: Session, user: User, entries) -> list[dict]:
     return reports
 
 
+def title_from_url(url: str) -> str:
+    """Readable fallback title from a story URL slug.
+
+    Decodes percent-encoding first so "%E2%80%94" never reaches the UI.
+    """
+    segments = [segment for segment in urlsplit(url).path.split("/") if segment]
+    slug = unquote(segments[-1]).replace("-", " ").replace("_", " ") if segments else ""
+    return " ".join(slug.split()).title() or "Untitled story"
+
+
 def _create_novel(db: Session, library: Library, item) -> tuple[Novel | None, str | None]:
     if not supported_src(item.url):
         return None, "Not a supported source url"
     site_name = get_site_name_from_url(item.url)
     if not site_name:
         return None, "Could not determine site from URL"
-    title = item.title or item.url.rstrip("/").split("/")[-1].replace("-", " ").title()
+    title = item.title or title_from_url(item.url)
     novel = Novel(title=title, url=item.url, library_id=library.id, novel_site=site_name, scrape_status="pending")
     db.add(novel)
     db.flush()
