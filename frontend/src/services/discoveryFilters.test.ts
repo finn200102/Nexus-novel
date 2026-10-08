@@ -3,7 +3,9 @@ import {
   EMPTY_DISCOVERY_FILTERS,
   discoveryFilterParams,
   isDiscoveryFilterActive,
+  describeDiscoveryFilters,
   normalizeDiscoveryFilters,
+  removeDiscoveryFilterChip,
 } from "./discoveryFilters";
 
 describe("normalizeDiscoveryFilters", () => {
@@ -88,5 +90,16 @@ describe("discoveryFilterParams", () => {
     expect(params).not.toHaveProperty("tag_mode");
     expect(params).not.toHaveProperty("complete_only");
     expect(params).not.toHaveProperty("crossover");
+  });
+});
+
+describe("describeDiscoveryFilters", () => {
+  it("lists one removable chip per active value and removes it", () => {
+    const filters = { ...EMPTY_DISCOVERY_FILTERS, excludeAuthor: ["Bob", "Eve"], status: "Complete", sortBy: "views" };
+    const chips = describeDiscoveryFilters(filters);
+    expect(chips.map((chip) => chip.label)).toEqual(["Hide author: Bob", "Hide author: Eve", "Status: Complete"]);
+    const next = removeDiscoveryFilterChip(filters, chips[0]);
+    expect(next.excludeAuthor).toEqual(["Eve"]);
+    expect(removeDiscoveryFilterChip(filters, chips[2]).status).toBe("");
   });
 });

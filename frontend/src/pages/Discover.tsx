@@ -1,11 +1,20 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { BookOpen, Plus, RefreshCw, Search, SlidersHorizontal, X } from "lucide-react";
+import { BookOpen, MoreHorizontal, Plus, RefreshCw, Search, SlidersHorizontal, X } from "lucide-react";
 import { discoveryService } from "../services/discoveryService";
 import { useLibraryContext } from "../context/useLibraryContext";
 import { useToast } from "../context/useToast";
 import { DiscoveredNovel, DiscoveryFilters, FandomInfo } from "../types/discovery";
-import { EMPTY_DISCOVERY_FILTERS, isDiscoveryFilterActive, normalizeDiscoveryFilters } from "../services/discoveryFilters";
+import {
+  EMPTY_DISCOVERY_FILTERS,
+  describeDiscoveryFilters,
+  isDiscoveryFilterActive,
+  normalizeDiscoveryFilters,
+  removeDiscoveryFilterChip,
+  DiscoveryFilterChip,
+} from "../services/discoveryFilters";
+import { IconButton, Menu, PageHeader, Sheet } from "../components/ui";
+import { usePageTitle } from "../hooks/usePageTitle";
 import { ChipInput } from "../components/common/ChipInput";
 import { Novel } from "../types/novel";
 import NovelCard from "../components/novel/NovelCard";
@@ -22,6 +31,7 @@ import defaultCoverImage from "../assets/cover.png";
 import "../styles/library.css";
 import "../styles/novel-list.css";
 import "../styles/live-search.css";
+import "../styles/discover.css";
 
 const SITE_OPTIONS = [
   { value: "all", label: "All Sites" },
@@ -58,6 +68,7 @@ const parseDiscoverUrl = (locationSearch: string) => {
 };
 
 const Discover: React.FC = () => {
+  usePageTitle("Discover");
   const { site } = useParams<{ site?: string }>();
   const navigate = useNavigate();
   const { activeLibraryId } = useLibraryContext();
@@ -79,7 +90,6 @@ const Discover: React.FC = () => {
   const [mode, setMode] = useState<"catalog" | "live" | "import">("catalog");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
-  const [lastRefreshAt, setLastRefreshAt] = useState<Date | null>(null);
   const [catalogStatus, setCatalogStatus] = useState<"unknown" | "online" | "offline">("unknown");
   const coordinatorRef = React.useRef(new RequestCoordinator());
   const hasSnapshotRef = React.useRef(false);
@@ -138,9 +148,6 @@ const Discover: React.FC = () => {
       setHasMore(response.has_more);
       setNextCursor(response.next_cursor);
       setCatalogStatus("online");
-      if (page === 1) {
-        setLastRefreshAt(new Date());
-      }
     } catch (err) {
       if (isRequestCancelled(err)) return;
       console.error("Failed to fetch novels:", err);
@@ -208,14 +215,27 @@ const Discover: React.FC = () => {
     navigate(`/discover/${currentSite}${search.trim() ? `?q=${encodeURIComponent(search.trim())}` : ""}`);
   };
 
-  const applyFilters = () => {
-    setAppliedFilters(filters);
+  const applyFilters = (next: DiscoveryFilters = filters) => {
+    setAppliedFilters(next);
     setNextCursor(null);
     setHasMore(true);
     const params = new URLSearchParams();
     if (searchFromUrl) params.set("q", searchFromUrl);
-    params.set("filters", JSON.stringify(filters));
+    params.set("filters", JSON.stringify(next));
     navigate(`/discover/${currentSite}?${params.toString()}`);
+  };
+
+  /** Quick controls apply immediately, using the draft state from the sheet. */
+  const setQuickFilter = (key: keyof DiscoveryFilters, value: string) => {
+    const next = { ...filters, [key]: value };
+    setFilters(next);
+    applyFilters(next);
+  };
+
+  const removeChip = (chip: DiscoveryFilterChip) => {
+    const next = removeDiscoveryFilterChip(appliedFilters, chip);
+    setFilters(next);
+    applyFilters(next);
   };
 
   const clearFilters = () => {
@@ -247,6 +267,7 @@ const Discover: React.FC = () => {
   };
 
   const hasActiveFilters = isDiscoveryFilterActive(appliedFilters);
+  const activeChips = describeDiscoveryFilters(appliedFilters);
   const fandomSuggestions = Array.from(new Set(fandomOptions.map((fandom) => fandom.display_name)));
 
   const handleAddToLibrary = async (novel: DiscoveredNovel) => {
@@ -344,40 +365,34 @@ const Discover: React.FC = () => {
 
   return (
     <div className="library-workspace">
-      <header className="discover-hero">
-        <div>
-          <p className="discover-hero__eyebrow">Metadata catalog</p>
-          <h1>Find your next story</h1>
-          <p>
-            Search the Nexus metadata server, compare sources, and bring the stories you want into your library.
-          </p>
-        </div>
-        <div className="discover-hero__actions">
-          <button type="button" className="discover-secondary-btn" onClick={handleRefresh} disabled={loading || isRefreshing}>
-            <RefreshCw size={16} className={isRefreshing ? "is-spinning" : ""} aria-hidden="true" />
-            {isRefreshing ? "Refreshing" : "Refresh catalog"}
-          </button>
-          <button
-            type="button"
-            className="discover-primary-btn"
-            onClick={() => setIsImportOpen(true)}
-            disabled={!activeLibraryId}
-            title={activeLibraryId ? "Import a novel by URL" : "Select a library before importing"}
-          >
-            <Plus size={17} aria-hidden="true" /> Import novel
-          </button>
-        </div>
-      </header>
+      <PageHeader
+        title="Discover"
+        description="Search and browse stories on supported sites."
+        actions={(
+          <>
+            <button type="button" className="discover-secondary-btn" onClick={handleRefresh} disabled={loading || isRefreshing}>
+              <RefreshCw size={16} className={isRefreshing ? "is-spinning" : ""} aria-hidden="true" />
+              {isRefreshing ? "Refreshing" : "Refresh catalog"}
+            </button>
+            <button
+              type="button"
+              className="discover-primary-btn"
+              onClick={() => setIsImportOpen(true)}
+              disabled={!activeLibraryId}
+              title={activeLibraryId ? "Import a novel by URL" : "Select a library before importing"}
+            >
+              <Plus size={17} aria-hidden="true" /> Import novel
+            </button>
+          </>
+        )}
+      />
 
-      <div className={`discover-catalog-status discover-catalog-status--${catalogStatus}`} role="status">
-        <span className="discover-catalog-status__dot" aria-hidden="true" />
-        <span>
-          {catalogStatus === "offline" ? "Metadata catalog unavailable" : "Metadata catalog online"}
-          {lastRefreshAt && catalogStatus === "online" && (
-            <small> · checked {lastRefreshAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</small>
-          )}
-        </span>
-      </div>
+      {catalogStatus === "offline" && (
+        <div className="discover-catalog-status discover-catalog-status--offline" role="status">
+          <span className="discover-catalog-status__dot" aria-hidden="true" />
+          <span>Metadata catalog unavailable</span>
+        </div>
+      )}
 
       <div className="discover-segmented discover-mode" role="tablist" aria-label="Discover mode">
         <button type="button" role="tab" aria-selected={mode === "catalog"} className={mode === "catalog" ? "is-active" : ""} onClick={() => setMode("catalog")}>Catalog</button>
@@ -394,17 +409,54 @@ const Discover: React.FC = () => {
           <Search size={19} aria-hidden="true" />
           <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by title" />
         </form>
+        <div className="discover-quick-filters" role="group" aria-label="Quick filters">
+          <label>
+            Sort by
+            <select value={filters.sortBy} onChange={(event) => setQuickFilter("sortBy", event.target.value)}>
+              <option value="updated">Last updated</option>
+              <option value="favorites">Favorites</option>
+              <option value="follows">Follows</option>
+              <option value="views">Views</option>
+              <option value="reviews">Reviews</option>
+              <option value="word_count">Word count</option>
+              <option value="chapter_count">Chapters</option>
+              <option value="title">Title</option>
+            </select>
+          </label>
+          <label>
+            Direction
+            <select value={filters.sortOrder} onChange={(event) => setQuickFilter("sortOrder", event.target.value)}>
+              <option value="desc">Highest first</option>
+              <option value="asc">Lowest first</option>
+            </select>
+          </label>
+          <label>
+            Status
+            <select value={filters.status} onChange={(event) => setQuickFilter("status", event.target.value)}>
+              <option value="">Any status</option>
+              <option value="Complete">Complete</option>
+              <option value="In-Progress">In progress</option>
+              <option value="Ongoing">Ongoing</option>
+            </select>
+          </label>
+          <label>
+            Updated within
+            <select value={filters.updatedSinceDays} onChange={(event) => setQuickFilter("updatedSinceDays", event.target.value)}>
+              <option value="">Any time</option><option value="7">7 days</option><option value="30">30 days</option><option value="90">90 days</option><option value="365">1 year</option>
+            </select>
+          </label>
+        </div>
         <div className="discover-filter-actions">
           <button
             type="button"
             className={`discover-filter-toggle ${filtersOpen ? "is-active" : ""}`}
             onClick={() => setFiltersOpen((open) => !open)}
-            title="Show filters"
+            aria-haspopup="dialog"
             aria-expanded={filtersOpen}
             aria-controls="discover-filters"
           >
             <SlidersHorizontal size={16} aria-hidden="true" />
-            Filters{hasActiveFilters ? " active" : ""}
+            More filters{activeChips.length > 0 ? ` (${activeChips.length})` : ""}
           </button>
           {hasActiveFilters && (
             <button
@@ -422,8 +474,20 @@ const Discover: React.FC = () => {
             </button>
           )}
         </div>
-        {filtersOpen && (
-          <section id="discover-filters" className="discover-filters" aria-label="Discover filters">
+        {activeChips.length > 0 && (
+          <ul className="discover-active-filters" aria-label="Active filters">
+            {activeChips.map((chip) => (
+              <li key={`${chip.key}-${chip.value ?? ""}`}>
+                <button type="button" className="discover-active-chip" onClick={() => removeChip(chip)} aria-label={`Remove filter ${chip.label}`}>
+                  {chip.label}
+                  <X size={14} aria-hidden="true" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <Sheet open={filtersOpen} onClose={() => setFiltersOpen(false)} title="More filters" variant="auto">
+          <div id="discover-filters" className="discover-filters">
             <ChipInput
               label="Fandom / series"
               values={filters.fandom}
@@ -462,27 +526,12 @@ const Discover: React.FC = () => {
               </div>
             </div>
             <label>
-              Status
-              <select value={filters.status} onChange={(event) => updateFilter("status", event.target.value)}>
-                <option value="">Any status</option>
-                <option value="Complete">Complete</option>
-                <option value="In-Progress">In progress</option>
-                <option value="Ongoing">Ongoing</option>
-              </select>
-            </label>
-            <label>
               Min words
               <input type="number" min="0" value={filters.minWordCount} onChange={(event) => updateFilter("minWordCount", event.target.value)} placeholder="0" />
             </label>
             <label>
               Max words
               <input type="number" min="0" value={filters.maxWordCount} onChange={(event) => updateFilter("maxWordCount", event.target.value)} placeholder="No maximum" />
-            </label>
-            <label>
-              Updated within
-              <select value={filters.updatedSinceDays} onChange={(event) => updateFilter("updatedSinceDays", event.target.value)}>
-                <option value="">Any time</option><option value="7">7 days</option><option value="30">30 days</option><option value="90">90 days</option><option value="365">1 year</option>
-              </select>
             </label>
             <label>
               Min favorites
@@ -540,42 +589,12 @@ const Discover: React.FC = () => {
               Label
               <input value={filters.label} onChange={(event) => updateFilter("label", event.target.value)} placeholder="e.g. cozy" />
             </label>
-            <label>
-              Label origin
-              <select value={filters.labelOrigin} onChange={(event) => updateFilter("labelOrigin", event.target.value)}>
-                <option value="">Any signal</option><option value="ai">Nexus insight</option><option value="source">Source fact</option>
-              </select>
-            </label>
-            <label>
-              Import state
-              <select value={filters.importState} onChange={(event) => updateFilter("importState", event.target.value)}><option value="">Ready only</option><option value="in_progress">Imports in progress</option></select>
-            </label>
-            <label>
-              Sort by
-              <select value={filters.sortBy} onChange={(event) => updateFilter("sortBy", event.target.value)}>
-                <option value="updated">Last updated</option>
-                <option value="favorites">Favorites</option>
-                <option value="follows">Follows</option>
-                <option value="views">Views</option>
-                <option value="reviews">Reviews</option>
-                <option value="word_count">Word count</option>
-                <option value="chapter_count">Chapters</option>
-                <option value="title">Title</option>
-              </select>
-            </label>
-            <label>
-              Direction
-              <select value={filters.sortOrder} onChange={(event) => updateFilter("sortOrder", event.target.value)}>
-                <option value="desc">Highest first</option>
-                <option value="asc">Lowest first</option>
-              </select>
-            </label>
             <div className="discover-filters__commands">
               <button type="button" className="discover-filter-reset" onClick={() => setFilters(EMPTY_FILTERS)}>Reset</button>
-              <button type="button" className="discover-filter-apply" onClick={applyFilters}>Apply filters</button>
+              <button type="button" className="discover-filter-apply" onClick={() => applyFilters()}>Apply filters</button>
             </div>
-          </section>
-        )}
+          </div>
+        </Sheet>
         <div className="discover-source-tabs" role="tablist" aria-label="Novel source">
           {SITE_OPTIONS.map((option) => (
             <button key={option.value} type="button" role="tab" aria-selected={option.value === currentSite}
@@ -596,6 +615,7 @@ const Discover: React.FC = () => {
         </section>
       )}
 
+      <h2 className="discover-results-heading">Results</h2>
       {!loading && !error && <p className="discover-result-count">{novels.length}{hasMore ? "+" : ""} results from {getSiteDisplayName(currentSite)}</p>}
 
       {error && (
@@ -658,10 +678,17 @@ const Discover: React.FC = () => {
                         e.stopPropagation();
                         handleAddToLibrary(novel);
                       }}
-                      title="Add to library"
+                      aria-label={`Add ${novel.title} to library`}
                     >
-                      +
+                      Add
                     </button>
+                    <Menu
+                      align="end"
+                      trigger={(p) => <IconButton {...p} label={`More actions for ${novel.title}`} icon={<MoreHorizontal size={16} aria-hidden="true" />} />}
+                      items={[
+                        { label: "Open on site", onSelect: () => window.open(novel.source_url, "_blank", "noopener,noreferrer") },
+                      ]}
+                    />
                   </div>
                   <NovelCard
                     novel={convertToNovel(novel)}

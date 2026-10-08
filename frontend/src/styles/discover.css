@@ -1,0 +1,92 @@
+/* Discover (WP-D8): search, quick filters, active filter chips, results grid. */
+
+.discover-results-heading {
+  font-size: var(--fs-lg);
+  margin: var(--sp-5) 0 0;
+}
+
+.discover-quick-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  align-items: flex-end;
+}
+
+.discover-quick-filters label {
+  display: grid;
+  gap: var(--sp-1);
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+
+.discover-quick-filters select {
+  min-height: 40px;
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.discover-active-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.discover-active-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  min-height: 32px;
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-pill);
+  background: var(--accent-subtle);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+
+.discover-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+@media (max-width: 767px) {
+  /* Sticky search under the phone app bar. */
+  .discover-toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    padding-bottom: var(--sp-2);
+    background: var(--bg);
+  }
+
+  .discover-quick-filters label {
+    flex: 1 1 calc(50% - var(--sp-3));
+  }
+}
+
+/* Text "Add" button replaces the round "+" (WP-D8 compact cards). */
+.discover-add-btn {
+  width: auto;
+  height: auto;
+  min-height: 32px;
+  padding: 0 var(--sp-3);
+  border-radius: var(--r-pill);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  box-shadow: none;
+}
+
+.discover-add-btn:hover {
+  transform: none;
+  box-shadow: none;
+}

@@ -125,3 +125,63 @@ export const discoveryFilterParams = (filters: Partial<DiscoveryFilters>): Recor
   if (filters.crossover === "true" || filters.crossover === "false") params.crossover = filters.crossover;
   return params;
 };
+
+export interface DiscoveryFilterChip {
+  /** Filter key the chip removes from. */
+  key: keyof DiscoveryFilters;
+  /** The list value to remove; undefined for scalar filters. */
+  value?: string;
+  label: string;
+}
+
+const LIST_LABELS: Partial<Record<keyof DiscoveryFilters, string>> = {
+  tag: "Tag",
+  fandom: "Fandom",
+  genre: "Genre",
+  language: "Language",
+  excludeTag: "Hide tag",
+  excludeFandom: "Hide fandom",
+  excludeGenre: "Hide genre",
+  excludeAuthor: "Hide author",
+  excludeText: "Hide word",
+};
+
+const SCALAR_LABELS: Partial<Record<keyof DiscoveryFilters, (value: string) => string>> = {
+  status: (value) => `Status: ${value}`,
+  minWordCount: (value) => `Min words: ${value}`,
+  maxWordCount: (value) => `Max words: ${value}`,
+  updatedSinceDays: (value) => `Updated within ${value} days`,
+  minFavorites: (value) => `Min favorites: ${value}`,
+  minFollows: (value) => `Min follows: ${value}`,
+  minReviews: (value) => `Min reviews: ${value}`,
+  minChapterCount: (value) => `Min chapters: ${value}`,
+  completeOnly: () => "Complete only",
+  crossover: (value) => (value === "true" ? "Crossovers only" : "Single fandom only"),
+  label: (value) => `Label: ${value}`,
+};
+
+/** One removable chip per active filter value, in display order. Sort options are not filters. */
+export const describeDiscoveryFilters = (filters: DiscoveryFilters): DiscoveryFilterChip[] => {
+  const chips: DiscoveryFilterChip[] = [];
+  (Object.keys(LIST_LABELS) as (keyof DiscoveryFilters)[]).forEach((key) => {
+    const prefix = LIST_LABELS[key];
+    const values = filters[key];
+    if (!Array.isArray(values)) return;
+    values.forEach((value) => chips.push({ key, value, label: `${prefix}: ${value}` }));
+  });
+  (Object.keys(SCALAR_LABELS) as (keyof DiscoveryFilters)[]).forEach((key) => {
+    const value = filters[key];
+    if (typeof value !== "string" || !value) return;
+    chips.push({ key, label: SCALAR_LABELS[key]!(value) });
+  });
+  return chips;
+};
+
+/** Returns a copy of the filters with one chip's value removed. */
+export const removeDiscoveryFilterChip = (filters: DiscoveryFilters, chip: DiscoveryFilterChip): DiscoveryFilters => {
+  const current = filters[chip.key];
+  if (Array.isArray(current)) {
+    return { ...filters, [chip.key]: current.filter((value) => value !== chip.value) };
+  }
+  return { ...filters, [chip.key]: "" };
+};

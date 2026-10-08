@@ -80,9 +80,8 @@ export function AppRoutes() {
 
       <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route index element={<Titled title="Home"><Home /></Titled>} />
-        <Route path="discover" element={<Titled title="Discover"><Discover /></Titled>} />
-        {/* Site browsing keeps its path segment until Discover moves filters into the query (D8). */}
-        <Route path="discover/:site" element={<Titled title="Discover"><Discover /></Titled>} />
+        <Route path="discover" element={<Discover />} />
+        <Route path="discover/:site" element={<Discover />} />
         {/* storyId = catalog id; the library variant joins it in D9. */}
         <Route path="story/:novelId" element={<DiscoverNovelDetail />} />
         <Route path="story/:metadataId/guide" element={<Titled title="Story Guide"><StoryGuide /></Titled>} />
