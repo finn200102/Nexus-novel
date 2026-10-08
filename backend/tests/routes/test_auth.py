@@ -1,4 +1,5 @@
 from datetime import timedelta
+from pathlib import Path
 
 import pytest
 from fastapi import status
@@ -7,9 +8,16 @@ from app.auth import rate_limit
 from app.auth.jwt import verify_token
 from app.auth.sessions import REFRESH_COOKIE, utcnow
 from app.models.account import AuthAttempt, RefreshToken, UserSession
+from app.models.audio_job import ChapterAudioJob
+from app.models.chapter import Chapter
+from app.models.ereader import EpubBuild
 from app.models.library import Library
+from app.models.novel import Novel
 from app.models.user import User
+from app.services import account_service
+from app.services.epub_service import epub_dir
 from app.services.user_services import get_user_by_username
+from config.settings import settings
 from tests.auth_helpers import bearer_headers
 
 PASSWORD = "password123"
@@ -396,6 +404,89 @@ def test_admin_deletes_a_user_and_their_data(client, db):
     assert db.get(User, reader_id) is None
     assert db.query(Library).filter(Library.user_id == reader_id).count() == 0
     assert db.query(UserSession).filter(UserSession.user_id == reader_id).count() == 0
+
+
+def _write(path: Path, text: str = "data") -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+    return path
+
+
+def test_deleting_a_user_removes_their_files_after_the_commit(client, db, tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "DOWNLOAD_PATH", str(tmp_path / "downloads"))
+    headers = admin_client(client)
+    set_signup_mode(client, headers, "open")
+    reader_id = signup(client, "reader").json()["id"]
+    other_id = signup(client, "other").json()["id"]
+    reader_library = Library(name="Reader library", user_id=reader_id)
+    other_library = Library(name="Other library", user_id=other_id)
+    db.add_all([reader_library, other_library])
+    db.flush()
+    novel = Novel(title="Kept", url="https://example.com/reader", library_id=reader_library.id, novel_site="royalroad")
+    other_novel = Novel(title="Other", url="https://example.com/other", library_id=other_library.id, novel_site="royalroad")
+    db.add_all([novel, other_novel])
+    db.flush()
+    chapter = Chapter(novel_id=novel.id, chapter_number=1, title="Chapter 1")
+    db.add(chapter)
+    db.flush()
+    audio = _write(tmp_path / "audio" / "reader.wav")
+    db.add(ChapterAudioJob(
+        user_id=reader_id, library_id=reader_library.id, novel_id=novel.id, chapter_id=chapter.id,
+        provider_id="local", provider_url="http://localhost", provider_model="m", provider_voice="v",
+        audio_path=str(audio),
+    ))
+    reader_epub = _write(epub_dir() / f"{novel.id}-aaaa.epub")
+    other_epub = _write(epub_dir() / f"{other_novel.id}-bbbb.epub")
+    db.add_all([
+        EpubBuild(novel_id=novel.id, fingerprint="a" * 64, partial_md5="a" * 32, size_bytes=4, file_name=reader_epub.name, spine=[]),
+        EpubBuild(novel_id=other_novel.id, fingerprint="b" * 64, partial_md5="b" * 32, size_bytes=4, file_name=other_epub.name, spine=[]),
+    ])
+    reader_dir = _write(tmp_path / "downloads" / "reader" / str(reader_library.id) / "Kept" / "1.txt")
+    other_dir = _write(tmp_path / "downloads" / "other" / str(other_library.id) / "Other" / "1.txt")
+    db.commit()
+
+    assert client.delete(f"/admin/users/{reader_id}", headers=headers).status_code == status.HTTP_204_NO_CONTENT
+
+    assert not audio.exists()
+    assert not reader_epub.exists()
+    assert not reader_dir.parents[2].exists()
+    assert other_epub.exists()
+    assert other_dir.exists()
+
+
+def test_user_files_are_kept_when_the_delete_does_not_commit(client, db, tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "DOWNLOAD_PATH", str(tmp_path / "downloads"))
+    headers = admin_client(client)
+    set_signup_mode(client, headers, "open")
+    reader_id = signup(client, "reader").json()["id"]
+    library = Library(name="Reader library", user_id=reader_id)
+    db.add(library)
+    db.commit()
+    kept = _write(tmp_path / "downloads" / "reader" / str(library.id) / "Novel" / "1.txt")
+
+    def failing_commit():
+        raise RuntimeError("database unavailable")
+
+    monkeypatch.setattr(db, "commit", failing_commit)
+    with pytest.raises(RuntimeError):
+        account_service.delete_user_account(db, db.get(User, reader_id))
+    db.rollback()
+
+    assert kept.exists()
+
+
+def test_user_download_folders_outside_the_download_root_are_never_removed(db, tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "DOWNLOAD_PATH", str(tmp_path / "downloads"))
+    sibling = _write(tmp_path / "downloads-secret" / "1.txt")
+    user = User(username="..", password="x")
+    db.add(user)
+    db.flush()
+    db.add(Library(name="Escape", user_id=user.id))
+    db.commit()
+
+    account_service.delete_user_account(db, db.get(User, user.id))
+
+    assert sibling.exists()
 
 
 def test_signup_mode_rejects_unknown_values(client):

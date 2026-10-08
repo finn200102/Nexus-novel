@@ -1,6 +1,8 @@
 """Instance sign-up policy, invites, password resets and account removal."""
 
+import shutil
 from datetime import timedelta
+from pathlib import Path
 
 from sqlalchemy.orm import Session
 
@@ -10,13 +12,17 @@ from app.models.account import InstanceSetting, InviteCode, PasswordResetToken, 
 from app.models.audio_job import ChapterAudioJob, ChapterAudioPart
 from app.models.download_job import ChapterDownloadJob
 from app.models.follow import UserNovelFollow
+from app.models.ereader import EpubBuild
 from app.models.library import Library
+from app.models.novel import Novel
 from app.models.reading_annotation import ReadingAnnotation
 from app.models.reading_history import ReadingHistory
 from app.models.reading_progress import ReadingProgress
 from app.models.saved_search import SavedSearch
 from app.models.update_event import NovelUpdateEvent
 from app.models.user import User
+from app.services.epub_service import epub_dir
+from config.settings import settings
 
 SIGNUP_MODES = ("open", "invite", "closed")
 SIGNUP_MODE_KEY = "signup_mode"
@@ -167,6 +173,9 @@ def delete_user_account(db: Session, user: User) -> None:
     which SQLite only honours when foreign keys are switched on.
     """
     user_id = user.id
+    # Collect the on-disk files first: their rows disappear with the user.
+    disk_files = _user_disk_files(db, user)
+    download_dirs = _user_download_dirs(db, user)
     session_ids = [row.id for row in db.query(UserSession.id).filter(UserSession.user_id == user_id)]
     if session_ids:
         db.query(RefreshToken).filter(RefreshToken.session_id.in_(session_ids)).delete(synchronize_session=False)
@@ -198,3 +207,52 @@ def delete_user_account(db: Session, user: User) -> None:
     db.flush()
     db.delete(user)
     db.commit()
+    # Files go only once the rows are gone for good.
+    _remove_user_files(disk_files, download_dirs)
+
+
+def _user_disk_files(db: Session, user: User) -> list[Path]:
+    """Audio files and cached EPUBs that belong to ``user``."""
+    user_id = user.id
+    paths = [Path(row.audio_path) for row in db.query(ChapterAudioJob.audio_path).filter(
+        ChapterAudioJob.user_id == user_id, ChapterAudioJob.audio_path.isnot(None))]
+    job_ids = [row.id for row in db.query(ChapterAudioJob.id).filter(ChapterAudioJob.user_id == user_id)]
+    if job_ids:
+        paths += [Path(row.audio_path) for row in db.query(ChapterAudioPart.audio_path).filter(
+            ChapterAudioPart.job_id.in_(job_ids), ChapterAudioPart.audio_path.isnot(None))]
+    novel_ids = [row.id for row in db.query(Novel.id).join(Library, Novel.library_id == Library.id).filter(
+        Library.user_id == user_id)]
+    if novel_ids:
+        paths += [epub_dir() / row.file_name for row in db.query(EpubBuild.file_name).filter(
+            EpubBuild.novel_id.in_(novel_ids))]
+    return paths
+
+
+def _user_download_dirs(db: Session, user: User) -> list[Path]:
+    """Per-library download folders (DOWNLOAD_PATH/<username>/<library_id>).
+
+    Only folders strictly inside DOWNLOAD_PATH are kept, so a strange username
+    can never point the cleanup at the download root or outside it.
+    """
+    root = Path(settings.DOWNLOAD_PATH).resolve()
+    dirs = []
+    for row in db.query(Library.id).filter(Library.user_id == user.id):
+        target = (root / str(user.username) / str(row.id)).resolve()
+        if target.is_relative_to(root) and len(target.relative_to(root).parts) >= 2:
+            dirs.append(target)
+    return dirs
+
+
+def _remove_user_files(files: list[Path], download_dirs: list[Path]) -> None:
+    for path in files:
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            pass
+    for directory in download_dirs:
+        shutil.rmtree(directory, ignore_errors=True)
+        # Drop the user's folder too once its last library folder is gone.
+        try:
+            directory.parent.rmdir()
+        except OSError:
+            pass
