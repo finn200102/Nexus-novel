@@ -154,6 +154,7 @@ const Navbar: React.FC<NavbarProps> = ({ onRequestCreateLibrary }) => {
               <strong>{isAuthenticated ? user?.username || "Reader" : "Local reader"}</strong>
               {isAuthenticated && <Link to="/account">Account</Link>}
               {isAuthenticated && <Link to="/notifications">Notifications</Link>}
+              {isAuthenticated && <Link to="/hidden-content">Hidden content</Link>}
               {isAuthenticated && <button type="button" onClick={() => void logout()}>Sign out</button>}
             </div>
           </div>

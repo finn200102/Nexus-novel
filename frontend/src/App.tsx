@@ -27,6 +27,7 @@ import Users from "./pages/Users";
 import Account from "./pages/Account";
 import ResetPassword from "./pages/ResetPassword";
 import NotificationSettings from "./pages/NotificationSettings";
+import HiddenContent from "./pages/HiddenContent";
 
 import { useAuth } from "./context/AuthContext";
 
@@ -61,6 +62,7 @@ const App: React.FC = () => {
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/account" element={<Protected><WrappedAccount /></Protected>} />
         <Route path="/notifications" element={<Protected><WrappedNotifications /></Protected>} />
+        <Route path="/hidden-content" element={<Protected><HiddenContent /></Protected>} />
         <Route path="/admin/users" element={<Protected><WrappedUsers /></Protected>} />
         <Route path="/discover" element={<Protected><WrappedDiscover /></Protected>} />
         <Route path="/discover/:site" element={<Protected><WrappedDiscover /></Protected>} />

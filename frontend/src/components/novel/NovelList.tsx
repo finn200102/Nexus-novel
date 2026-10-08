@@ -5,16 +5,30 @@ import NovelCard from "./NovelCard";
 import "../../styles/novel-list.css";
 import { Novel } from "../../types/novel";
 import { NovelCardSkeleton } from "../common/Skeleton";
+import { ShelfPicker } from "../organization/ShelfPicker";
+import { organizationService } from "../../services/organizationService";
+import type { LibraryPersonalEntry, Shelf } from "../../types/organization";
+import type { LibraryNovelOptions } from "../../services/novelService";
+
+export type LibrarySortBy = "recent" | "title" | "chapters" | "updated_since_read" | "personal_rating";
 
 interface NovelListProps {
   library_id: number;
   searchTerm: string;
   sourceFilter: string;
-  sortBy: "recent" | "title" | "chapters";
+  sortBy: LibrarySortBy;
   viewMode: "grid" | "list";
   selectionMode: boolean;
   refreshKey?: number;
+  shelves?: Shelf[];
+  onShelvesChanged?: (shelves: Shelf[]) => void;
+  shelfId?: number | null;
+  userTag?: string;
+  minRating?: number;
 }
+
+// The server orders these, so the client keeps the order it receives.
+const SERVER_SORTS: LibrarySortBy[] = ["updated_since_read", "personal_rating"];
 
 const NovelList: React.FC<NovelListProps> = ({
   library_id,
@@ -24,8 +38,14 @@ const NovelList: React.FC<NovelListProps> = ({
   viewMode,
   selectionMode,
   refreshKey = 0,
+  shelves = [],
+  onShelvesChanged,
+  shelfId = null,
+  userTag = "",
+  minRating = 0,
 }) => {
   const [novels, setNovels] = useState<Novel[]>([]);
+  const [personal, setPersonal] = useState<Record<string, LibraryPersonalEntry>>({});
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedNovels, setSelectedNovels] = useState<Set<number>>(new Set());
@@ -37,7 +57,13 @@ const NovelList: React.FC<NovelListProps> = ({
     const fetchNovels = async () => {
       try {
         setLoading(true);
-        const data = await novelService.getAllNovels(library_id, searchTerm);
+        const options: LibraryNovelOptions = {
+          shelfId,
+          userTag: userTag.trim(),
+          minRating,
+          sortBy: SERVER_SORTS.includes(sortBy) ? sortBy : undefined,
+        };
+        const data = await novelService.getAllNovels(library_id, searchTerm, options);
         if (isCancelled) return;
         if (Array.isArray(data)) {
           setNovels(data);
@@ -60,7 +86,18 @@ const NovelList: React.FC<NovelListProps> = ({
     return () => {
       isCancelled = true;
     };
-  }, [library_id, searchTerm, refreshKey]);
+  }, [library_id, searchTerm, refreshKey, shelfId, userTag, minRating, sortBy]);
+
+  useEffect(() => {
+    let active = true;
+    organizationService
+      .libraryPersonal(library_id)
+      .then((entries) => active && setPersonal(entries))
+      .catch(() => active && setPersonal({}));
+    return () => {
+      active = false;
+    };
+  }, [library_id, refreshKey]);
 
   useEffect(() => {
     if (!selectionMode) {
@@ -75,6 +112,8 @@ const NovelList: React.FC<NovelListProps> = ({
       const site = (novel.novel_site || novel.source_url || "").toLowerCase();
       return site.includes(normalizedSource);
     });
+
+    if (SERVER_SORTS.includes(sortBy)) return filtered;
 
     const sorted = [...filtered];
     if (sortBy === "recent") {
@@ -178,6 +217,18 @@ const NovelList: React.FC<NovelListProps> = ({
                 isSelected={selectedNovels.has(novel.id)}
                 onClick={() => handleNovelClick(novel.id)}
               />
+              {!selectionMode && (
+                <div className="novel-card-organize">
+                  {personal[String(novel.id)]?.rating != null && (
+                    <span className="novel-card-organize__rating" aria-label={`Your rating ${personal[String(novel.id)]?.rating} of 5`}>
+                      ★ {personal[String(novel.id)]?.rating}
+                    </span>
+                  )}
+                  {shelves.length > 0 && (
+                    <ShelfPicker novelId={novel.id} shelves={shelves} onChanged={onShelvesChanged} />
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </div>

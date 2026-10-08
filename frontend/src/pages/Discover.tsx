@@ -9,6 +9,7 @@ import { EMPTY_DISCOVERY_FILTERS, isDiscoveryFilterActive, normalizeDiscoveryFil
 import { ChipInput } from "../components/common/ChipInput";
 import { Novel } from "../types/novel";
 import NovelCard from "../components/novel/NovelCard";
+import { HideButton } from "../components/organization/HideButton";
 import { NovelCardSkeleton } from "../components/common/Skeleton";
 import { cancelPendingRequests, getUserFacingError, isRequestCancelled } from "../services/apiClient";
 import { RequestCoordinator, useAdaptivePolling } from "../services/requestResilience";
@@ -637,6 +638,7 @@ const Discover: React.FC = () => {
                   <NovelCard
                     novel={convertToNovel(novel)}
                     onClick={() => handleNovelClick(novel)}
+                    footer={novel.author ? <HideButton kind="author" value={novel.author} /> : undefined}
                   />
                 </div>
               ))}

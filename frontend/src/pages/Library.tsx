@@ -1,8 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
-import NovelList from "../components/novel/NovelList";
+import NovelList, { LibrarySortBy } from "../components/novel/NovelList";
 import CreateNovelForm from "../components/novel/CreateNovelForm";
+import { ShelfBar } from "../components/organization/ShelfBar";
 import { useLibraryContext } from "../context/useLibraryContext";
+import { organizationService } from "../services/organizationService";
+import type { Shelf } from "../types/organization";
 import "../styles/library.css";
+import "../styles/organization.css";
 
 interface LibraryPageProps {
   library_id: number;
@@ -23,7 +27,12 @@ const LibraryPage: React.FC<LibraryPageProps> = ({ library_id }) => {
   const { libraries, activeLibraryId, selectLibrary } = useLibraryContext();
   const [searchTerm, setSearchTerm] = useState("");
   const [sourceFilter, setSourceFilter] = useState("all");
-  const [sortBy, setSortBy] = useState<"recent" | "title" | "chapters">("recent");
+  const [sortBy, setSortBy] = useState<LibrarySortBy>("recent");
+  const [shelves, setShelves] = useState<Shelf[]>([]);
+  const [shelfId, setShelfId] = useState<number | null>(null);
+  const [userTag, setUserTag] = useState("");
+  const [minRating, setMinRating] = useState(0);
+  const [tagOptions, setTagOptions] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectionMode, setSelectionMode] = useState(false);
@@ -34,6 +43,15 @@ const LibraryPage: React.FC<LibraryPageProps> = ({ library_id }) => {
       selectLibrary(library_id);
     }
   }, [activeLibraryId, library_id, selectLibrary]);
+
+  useEffect(() => {
+    let active = true;
+    organizationService.listShelves().then((rows) => active && setShelves(rows)).catch(() => active && setShelves([]));
+    organizationService.tagSuggestions("").then((tags) => active && setTagOptions(tags)).catch(() => active && setTagOptions([]));
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     const listener = (event: Event) => {
@@ -110,13 +128,35 @@ const LibraryPage: React.FC<LibraryPageProps> = ({ library_id }) => {
             Sort
             <select
               value={sortBy}
-              onChange={(event) =>
-                setSortBy(event.target.value as "recent" | "title" | "chapters")
-              }
+              onChange={(event) => setSortBy(event.target.value as LibrarySortBy)}
             >
               <option value="recent">Recently updated</option>
+              <option value="updated_since_read">Updated since I last read</option>
+              <option value="personal_rating">My rating</option>
               <option value="title">Title</option>
               <option value="chapters">Chapter count</option>
+            </select>
+          </label>
+          <label>
+            My tag
+            <input
+              type="search"
+              list="library-user-tags"
+              value={userTag}
+              placeholder="Any tag"
+              onChange={(event) => setUserTag(event.target.value)}
+            />
+            <datalist id="library-user-tags">
+              {tagOptions.map((tag) => <option key={tag} value={tag} />)}
+            </datalist>
+          </label>
+          <label>
+            Min. my rating
+            <select value={minRating} onChange={(event) => setMinRating(Number(event.target.value))}>
+              <option value={0}>Any</option>
+              {[1, 2, 3, 4, 5].map((stars) => (
+                <option key={stars} value={stars}>{stars}★ and up</option>
+              ))}
             </select>
           </label>
         </div>
@@ -138,6 +178,13 @@ const LibraryPage: React.FC<LibraryPageProps> = ({ library_id }) => {
         </div>
       </div>
 
+      <ShelfBar
+        shelves={shelves}
+        activeShelfId={shelfId}
+        onSelect={setShelfId}
+        onChanged={setShelves}
+      />
+
       <NovelList
         library_id={library_id}
         searchTerm={searchTerm}
@@ -146,6 +193,11 @@ const LibraryPage: React.FC<LibraryPageProps> = ({ library_id }) => {
         viewMode={viewMode}
         selectionMode={selectionMode}
         refreshKey={refreshKey}
+        shelves={shelves}
+        onShelvesChanged={setShelves}
+        shelfId={shelfId}
+        userTag={userTag}
+        minRating={minRating}
       />
 
       <CreateNovelForm

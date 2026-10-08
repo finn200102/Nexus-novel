@@ -11,10 +11,29 @@ interface GetNovelSchema {
   novel_id: number;
 }
 
+export interface LibraryNovelOptions {
+  shelfId?: number | null;
+  userTag?: string;
+  minRating?: number;
+  sortBy?: string;
+}
+
 export const novelService = {
-  async getAllNovels(library_id: number, query: string = ""): Promise<Novel[]> {
+  async getAllNovels(
+    library_id: number,
+    query: string = "",
+    options: LibraryNovelOptions = {},
+  ): Promise<Novel[]> {
     try {
-      const response = await apiClient.get(`/novel/?library_id=${library_id}&search=${query}`);
+      const extra = new URLSearchParams();
+      if (options.shelfId != null) extra.set("shelf_id", String(options.shelfId));
+      if (options.userTag) extra.set("user_tag", options.userTag);
+      if (options.minRating) extra.set("min_rating", String(options.minRating));
+      if (options.sortBy === "updated_since_read" || options.sortBy === "personal_rating") {
+        extra.set("sort_by", options.sortBy);
+      }
+      const suffix = extra.toString() ? `&${extra.toString()}` : "";
+      const response = await apiClient.get(`/novel/?library_id=${library_id}&search=${query}${suffix}`);
       return response.data as Novel[];
     } catch (error) {
       if (axios.isAxiosError(error) && error.response?.status != 401) {

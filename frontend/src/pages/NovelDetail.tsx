@@ -9,7 +9,14 @@ import { NovelDetailHeroSkeleton } from "../components/common/Skeleton";
 import { useToast } from "../context/useToast";
 import { Bell } from "lucide-react";
 import { insightService, CanonicalWork, InsightSignal, SimilarNovel, StoryGuide } from "../services/insightService";
+import { HideButton } from "../components/organization/HideButton";
+import { PersonalPanel } from "../components/organization/PersonalPanel";
+import { ReasonList } from "../components/organization/ReasonList";
+import { ShelfPicker } from "../components/organization/ShelfPicker";
+import { organizationService } from "../services/organizationService";
+import type { Shelf } from "../types/organization";
 import "../styles/novel-detail.css";
+import "../styles/organization.css";
 
 interface NovelDetailProps {
   novelId: number;
@@ -25,9 +32,18 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
   const [followSettings, setFollowSettings] = useState<NovelFollowSettings | null>(null);
   const [signals, setSignals] = useState<InsightSignal[]>([]);
   const [similar, setSimilar] = useState<SimilarNovel[]>([]);
+  const [shelves, setShelves] = useState<Shelf[]>([]);
   const [canonicalWork, setCanonicalWork] = useState<CanonicalWork | null>(null);
   const [analysisState, setAnalysisState] = useState<string>("not_started");
   const [enriching, setEnriching] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    organizationService.listShelves().then((rows) => active && setShelves(rows)).catch(() => active && setShelves([]));
+    return () => {
+      active = false;
+    };
+  }, []);
   const [storyGuide, setStoryGuide] = useState<StoryGuide | null>(null);
   const [buildingGuide, setBuildingGuide] = useState(false);
   // Start at zero so no asynchronous guide request can reveal material before
@@ -289,7 +305,7 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
               </div>
               <h1 className="novel-hero__title">{novel.title}</h1>
               {novel.author && (
-                <p className="novel-hero__author">by {novel.author}</p>
+                <p className="novel-hero__author">by {novel.author} <HideButton kind="author" value={novel.author} /></p>
               )}
               {novel.description && (
                 <p className="novel-hero__description">{novel.description}</p>
@@ -399,6 +415,11 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
           <div className="novel-detail-grid">
             <div className="novel-detail-info">
               <NovelDetails novel={novel} />
+              <PersonalPanel novelId={novel.id} />
+              <section className="organize-panel" aria-labelledby={`shelves-${novel.id}`}>
+                <h2 id={`shelves-${novel.id}`}>Shelves</h2>
+                <ShelfPicker novelId={novel.id} shelves={shelves} onChanged={setShelves} />
+              </section>
             </div>
             <div className="novel-detail-chapters">
               <ChapterList novel_id={novel.id} library_id={libraryId} />
@@ -406,7 +427,7 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
           </div>
           {novel.metadata_id && <section className="novel-insights" aria-label="Nexus insights">
             <div className="novel-insights__panel"><p className="novel-insights__eyebrow">Nexus insights</p><h2>Text signals</h2><p className="novel-insights__notice">Local, cautious classifier signals. They never replace source facts.</p>{signals.length > 0 ? <div className="novel-insights__chips">{signals.map((signal) => <span key={`${signal.family}:${signal.value}`} title={`${signal.model_version} · ${(signal.confidence || 0) * 100}% confidence`}>{signal.family.replace(/_/g, " ")}: <strong>{signal.value}</strong></span>)}</div> : <div className="novel-insights__empty"><span>{analysisState === "queued" || analysisState === "running" ? "Analysis is running in the low-priority local worker." : "No local text signals yet."}</span><button type="button" className="novel-insights__browse" disabled={enriching || analysisState === "queued" || analysisState === "running"} onClick={() => void handleEnrich()}>{enriching ? "Queueing…" : analysisState === "queued" || analysisState === "running" ? "Analysis queued" : "Generate insights"}</button></div>}</div>
-            {similar.length > 0 && <div className="novel-insights__panel"><p className="novel-insights__eyebrow">More to explore</p><h2>Similar stories</h2><div className="novel-insights__similar">{similar.map((match) => <button type="button" key={match.novel_id} onClick={() => window.location.assign(`/discover/all/${match.novel_id}`)}><strong>{match.title}</strong><small>{match.author || "Unknown author"} · {match.explanation}</small></button>)}</div><button type="button" className="novel-insights__browse" onClick={() => window.location.assign(`/discover/all?similar_to=${novel.id}`)}>Browse all similar stories</button></div>}
+            {similar.length > 0 && <div className="novel-insights__panel"><p className="novel-insights__eyebrow">More to explore</p><h2>Similar stories</h2><div className="novel-insights__similar">{similar.map((match) => <button type="button" key={match.novel_id} onClick={() => window.location.assign(`/discover/all/${match.novel_id}`)}><strong>{match.title}</strong><small>{match.author || "Unknown author"} · {match.explanation}</small><ReasonList reasons={match.reasons} inline /></button>)}</div><button type="button" className="novel-insights__browse" onClick={() => window.location.assign(`/discover/all?similar_to=${novel.id}`)}>Browse all similar stories</button></div>}
             {storyGuide && !storyGuide.unavailable && <div className="novel-insights__panel novel-insights__guide">
               <p className="novel-insights__eyebrow">Story guide</p>
               <h2>Private chapter knowledge</h2>

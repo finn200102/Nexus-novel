@@ -1,0 +1,260 @@
+/* Library organization: hide buttons, shelves, personal notes, reasons. */
+
+.hide-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: 0.4rem;
+  padding: 0.1rem 0.45rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  cursor: pointer;
+  opacity: 0.75;
+}
+
+.hide-button:hover,
+.hide-button:focus-visible {
+  opacity: 1;
+}
+
+.hide-button--undo {
+  opacity: 1;
+  font-weight: 600;
+}
+
+.hide-button:disabled {
+  cursor: progress;
+}
+
+.term-hide-list {
+  margin: 0.75rem 0;
+}
+
+.term-hide-list ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.3rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.term-hide-list__item {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.3rem 0.15rem 0.6rem;
+  border-radius: 999px;
+  background: rgba(127, 127, 127, 0.14);
+  font-size: 0.85rem;
+}
+
+.term-hide-list__label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.7;
+}
+
+.hidden-content__hint,
+.hidden-content__empty,
+.personal-panel__hint,
+.shelf-picker__empty {
+  opacity: 0.75;
+  font-size: 0.9rem;
+}
+
+.hidden-content__form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-end;
+  margin: 1rem 0;
+}
+
+.hidden-content__form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
+
+.hidden-content__group ul {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+}
+
+.hidden-content__group li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid rgba(127, 127, 127, 0.2);
+}
+
+.shelf-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+}
+
+.shelf-bar__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.shelf-bar__chips button,
+.shelf-bar__shelf button {
+  font-size: 0.85rem;
+}
+
+.shelf-bar__chips > button.is-active,
+.shelf-bar__shelf button.is-active {
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.shelf-bar__shelf {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.15rem 0.35rem;
+  border: 1px solid rgba(127, 127, 127, 0.3);
+  border-radius: 999px;
+}
+
+.shelf-bar__create,
+.shelf-bar__rename {
+  display: flex;
+  gap: 0.4rem;
+  max-width: 28rem;
+}
+
+.shelf-picker {
+  margin-top: 0.4rem;
+  font-size: 0.85rem;
+}
+
+.shelf-picker summary {
+  cursor: pointer;
+}
+
+.shelf-picker ul {
+  list-style: none;
+  padding: 0.3rem 0 0;
+  margin: 0;
+}
+
+.novel-card-organize {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.25rem 0.5rem 0.5rem;
+  font-size: 0.8rem;
+}
+
+.novel-card-organize__rating {
+  font-weight: 600;
+}
+
+.novel-card__footer {
+  margin-top: 0.4rem;
+}
+
+.organize-panel,
+.personal-panel {
+  margin-top: 1.5rem;
+}
+
+.personal-panel__rating {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  margin: 0.5rem 0;
+}
+
+.personal-panel__rating button {
+  border: 0;
+  background: transparent;
+  font-size: 1.4rem;
+  line-height: 1;
+  color: inherit;
+  opacity: 0.35;
+  cursor: pointer;
+}
+
+.personal-panel__rating button.is-on {
+  opacity: 1;
+  color: #d9a400;
+}
+
+.personal-panel__rating span {
+  margin-left: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.personal-panel__notes-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.personal-panel__notes textarea {
+  width: 100%;
+  min-height: 7rem;
+  font: inherit;
+  padding: 0.5rem;
+  border-radius: 6px;
+  border: 1px solid rgba(127, 127, 127, 0.4);
+  background: transparent;
+  color: inherit;
+}
+
+.personal-panel__preview {
+  min-height: 7rem;
+  padding: 0.5rem;
+  border: 1px dashed rgba(127, 127, 127, 0.4);
+  border-radius: 6px;
+}
+
+.personal-panel__save {
+  margin-top: 0.75rem;
+}
+
+.markdown-lite p {
+  margin: 0 0 0.6rem;
+}
+
+.markdown-lite ul {
+  margin: 0 0 0.6rem 1.2rem;
+  padding: 0;
+}
+
+.reason-list {
+  margin: 0.3rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.8rem;
+  opacity: 0.85;
+}
+
+.reason-list--inline {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  margin-top: 0.25rem;
+  text-align: left;
+}
+
+.reason-list__item::before {
+  content: "→ ";
+}

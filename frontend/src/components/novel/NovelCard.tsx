@@ -7,6 +7,8 @@ interface NovelCardProps {
   novel: Novel;
   isSelected?: boolean;
   onClick?: () => void;
+  /** Extra controls (for example a Hide button); clicks here never open the card. */
+  footer?: React.ReactNode;
 }
 
 const formatWordCount = (wordCount: number | null | undefined): string => {
@@ -36,6 +38,7 @@ const NovelCard: React.FC<NovelCardProps> = ({
   novel,
   isSelected,
   onClick,
+  footer,
 }) => {
   const coverImageSrc = novel.img_url || novel.cover_image || defaultCoverImage;
   const displayStatus = getDisplayStatus(novel);
@@ -118,6 +121,11 @@ const NovelCard: React.FC<NovelCardProps> = ({
             <span className="novel-card__updated">Updated {updatedDate}</span>
           )}
         </div>
+        {footer && (
+          <div className="novel-card__footer" onClick={(event) => event.stopPropagation()}>
+            {footer}
+          </div>
+        )}
       </div>
     </div>
   );

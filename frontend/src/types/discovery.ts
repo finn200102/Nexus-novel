@@ -17,6 +17,10 @@ export interface DiscoveredNovel {
   chapter_count: number | null;
   created_at: string;
   updated_at: string;
+  // Source metadata, present on detail responses; optional so list rows still type-check.
+  tags?: Array<string | { name: string }>;
+  genres?: Array<string | { name: string }>;
+  fandoms?: Array<string | { name: string }>;
 }
 
 export interface PaginatedResponse<T> {
