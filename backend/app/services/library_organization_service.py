@@ -5,7 +5,9 @@ Novels are checked through their library, so another user's novel id is
 reported as not found.
 """
 
+from collections.abc import Mapping
 from datetime import datetime
+from typing import Any
 
 from fastapi import HTTPException, status
 from sqlalchemy import func
@@ -209,49 +211,51 @@ def clean_followed_categories(categories: list[str]) -> list[str]:
     return cleaned
 
 
-def set_personal(
-    db: Session,
-    user: User,
-    novel_id: int,
-    *,
-    notes: str | None,
-    rating: int | None,
-    user_tags: list[str],
-    followed_categories: list[str] | None = None,
-    auto_download: bool | None = None,
-    keep_ahead: int | None = None,
-) -> dict:
-    """``None`` for followed_categories, auto_download or keep_ahead leaves the stored value untouched."""
+def set_personal(db: Session, user: User, novel_id: int, fields: Mapping[str, Any]) -> dict:
+    """Apply a partial update: only the keys present in ``fields`` change.
+
+    ``notes`` and ``rating`` are cleared by an explicit None. ``user_tags``
+    replaces the tags when present. For ``followed_categories``,
+    ``auto_download`` and ``keep_ahead`` a None value leaves the stored value
+    untouched.
+    """
     owned_novel(db, user, novel_id)
+    keep_ahead = fields.get("keep_ahead")
     if keep_ahead is not None and not MIN_KEEP_AHEAD <= keep_ahead <= MAX_KEEP_AHEAD:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"keep_ahead must be between {MIN_KEEP_AHEAD} and {MAX_KEEP_AHEAD}")
+    rating = fields.get("rating")
     if rating is not None and not 1 <= rating <= 5:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Rating must be between 1 and 5")
+    followed_categories = fields.get("followed_categories")
     categories = clean_followed_categories(followed_categories) if followed_categories is not None else None
-    cleaned_tags: list[str] = []
-    for tag in user_tags:
-        value = clean_user_tag(tag)
-        if value and value not in cleaned_tags:
-            cleaned_tags.append(value)
-    if len(cleaned_tags) > USER_TAG_LIMIT:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"At most {USER_TAG_LIMIT} tags per novel")
+    cleaned_tags: list[str] | None = None
+    if "user_tags" in fields:
+        cleaned_tags = []
+        for tag in fields["user_tags"] or []:
+            value = clean_user_tag(tag)
+            if value and value not in cleaned_tags:
+                cleaned_tags.append(value)
+        if len(cleaned_tags) > USER_TAG_LIMIT:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"At most {USER_TAG_LIMIT} tags per novel")
 
     row = db.query(NovelPersonalData).filter(NovelPersonalData.user_id == user.id, NovelPersonalData.novel_id == novel_id).first()
-    text = (notes or "").strip() or None
     if row is None:
         row = NovelPersonalData(user_id=user.id, novel_id=novel_id)
         db.add(row)
-    row.notes = text
-    row.rating = rating
+    if "notes" in fields:
+        row.notes = (fields["notes"] or "").strip() or None
+    if "rating" in fields:
+        row.rating = rating
     if categories is not None:
         row.followed_categories = categories
-    if auto_download is not None:
-        row.auto_download = auto_download
+    if fields.get("auto_download") is not None:
+        row.auto_download = fields["auto_download"]
     if keep_ahead is not None:
         row.keep_ahead = keep_ahead
-    db.query(NovelUserTag).filter(NovelUserTag.user_id == user.id, NovelUserTag.novel_id == novel_id).delete(synchronize_session=False)
-    for tag in cleaned_tags:
-        db.add(NovelUserTag(user_id=user.id, novel_id=novel_id, tag=tag))
+    if cleaned_tags is not None:
+        db.query(NovelUserTag).filter(NovelUserTag.user_id == user.id, NovelUserTag.novel_id == novel_id).delete(synchronize_session=False)
+        for tag in cleaned_tags:
+            db.add(NovelUserTag(user_id=user.id, novel_id=novel_id, tag=tag))
     db.commit()
     return get_personal(db, user, novel_id)
 

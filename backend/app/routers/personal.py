@@ -11,12 +11,17 @@ router = APIRouter(prefix="/personal", tags=["personal data"], responses={404: {
 
 
 class PersonalWrite(BaseModel):
+    """A partial update: only the fields present in the request body change.
+
+    Send ``notes`` or ``rating`` as null to clear them. ``user_tags`` replaces
+    the tag list. Null for ``followed_categories``, ``auto_download`` and
+    ``keep_ahead`` leaves the stored value alone.
+    """
+
     notes: str | None = Field(default=None, max_length=20000)
     rating: int | None = Field(default=None, ge=1, le=5)
-    user_tags: list[str] = Field(default_factory=list, max_length=60)
-    # Omit to keep the stored categories; send a list to replace them.
+    user_tags: list[str] | None = Field(default=None, max_length=60)
     followed_categories: list[str] | None = Field(default=None, max_length=20)
-    # Omit to keep the stored auto-download settings.
     auto_download: bool | None = None
     keep_ahead: int | None = Field(default=None, ge=1, le=200)
 
@@ -29,17 +34,7 @@ def get_personal(novel_id: int, db: Session = Depends(get_db), current_user: Use
 
 @router.put("/novels/{novel_id}")
 def set_personal(novel_id: int, payload: PersonalWrite, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    return organization.set_personal(
-        db,
-        current_user,
-        novel_id,
-        notes=payload.notes,
-        rating=payload.rating,
-        user_tags=payload.user_tags,
-        followed_categories=payload.followed_categories,
-        auto_download=payload.auto_download,
-        keep_ahead=payload.keep_ahead,
-    )
+    return organization.set_personal(db, current_user, novel_id, payload.model_dump(exclude_unset=True))
 
 
 @router.get("/tags")

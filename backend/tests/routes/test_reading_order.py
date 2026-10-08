@@ -52,6 +52,31 @@ def test_novel_payloads_expose_next_unread_chapter(client, db, test_user, test_l
     assert listed[0]["next_unread_chapter_number"] is None
 
 
+def test_personal_put_changes_only_the_fields_sent(client, db, test_user, test_library):
+    headers = bearer_headers(test_user.id)
+    novel = _novel(db, test_library)
+    url = f"/personal/novels/{novel.id}"
+    client.put(url, json={"notes": "keep me", "rating": 3, "user_tags": ["fav"], "auto_download": True}, headers=headers)
+
+    # Toggling auto-download alone leaves notes, rating and tags alone.
+    toggled = client.put(url, json={"auto_download": False, "keep_ahead": 12}, headers=headers).json()
+    assert (toggled["notes"], toggled["rating"], toggled["user_tags"]) == ("keep me", 3, ["fav"])
+    assert (toggled["auto_download"], toggled["keep_ahead"]) == (False, 12)
+
+    # An explicit null clears notes and rating; the tags stay.
+    cleared = client.put(url, json={"notes": None, "rating": None}, headers=headers).json()
+    assert (cleared["notes"], cleared["rating"], cleared["user_tags"]) == (None, None, ["fav"])
+
+    # Sending tags replaces them and leaves the rest alone.
+    retagged = client.put(url, json={"user_tags": ["a", "b"]}, headers=headers).json()
+    assert retagged["user_tags"] == ["a", "b"]
+    assert retagged["keep_ahead"] == 12
+
+    # An empty body changes nothing.
+    unchanged = client.put(url, json={}, headers=headers).json()
+    assert (unchanged["notes"], unchanged["user_tags"], unchanged["auto_download"], unchanged["keep_ahead"]) == (None, ["a", "b"], False, 12)
+
+
 def test_personal_followed_categories_round_trip(client, db, test_user, test_library):
     headers = bearer_headers(test_user.id)
     novel = _novel(db, test_library)
