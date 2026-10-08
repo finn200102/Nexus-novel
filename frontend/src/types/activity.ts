@@ -40,3 +40,14 @@ export interface DownloadJob {
   created_at: string;
   updated_at: string;
 }
+
+export interface InboxNovel {
+  novel_id: number;
+  title: string;
+  new_chapter_count: number;
+  first_new_chapter_number: number;
+  latest_at: string;
+  event_ids: number[];
+  next_unread_chapter_id: number | null;
+  next_unread_chapter_number: number | null;
+}

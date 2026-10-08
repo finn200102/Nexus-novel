@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { CalendarDays, CheckCircle2, Download, RefreshCw } from "lucide-react";
 import { useLibraryContext } from "../context/useLibraryContext";
 import { activityService } from "../services/activityService";
+import UpdatesInbox from "../components/activity/UpdatesInbox";
 import type { ActivityDay, ActivityEvent } from "../types/activity";
 import "../styles/activity.css";
 
@@ -26,6 +27,7 @@ const Activity: React.FC = () => {
     {loading && <p className="activity-page__empty">Loading activity…</p>}
     {!loading && !activeLibrary && <p className="activity-page__empty">Create or select a library to see activity.</p>}
     {!loading && activeLibrary && <>
+      <UpdatesInbox libraryId={activeLibrary.id} />
       <section className="activity-calendar" aria-label="Activity calendar">
         <div className="activity-section__title"><CalendarDays size={18} /><h2>Recent days</h2></div>
         {days.length === 0 && <p className="activity-page__empty">No activity recorded yet.</p>}

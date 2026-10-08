@@ -1,5 +1,5 @@
 import apiClient from "./apiClient";
-import type { ActivityDay, ActivityEvent } from "../types/activity";
+import type { ActivityDay, ActivityEvent, InboxNovel } from "../types/activity";
 
 export interface OperationsSummary {
   library_id: number;
@@ -131,6 +131,18 @@ export const activityService = {
   },
   async getSourcePolicy(): Promise<SourcePolicySummary> {
     const response = await apiClient.get("/operations/source-policy");
+    return response.data;
+  },
+  async getInbox(libraryId: number): Promise<InboxNovel[]> {
+    const response = await apiClient.get<InboxNovel[]>(`/activity/inbox?library_id=${libraryId}`);
+    return response.data;
+  },
+  async markInboxRead(novelId: number): Promise<number> {
+    const response = await apiClient.post<{ updated: number }>(`/activity/inbox/${novelId}/read`);
+    return response.data.updated;
+  },
+  async markInboxCaughtUp(novelId: number): Promise<{ updated: number; progress_chapter_number: number | null }> {
+    const response = await apiClient.post<{ updated: number; progress_chapter_number: number | null }>(`/activity/inbox/${novelId}/caught-up`);
     return response.data;
   },
   async markAllRead(libraryId: number): Promise<number> {

@@ -14,3 +14,14 @@
 .activity-event__icon { display: grid; place-items: center; width: 30px; height: 30px; color: #a994ff; background: #28204c; border-radius: 50%; }
 .activity-event p { margin: 4px 0; }.activity-event__read, .activity-event__new { margin-left: auto; color: #8794a8; font-size: 10px; }.activity-event__new { color: #66d29a; }
 .activity-page__empty { margin: 0; color: #8995a6; font-size: 13px; }
+
+/* Updates inbox */
+.activity-inbox { margin-bottom: 1.5rem; }
+.activity-inbox__header { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; }
+.activity-inbox__all { display: inline-flex; align-items: center; gap: 0.35rem; }
+.activity-inbox__error { color: var(--danger, #b42318); }
+.activity-inbox__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+.activity-inbox__row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem 1rem; padding: 0.75rem 1rem; border: 1px solid var(--border, #d9d9d9); border-radius: 10px; }
+.activity-inbox__summary { display: flex; flex-wrap: wrap; gap: 0.35rem; min-width: 0; }
+.activity-inbox__actions { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.activity-inbox__actions button { display: inline-flex; align-items: center; gap: 0.3rem; }

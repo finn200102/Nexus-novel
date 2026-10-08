@@ -12,6 +12,7 @@ import { Bell } from "lucide-react";
 import { insightService, CanonicalWork, InsightSignal, SimilarNovel, StoryGuide } from "../services/insightService";
 import { HideButton } from "../components/organization/HideButton";
 import { PersonalPanel } from "../components/organization/PersonalPanel";
+import AutoDownloadToggle from "../components/novel/AutoDownloadToggle";
 import { ReasonList } from "../components/organization/ReasonList";
 import { ShelfPicker } from "../components/organization/ShelfPicker";
 import { organizationService } from "../services/organizationService";
@@ -417,6 +418,7 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
             <div className="novel-detail-info">
               <NovelDetails novel={novel} />
               <PersonalPanel novelId={novel.id} />
+              <AutoDownloadToggle novelId={novel.id} />
               <section className="organize-panel" aria-labelledby={`shelves-${novel.id}`}>
                 <h2 id={`shelves-${novel.id}`}>Shelves</h2>
                 <ShelfPicker novelId={novel.id} shelves={shelves} onChanged={setShelves} />

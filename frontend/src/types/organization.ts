@@ -19,6 +19,9 @@ export interface PersonalData {
   notes: string | null;
   rating: number | null;
   user_tags: string[];
+  followed_categories?: string[];
+  auto_download?: boolean;
+  keep_ahead?: number;
 }
 
 export interface LibraryPersonalEntry extends PersonalData {

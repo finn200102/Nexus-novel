@@ -42,7 +42,7 @@ export const organizationService = {
   },
   async savePersonal(
     novelId: number,
-    data: { notes: string | null; rating: number | null; user_tags: string[] },
+    data: { notes: string | null; rating: number | null; user_tags: string[]; auto_download?: boolean; keep_ahead?: number },
   ): Promise<PersonalData> {
     return (await apiClient.put<PersonalData>(`/personal/novels/${novelId}`, data)).data;
   },
