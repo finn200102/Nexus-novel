@@ -1,94 +1,84 @@
-* README
+* Nexus Novel
 
-This project contains a FastAPI backend and a React frontend for reading and managing web novels.
+A FastAPI backend and a React frontend for reading and managing web novels.
+Nexus Novel owns users, libraries, reading progress, downloads and follows.
+Story metadata comes from the metadata server ([[https://github.com/finn200102/nexus-server][nexus-server]]).
 
 ** Architecture
 
-Nexus Novel now uses a metadata server architecture:
+- *Metadata server.* Each story stores a =metadata_id= that points at a record
+  in nexus-server. The backend calls it over HTTP (=METADATA_SERVER_URL=,
+  authenticated with =METADATA_API_KEY=) for search, discovery and metadata
+  refreshes, and caches what it needs locally.
+- *Backend* (=backend/=, Python 3.12+, FastAPI, SQLAlchemy). Serves the REST API
+  under the routers in =app/routers/= and runs a background worker
+  (=app/worker.py=) that downloads chapters and sends digests. Chapter text is
+  stored locally in =DOWNLOAD_PATH=.
+- *Frontend* (=frontend/=, React 19, Vite 6, TypeScript, Tailwind). In development
+  Vite proxies =/api= to the backend and strips the prefix.
 
-- [[https://github.com/finn200102/nexus-server][nexus-server]] - A separate metadata server that scrapes and stores novel metadata from various sources
-- nexus-novel (this project) - The main application that:
-  - Stores a reference to metadata via =metadata_id=
-  - Caches metadata locally for fast access
-  - Downloads and stores chapter text locally
-  - Provides the user interface for reading
+Compose (in the repository root) runs the same pieces as containers: =novel-api=,
+=novel-worker=, the frontend behind nginx, and their Postgres database.
 
-** Setup
+** Backend
 
-1. Start the metadata server (nexus-server) on http://127.0.0.1:8004
+Requirements: Python 3.12+ and [[https://docs.astral.sh/uv/][uv]].
 
-2. Create a Python virtual environment and install backend dependencies:
-   #+begin_src shell
-   cd backend
-   python3 -m venv .venv
-   source .venv/bin/activate
-   pip install -r ../requirements.txt
-   #+end_src
+#+begin_src shell
+cd backend
+uv sync
+#+end_src
 
-3. Install frontend dependencies (requires Node.js 18+):
-   #+begin_src shell
-   cd frontend
-   npm install
-   #+end_src
+Settings come from the environment or =backend/.env=. The useful ones:
 
-4. Run the backend (from project root):
-   #+begin_src shell
-   uvicorn backend.app.main:app --reload --port $(grep BACKEND_PORT backend/.env | cut -d= -f2)
-   #+end_src
+| Variable | Default | Meaning |
+|---------------------+--------------------------+-----------------------------------------|
+| =DATABASE_URL= | =sqlite:///./test.db= | Database connection |
+| =DOWNLOAD_PATH= | =./downloads= | Where chapter text is stored |
+| =BACKEND_PORT= | =8000= | Port for local runs |
+| =METADATA_SERVER_URL= | =http://127.0.0.1:8004= | nexus-server base URL |
+| =METADATA_API_KEY= | empty | Key for the metadata server |
+| =SECRET_KEY= | placeholder | Replaced by a random key stored in =DOWNLOAD_PATH= when left as a placeholder or empty |
 
-   Or manually specify the port:
-   #+begin_src shell
-   uvicorn backend.app.main:app --reload --port 8000
-   #+end_src
+Run the API with auto-reload:
 
-   Configure port in =backend/.env= with =BACKEND_PORT=
+#+begin_src shell
+cd backend
+uv run uvicorn app.main:app --reload --port 8000
+#+end_src
 
-5. Run the frontend development server:
-   #+begin_src shell
-   cd frontend
-   npm run dev
-   #+end_src
+Run the tests:
 
-6. Run backend tests:
-   #+begin_src shell
-   cd backend
-   pytest -q
-   #+end_src
+#+begin_src shell
+cd backend
+uv run pytest -q
+#+end_src
 
-7. Run frontend tests:
-   #+begin_src shell
-   cd frontend
-   npm test
-   #+end_src
+** Frontend
 
-** Dependencies
+Requirements: Node.js 22 (the version CI uses) and npm.
 
-The backend dependencies are listed in ~requirements.txt~. The frontend
-uses ~package.json~ to track both runtime and development packages for
-React, Vite and testing via Vitest.
+#+begin_src shell
+cd frontend
+npm install
+npm run dev          # http://localhost:5173, proxies /api to the backend
+#+end_src
 
-Key runtime dependencies:
-- FastAPI + Uvicorn for the web server
-- SQLAlchemy for database ORM
-- httpx for async HTTP calls to metadata server
+The proxy target is =VITE_BACKEND_URL= (default =http://127.0.0.1:8000=); the
+port is =VITE_FRONTEND_PORT= (default =5173=).
 
-** Supported Sources
+Checks, in the same order CI uses:
 
-Stories can be imported from sites supported by the metadata server:
-- [[https://www.royalroad.com][RoyalRoad]]
-- [[https://forums.spacebattles.com][SpaceBattles]]
-- [[https://www.fanfiction.net][FanFiction.Net]]
-- [[https://archiveofourown.org][Archive of Our Own]]
-- [[https://www.webnovel.com][WebNovel]]
+#+begin_src shell
+cd frontend
+npx tsc -b --noEmit
+npx eslint src
+npx vitest run
+#+end_src
 
-** API Integration
+End-to-end tests (Playwright) need a running stack; see =package.json=
+(=test:e2e=, =test:e2e:docker=).
 
-When importing a novel:
-1. Nexus-novel calls the metadata server (=POST /scrape/by-url=)
-2. Metadata server scrapes the source and returns novel/chapter metadata
-3. Nexus-novel stores the =metadata_id= and caches relevant metadata locally
-4. Chapter text is downloaded on-demand using local scrapers
+** Running the whole stack
 
-Metadata refresh:
-- Call =GET /novel/refresh/{novel_id}= to refresh metadata from the server
-- This also checks for new chapters and adds them to the local database
+From the repository root, see the root [[../README.md][README]] and [[../docs/deployment.md][deployment notes]].
