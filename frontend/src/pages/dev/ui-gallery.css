@@ -1,0 +1,6 @@
+.gallery { max-width: var(--content-max); margin: 0 auto; padding: var(--sp-6) var(--gutter) var(--sp-8); display: grid; gap: var(--sp-6); }
+.gallery__header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-4); }
+.gallery__section { display: grid; gap: var(--sp-4); padding: var(--sp-5); background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-md); }
+.gallery__row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); }
+.gallery__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--sp-4); width: 100%; align-items: start; }
+.gallery__stack { display: grid; gap: var(--sp-3); width: 100%; }

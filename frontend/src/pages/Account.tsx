@@ -5,6 +5,7 @@ import { getUserFacingError } from "../services/apiClient";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/useToast";
 import EReaderSettings from "../components/ereader/EReaderSettings";
+import { ThemeSwitcher } from "../theme/ThemeSwitcher";
 import "../styles/operations.css";
 import "../styles/integrations.css";
 import "../styles/accounts.css";
@@ -51,6 +52,16 @@ const Account: React.FC = () => {
           <p>{user?.is_admin ? "Administrator" : "Reader"}</p>
         </div>
       </header>
+
+      <article className="integrations-panel">
+        <header>
+          <div>
+            <h2>Appearance</h2>
+            <p>System follows your device's light or dark setting.</p>
+          </div>
+        </header>
+        <ThemeSwitcher />
+      </article>
 
       <article className="integrations-panel">
         <header>

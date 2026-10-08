@@ -6,7 +6,7 @@ import {
   Route,
   useParams,
 } from "react-router-dom";
-import { ReactNode } from "react";
+import { lazy, ReactNode, Suspense } from "react";
 import Layout from "./components/layout/Layout";
 import Home from "./pages/Home";
 import Signup from "./pages/Signup";
@@ -52,6 +52,9 @@ const Protected = ({ children }: { children: ReactNode }) => (
   <ProtectedRoute>{children}</ProtectedRoute>
 );
 
+// Dev-only component gallery (/dev/ui); tree-shaken from production builds.
+const UiGallery = import.meta.env.DEV ? lazy(() => import("./pages/dev/UiGallery")) : null;
+
 const App: React.FC = () => {
   return (
     <Router>
@@ -83,6 +86,9 @@ const App: React.FC = () => {
           path="/library/:libraryId/novels/:novelId/:chapterNumber"
           element={<Protected><ChapterWrapper /></Protected>}
         />
+        {UiGallery && (
+          <Route path="/dev/ui" element={<Suspense fallback={null}><UiGallery /></Suspense>} />
+        )}
          </Routes>
     </Router>
   );
