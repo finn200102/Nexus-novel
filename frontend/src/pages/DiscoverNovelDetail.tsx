@@ -135,6 +135,9 @@ const DiscoverNovelDetail: React.FC = () => {
       spacebattles: "SpaceBattles",
       archive: "Archive of Our Own",
       webnovel: "WebNovel",
+      sufficientvelocity: "Sufficient Velocity",
+      questionablequesting: "Questionable Questing",
+      scribblehub: "ScribbleHub",
     };
     return sites[siteValue.toLowerCase()] || siteValue;
   };

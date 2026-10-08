@@ -59,7 +59,7 @@ def _reader_safe_cutoff(
 async def get_novels(
     site: Optional[str] = Query(
         None,
-        description="Filter by site: royalroad, fanfiction, webnovel, archive, spacebattles",
+        description="Filter by site: royalroad, fanfiction, webnovel, archive, spacebattles, sufficientvelocity, questionablequesting, scribblehub",
     ),
     author: Optional[str] = Query(None, description="Filter by author name"),
     title: Optional[str] = Query(None, description="Search by title"),
@@ -259,6 +259,9 @@ async def get_supported_sites(
             {"id": "spacebattles", "name": "SpaceBattles"},
             {"id": "archive", "name": "Archive of Our Own"},
             {"id": "webnovel", "name": "WebNovel"},
+            {"id": "sufficientvelocity", "name": "Sufficient Velocity"},
+            {"id": "questionablequesting", "name": "Questionable Questing"},
+            {"id": "scribblehub", "name": "ScribbleHub"},
         ]
     }
 

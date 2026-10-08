@@ -35,6 +35,9 @@ const getSiteDisplayName = (site: string | null | undefined): string => {
     spacebattles: "SpaceBattles",
     archive: "Archive of Our Own",
     webnovel: "WebNovel",
+    sufficientvelocity: "Sufficient Velocity",
+    questionablequesting: "Questionable Questing",
+    scribblehub: "ScribbleHub",
   };
   return sites[site.toLowerCase()] || site;
 };

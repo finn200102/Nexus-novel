@@ -25,6 +25,9 @@ const SITE_OPTIONS = [
   { value: "fanfiction", label: "FanFiction" },
   { value: "archive", label: "AO3" },
   { value: "webnovel", label: "WebNovel" },
+  { value: "sufficientvelocity", label: "Sufficient Velocity" },
+  { value: "questionablequesting", label: "Questionable Questing" },
+  { value: "scribblehub", label: "ScribbleHub" },
 ];
 
 const ITEMS_PER_PAGE = 20;

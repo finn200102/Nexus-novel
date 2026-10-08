@@ -14,6 +14,9 @@ const sourceOptions = [
   { value: "spacebattles", label: "SpaceBattles" },
   { value: "fanfiction", label: "FanFiction" },
   { value: "ao3", label: "AO3" },
+  { value: "sufficientvelocity", label: "Sufficient Velocity" },
+  { value: "questionablequesting", label: "Questionable Questing" },
+  { value: "scribblehub", label: "ScribbleHub" },
 ];
 
 const LibraryPage: React.FC<LibraryPageProps> = ({ library_id }) => {

@@ -434,6 +434,9 @@ def supported_src(url):
         "archiveofourown.org",
         "www.webnovel.com",
         "webnovel.com",
+        "forums.sufficientvelocity.com",
+        "forum.questionablequesting.com",
+        "www.scribblehub.com",
     ]
 
     def check_url_supported(url):
@@ -456,6 +459,12 @@ def get_site_name_from_url(url):
         return "archive"
     if "webnovel" in url:
         return "webnovel"
+    if "sufficientvelocity" in url:
+        return "sufficientvelocity"
+    if "questionablequesting" in url:
+        return "questionablequesting"
+    if "scribblehub" in url:
+        return "scribblehub"
     return None
 
 

@@ -69,6 +69,9 @@ def extract_story_id_from_url(url: str | None, site_name: str | None) -> int | N
         "fanfiction": r"/s/(\d+)(?:/|$)",
         "royalroad": r"/fiction/(\d+)(?:/|$)",
         "spacebattles": r"/threads/(?:[^/]+\.)?(\d+)(?:/|$)",
+        "sufficientvelocity": r"/threads/(?:[^/]+\.)?(\d+)(?:/|$)",
+        "questionablequesting": r"/threads/(?:[^/]+\.)?(\d+)(?:/|$)",
+        "scribblehub": r"/series/(\d+)(?:/|$)",
         "archive": r"/works/(\d+)(?:/|$)",
         "webnovel": r"/book/[^_/?]+_(\d+)(?:[/?]|$)",
     }
@@ -315,6 +318,9 @@ def supported_src(url):
         "www.fanfiction.net",
         "archiveofourown.org",
         "www.webnovel.com",
+        "forums.sufficientvelocity.com",
+        "forum.questionablequesting.com",
+        "www.scribblehub.com",
     ]
 
     def check_url_supported(url):
@@ -337,6 +343,12 @@ def get_site_name_from_url(url):
         return "archive"
     if "webnovel" in url:
         return "webnovel"
+    if "sufficientvelocity" in url:
+        return "sufficientvelocity"
+    if "questionablequesting" in url:
+        return "questionablequesting"
+    if "scribblehub" in url:
+        return "scribblehub"
     return None
 
 
