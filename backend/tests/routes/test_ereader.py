@@ -341,6 +341,36 @@ def test_kosync_round_trip_updates_reading_progress(client, auth_headers, reader
     assert db.query(KosyncProgress).filter(KosyncProgress.user_id == reader.id).count() == 1
 
 
+def test_kosync_returns_web_progress_when_it_is_further_along(client, auth_headers, reader, library, db):
+    opds_secret = make_app_password(client, auth_headers, "opds")
+    kosync_secret = make_app_password(client, auth_headers, "kosync")
+    novel = add_novel(db, library, "Two Way", chapters=3)
+    epub = client.get(f"/opds/novels/{novel.id}.epub", headers=basic(reader.username, opds_secret)).content
+    document = partial_md5(epub)
+    sync_headers = {"x-auth-user": reader.username, "x-auth-key": _kosync_key(kosync_secret)}
+
+    # Nothing read anywhere yet.
+    assert client.get(f"/kosync/syncs/progress/{document}", headers=sync_headers).json() == {}
+
+    client.put(
+        "/kosync/syncs/progress",
+        json={"document": document, "progress": "/body/DocFragment[1]/body/p[3]/text().0", "percentage": 0.1, "device": "KOReader", "device_id": "kobo-1"},
+        headers=sync_headers,
+    )
+    # Same chapter on both sides: the device's exact position wins.
+    assert client.get(f"/kosync/syncs/progress/{document}", headers=sync_headers).json()["device"] == "KOReader"
+
+    # The web reader moved on to chapter 3.
+    progress = db.query(ReadingProgress).filter(ReadingProgress.novel_id == novel.id, ReadingProgress.user_id == reader.id).one()
+    progress.chapter_number = 3
+    db.commit()
+
+    got = client.get(f"/kosync/syncs/progress/{document}", headers=sync_headers).json()
+    assert got["progress"] == "/body/DocFragment[3]/body"
+    assert got["percentage"] == pytest.approx(2 / 3, abs=1e-3)
+    assert got["device_id"] == "nexus-web"
+
+
 def test_kosync_accepts_either_partial_md5_variant(client, auth_headers, reader, library, db):
     opds_secret = make_app_password(client, auth_headers, "opds")
     kosync_secret = make_app_password(client, auth_headers, "kosync")

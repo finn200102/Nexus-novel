@@ -105,11 +105,15 @@ def put_progress(
 
 @router.get("/syncs/progress/{document}")
 def get_progress(document: str, db: Session = Depends(get_db), user: User = Depends(get_kosync_user)):
+    document = document.strip().lower()
     record = (
         db.query(KosyncProgress)
-        .filter(KosyncProgress.user_id == user.id, KosyncProgress.document == document.strip().lower())
+        .filter(KosyncProgress.user_id == user.id, KosyncProgress.document == document)
         .first()
     )
+    web = _web_position(db, user, document, record)
+    if web is not None:
+        return web
     if record is None:
         return {}
     return {
@@ -157,3 +161,40 @@ def _store_reading_progress(db: Session, user: User, novel_id: int, chapter: Cha
     progress.chapter_number = chapter.chapter_number
     progress.position = 0
     progress.percent = min(max(fraction * 100, 0), 100)
+
+
+def _web_position(db: Session, user: User, document: str, record: KosyncProgress | None) -> dict | None:
+    """The web reader's chapter, when it is further along than the device.
+
+    Reading only moves forward in practice, so a later chapter in the web app
+    wins; KOReader then offers to jump there. The position is the start of
+    that chapter (DocFragment N+1 for spine index N).
+    """
+    build = (
+        db.query(EpubBuild)
+        .filter(or_(EpubBuild.partial_md5 == document, EpubBuild.partial_md5_lua == document))
+        .order_by(EpubBuild.id.desc())
+        .first()
+    )
+    spine = list(build.spine or []) if build is not None else []
+    if not spine or _owned_novel(db, user, build.novel_id) is None:
+        return None
+    web = db.query(ReadingProgress).filter(
+        ReadingProgress.user_id == user.id,
+        ReadingProgress.novel_id == build.novel_id,
+    ).first()
+    if web is None or web.chapter_number not in spine:
+        return None
+    web_index = spine.index(web.chapter_number)
+    if record is not None:
+        device_chapter = _chapter_number(spine, record)
+        if device_chapter in spine and spine.index(device_chapter) >= web_index:
+            return None
+    return {
+        "document": document,
+        "progress": f"/body/DocFragment[{web_index + 1}]/body",
+        "percentage": round(web_index / len(spine), 4),
+        "device": "Nexus web reader",
+        "device_id": "nexus-web",
+        "timestamp": int(time.time()),
+    }
