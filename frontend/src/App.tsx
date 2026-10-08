@@ -18,6 +18,7 @@ import Discover from "./pages/Discover";
 import DiscoverNovelDetail from "./pages/DiscoverNovelDetail";
 import Downloads from "./pages/Downloads";
 import Activity from "./pages/Activity";
+import NotificationSettings from "./pages/NotificationSettings";
 import Operations from "./pages/Operations";
 import ScrapeJobs from "./pages/ScrapeJobs";
 import Integrations from "./pages/Integrations";
@@ -58,6 +59,7 @@ const App: React.FC = () => {
         <Route path="/discover/:site" element={<Protected><WrappedDiscover /></Protected>} />
         <Route path="/discover/:site/:novelId" element={<Protected><WrappedDiscoverDetail /></Protected>} />
         <Route path="/downloads" element={<Protected><WrappedDownloads /></Protected>} />
+        <Route path="/notifications" element={<Protected><WrappedNotifications /></Protected>} />
         <Route path="/activity" element={<Protected><WrappedActivity /></Protected>} />
         <Route path="/operations" element={<Protected><WrappedOperations /></Protected>} />
         <Route path="/scrape-jobs" element={<Protected><WrappedScrapeJobs /></Protected>} />
@@ -184,6 +186,12 @@ const WrappedStoryGuide = () => (
 const WrappedStoryGuideReview = () => (
   <Layout>
     <StoryGuideReview />
+  </Layout>
+);
+
+const WrappedNotifications = () => (
+  <Layout>
+    <NotificationSettings />
   </Layout>
 );
 

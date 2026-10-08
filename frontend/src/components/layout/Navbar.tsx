@@ -146,6 +146,7 @@ const Navbar: React.FC<NavbarProps> = ({ onRequestCreateLibrary }) => {
             <span className="sidebar__avatar">{(user?.username || "R").slice(0, 1).toUpperCase()}</span>
             <div>
               <strong>{isAuthenticated ? user?.username || "Reader" : "Local reader"}</strong>
+              {isAuthenticated && <Link to="/notifications">Notifications</Link>}
               {isAuthenticated && <button type="button" onClick={logout}>Sign out</button>}
             </div>
           </div>

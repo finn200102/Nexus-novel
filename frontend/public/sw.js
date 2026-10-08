@@ -40,3 +40,38 @@ self.addEventListener("fetch", (event) => {
   }
   event.respondWith(fetch(request).then((res) => remember(request, res)).catch(() => caches.match(request)));
 });
+
+// Web Push: the server sends {title, body, url, tag}. Notifications with the
+// same tag replace each other, so one story shows its newest update.
+self.addEventListener("push", (event) => {
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch {
+    payload = { body: event.data ? event.data.text() : "" };
+  }
+  const title = typeof payload.title === "string" && payload.title ? payload.title : "Nexus Novel";
+  const options = {
+    body: typeof payload.body === "string" ? payload.body : "",
+    tag: typeof payload.tag === "string" ? payload.tag : undefined,
+    data: { url: typeof payload.url === "string" ? payload.url : "/" },
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const requested = (event.notification.data && event.notification.data.url) || "/";
+  // Only same-origin paths are opened, whatever the payload says.
+  const target = new URL(requested, self.location.origin);
+  const url = target.origin === self.location.origin ? target.href : self.location.origin + "/";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      const existing = clients.find((client) => "focus" in client);
+      if (existing) {
+        return existing.navigate(url).catch(() => null).then((client) => (client || existing).focus());
+      }
+      return self.clients.openWindow(url);
+    })
+  );
+});

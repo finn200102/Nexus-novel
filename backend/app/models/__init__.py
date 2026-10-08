@@ -13,6 +13,7 @@ from .follow import UserNovelFollow
 from .genre import Genre
 from .library import Library
 from .metadata_webhook_delivery import MetadataWebhookDelivery
+from .notification import NotificationChannel, PushSubscription
 from .novel import Novel, novel_tag
 from .reading_annotation import ReadingAnnotation
 from .reading_history import ReadingHistory
@@ -37,6 +38,8 @@ __all__ = [
     "Genre",
     "Library",
     "MetadataWebhookDelivery",
+    "NotificationChannel",
+    "PushSubscription",
     "Novel",
     "NovelUpdateEvent",
     "ReadingAnnotation",

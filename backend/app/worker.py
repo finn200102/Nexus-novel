@@ -1,6 +1,7 @@
 """Durable background worker for automatic chapter downloads and digests."""
 
 import asyncio
+import logging
 import signal
 from datetime import UTC, datetime
 from sqlalchemy import or_
@@ -14,6 +15,7 @@ from app.models.follow import UserNovelFollow
 from app.models.update_event import NovelUpdateEvent
 from app.routers.chapter import run_queued_download
 from app.services.audio_job_service import process_audio_job
+from app.services.notification_delivery import deliver_due_notifications
 
 
 def release_due_notifications(db) -> int:
@@ -84,6 +86,23 @@ def process_downloads() -> int:
     return len(ids)
 
 
+def process_notifications() -> int:
+    """Send released update events to push devices and Apprise channels.
+
+    Runs on a worker thread so slow push services never stall the loop, and
+    logs rather than raises so one bad delivery cannot stop the worker.
+    """
+    db = SessionLocal()
+    try:
+        return deliver_due_notifications(db).events
+    except Exception:
+        logging.getLogger(__name__).exception("Notification delivery failed")
+        db.rollback()
+        return 0
+    finally:
+        db.close()
+
+
 def process_audio_jobs() -> int:
     db = SessionLocal()
     try:
@@ -123,6 +142,7 @@ async def run() -> None:
             release_due_notifications(db)
         finally:
             db.close()
+        await asyncio.to_thread(process_notifications)
         try:
             await asyncio.wait_for(stop.wait(), timeout=5)
         except asyncio.TimeoutError:
