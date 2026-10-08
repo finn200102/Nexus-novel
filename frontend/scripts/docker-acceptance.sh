@@ -9,10 +9,12 @@ PROJECT=${NEXUS_E2E_PROJECT:-nexus-e2e}
 PORT=${NEXUS_E2E_PORT:-18180}
 ARTIFACT_DIR=${NEXUS_E2E_ARTIFACT_DIR:-$HERE/../artifacts/docker-acceptance}
 COMPOSE_FILE=$ROOT/docker-compose.yml
+BUILD_COMPOSE_FILE=$ROOT/docker-compose.build.yml
 ACCEPTANCE_COMPOSE_FILE=$ROOT/docker-compose.acceptance.yml
 
+# The acceptance stack always builds from this checkout, never from ghcr.io.
 compose() {
-  docker compose -p "$PROJECT" -f "$COMPOSE_FILE" -f "$ACCEPTANCE_COMPOSE_FILE" "$@"
+  docker compose -p "$PROJECT" -f "$COMPOSE_FILE" -f "$BUILD_COMPOSE_FILE" -f "$ACCEPTANCE_COMPOSE_FILE" "$@"
 }
 
 mkdir -p "$ARTIFACT_DIR"
@@ -80,6 +82,8 @@ until curl --fail --silent "http://127.0.0.1:$PORT/" >/dev/null; do
   fi
   sleep 2
 done
+# The same health route the published-stack smoke check uses, through the proxy.
+curl --fail --silent --show-error "http://127.0.0.1:$PORT/api/health" >/dev/null
 
 # Create a disposable administrator through the real API.  Each isolated
 # Compose project begins with empty volumes, so this account never touches a
