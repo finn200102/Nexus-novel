@@ -8,7 +8,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from config.database import get_db
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, require_admin
 from config.settings import settings
 from app.models.download_job import ChapterDownloadJob
 from app.models.follow import UserNovelFollow
@@ -191,14 +191,14 @@ def summary(
 
 
 @router.get("/schedules")
-def list_refresh_schedules(current_user: User = Depends(get_current_user)):
+def list_refresh_schedules(current_user: User = Depends(require_admin)):
     return _metadata_proxy("GET", "/api/refresh-schedules/")
 
 
 @router.post("/schedules", status_code=201)
 def create_refresh_schedule(
     request: RefreshScheduleCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     return _metadata_proxy("POST", "/api/refresh-schedules/", json=request.model_dump())
 
@@ -207,7 +207,7 @@ def create_refresh_schedule(
 def update_refresh_schedule(
     schedule_id: str,
     request: RefreshScheduleUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     return _metadata_proxy(
         "PATCH",
@@ -219,7 +219,7 @@ def update_refresh_schedule(
 @router.post("/schedules/{schedule_id}/run")
 def run_refresh_schedule(
     schedule_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     return _metadata_proxy("POST", f"/api/refresh-schedules/{schedule_id}/run")
 
@@ -227,7 +227,7 @@ def run_refresh_schedule(
 @router.delete("/schedules/{schedule_id}")
 def delete_refresh_schedule(
     schedule_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     return _metadata_proxy("DELETE", f"/api/refresh-schedules/{schedule_id}")
 
@@ -237,7 +237,7 @@ def list_metadata_jobs(
     status: str | None = Query(default=None),
     job_type: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     params = {"limit": limit}
     if status:
@@ -248,35 +248,35 @@ def list_metadata_jobs(
 
 
 @router.post("/metadata-jobs/{job_id}/retry")
-def retry_metadata_job(job_id: str, current_user: User = Depends(get_current_user)):
+def retry_metadata_job(job_id: str, current_user: User = Depends(require_admin)):
     return _metadata_proxy("POST", f"/api/jobs/{job_id}/retry")
 
 
 @router.delete("/metadata-jobs/{job_id}")
-def cancel_metadata_job(job_id: str, current_user: User = Depends(get_current_user)):
+def cancel_metadata_job(job_id: str, current_user: User = Depends(require_admin)):
     return _metadata_proxy("DELETE", f"/api/jobs/{job_id}")
 
 
 @router.post("/metadata-jobs/{job_id}/archive")
-def archive_metadata_job(job_id: str, current_user: User = Depends(get_current_user)):
+def archive_metadata_job(job_id: str, current_user: User = Depends(require_admin)):
     return _metadata_proxy("POST", f"/api/jobs/{job_id}/archive")
 
 
 @router.post("/metadata-jobs/archive-failed")
-def archive_failed_metadata_jobs(current_user: User = Depends(get_current_user)):
+def archive_failed_metadata_jobs(current_user: User = Depends(require_admin)):
     return _metadata_proxy("POST", "/api/jobs/archive-failed")
 
 
 @router.get("/source-health")
-def list_source_health(current_user: User = Depends(get_current_user)):
+def list_source_health(current_user: User = Depends(require_admin)):
     return _metadata_proxy("GET", "/api/jobs/source-health")
 
 
 @router.get("/source-policy")
-def source_policy(hours: int = Query(default=24, ge=1, le=720), current_user: User = Depends(get_current_user)):
+def source_policy(hours: int = Query(default=24, ge=1, le=720), current_user: User = Depends(require_admin)):
     return _metadata_proxy("GET", "/source-policy/summary", params={"hours": hours})
 
 
 @router.post("/source-health/{site}/reset")
-def reset_source_health(site: str, current_user: User = Depends(get_current_user)):
+def reset_source_health(site: str, current_user: User = Depends(require_admin)):
     return _metadata_proxy("POST", f"/api/jobs/source-health/{site}/reset")

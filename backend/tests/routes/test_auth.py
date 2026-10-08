@@ -323,6 +323,9 @@ def test_admin_routes_require_an_administrator(client):
 
     assert client.get("/admin/users", headers=bearer(reader)).status_code == status.HTTP_403_FORBIDDEN
     assert client.post("/admin/invites", json={}, headers=bearer(reader)).status_code == status.HTTP_403_FORBIDDEN
+    # Instance-wide metadata operations are administrator-only as well.
+    assert client.get("/operations/schedules", headers=bearer(reader)).status_code == status.HTTP_403_FORBIDDEN
+    assert client.post("/operations/metadata-jobs/x/retry", headers=bearer(reader)).status_code == status.HTTP_403_FORBIDDEN
 
 
 def test_admin_lists_promotes_and_disables_users(client):
