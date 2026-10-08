@@ -1,4 +1,4 @@
-import { Page, Route } from "@playwright/test";
+import { BrowserContext, Page, Route } from "@playwright/test";
 
 type MockApiOptions = {
   admin?: boolean;
@@ -32,7 +32,9 @@ const pathAndQuery = (route: Route) => {
   return `${url.pathname.replace(/^\/api(?=\/|$)/, "")}${url.search}`;
 };
 
-export async function installMockApi(page: Page, options: MockApiOptions = {}): Promise<MockApi> {
+// Pass the browser context instead of a page when a service worker is active:
+// requests the worker makes are only visible to context routes.
+export async function installMockApi(page: Page | BrowserContext, options: MockApiOptions = {}): Promise<MockApi> {
   let catalogJobStatus = "running";
   let previewCalls = 0;
   // The fake server mirrors the real session model: the refresh "cookie" is
