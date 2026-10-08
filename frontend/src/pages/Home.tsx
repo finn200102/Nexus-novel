@@ -16,6 +16,7 @@ import { novelService } from "../services/novelService";
 import { activityService, OperationsSummary } from "../services/activityService";
 import { Novel, NovelUpdateEvent } from "../types/novel";
 import defaultCoverImage from "../assets/cover.png";
+import ContinueReading from "../components/reader/ContinueReading";
 import "../styles/home.css";
 
 const formatCompact = (value: number) =>
@@ -98,6 +99,7 @@ const Home: React.FC = () => {
 
   return (
     <div className="dashboard" aria-live="polite">
+      <ContinueReading />
       <header className="dashboard__header">
         <div>
           <p className="dashboard__eyebrow">Overview</p>

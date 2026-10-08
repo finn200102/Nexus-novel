@@ -8,6 +8,13 @@ import { ChapterAudioJob, chapterAudioJobStore, chapterAudioStore, offlineReader
 import { mergeAudioSegments, OpenAICompatibleTtsConfig, splitTextForSynthesis, TtsProviderPresetId, TTS_PROVIDER_PRESETS, TtsRequestError, ttsService } from "../services/ttsService";
 import { audioService, ServerAudioJob } from "../services/audioService";
 import OfflineBadge from "../components/reader/OfflineBadge";
+import ChapterBody from "../components/reader/ChapterBody";
+import ChapterDrawer from "../components/reader/ChapterDrawer";
+import ReaderPrefsControls from "../components/reader/ReaderPrefsControls";
+import { AuthorNotesMode, readAuthorNotesMode, readLayout, ReaderLayout, writeAuthorNotesMode, writeLayout } from "../components/reader/readerSettings";
+import { scrollPercent } from "../components/reader/pagedMath";
+import { useReaderPaging } from "../hooks/useReaderPaging";
+import { useReaderTypography } from "../hooks/useReaderTypography";
 import "../styles/Reader.css";
 
 interface ChapterContent {
@@ -24,12 +31,15 @@ interface Novel {
   author: string;
   library_id: number;
   total_chapters: number;
+  next_unread_chapter_id?: number | null;
+  next_unread_chapter_number?: number | null;
 }
 
 interface ChapterSummary {
   id: number;
   chapter_number: number;
   title: string;
+  category?: string;
 }
 
 interface ReadingProgress {
@@ -81,11 +91,13 @@ const Reader: React.FC = () => {
   const [chapters, setChapters] = useState<ChapterSummary[]>([]);
   const [chaptersLoading, setChaptersLoading] = useState<boolean>(true);
   const [chaptersError, setChaptersError] = useState<string | null>(null);
-  const [fontScale, setFontScale] = useState(() => Number(localStorage.getItem("nexus-reader-font-scale")) || 1);
-  const [lineHeight, setLineHeight] = useState(() => Number(localStorage.getItem("nexus-reader-line-height")) || 1.8);
-  const [contentWidth, setContentWidth] = useState(() => Number(localStorage.getItem("nexus-reader-content-width")) || 760);
+  const typographyState = useReaderTypography(novel_id);
+  const { fontScale, lineHeight, contentWidth, theme } = typographyState.typography;
+  const { setFontScale, setLineHeight, setContentWidth, setTheme } = typographyState;
+  const [authorNotes, setAuthorNotes] = useState<AuthorNotesMode>(readAuthorNotesMode);
+  const [layout, setLayout] = useState<ReaderLayout>(readLayout);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [chapterQuery, setChapterQuery] = useState("");
-  const [theme, setTheme] = useState<"night" | "dusk" | "paper">(() => (localStorage.getItem("nexus-reader-theme") as "night" | "dusk" | "paper") || "night");
   const [progress, setProgress] = useState<ReadingProgress | null>(null);
   const [annotations, setAnnotations] = useState<ReadingAnnotation[]>([]);
   const [restoredPosition, setRestoredPosition] = useState(false);
@@ -189,17 +201,6 @@ const Reader: React.FC = () => {
   }, [novel_id, chapter_number]);
 
   useEffect(() => {
-    localStorage.setItem("nexus-reader-font-scale", String(fontScale));
-  }, [fontScale]);
-
-  useEffect(() => { localStorage.setItem("nexus-reader-line-height", String(lineHeight)); }, [lineHeight]);
-  useEffect(() => { localStorage.setItem("nexus-reader-content-width", String(contentWidth)); }, [contentWidth]);
-
-  useEffect(() => {
-    localStorage.setItem("nexus-reader-theme", theme);
-  }, [theme]);
-
-  useEffect(() => {
     localStorage.setItem("nexus-reader-tts-voice", voiceName);
   }, [voiceName]);
 
@@ -263,10 +264,16 @@ const Reader: React.FC = () => {
     const content = contentRef.current;
     if (!content || !chapter || !progress || progress.chapter_number !== chapter.chapter_number) return;
     window.requestAnimationFrame(() => {
-      content.scrollTop = progress.position || ((progress.percent / 100) * Math.max(content.scrollHeight - content.clientHeight, 0));
+      if (layout === "paged") {
+        const maxLeft = Math.max(content.scrollWidth - content.clientWidth, 0);
+        const column = content.clientWidth || 1;
+        content.scrollLeft = Math.round(((progress.percent / 100) * maxLeft) / column) * column;
+      } else {
+        content.scrollTop = progress.position || ((progress.percent / 100) * Math.max(content.scrollHeight - content.clientHeight, 0));
+      }
       setRestoredPosition(true);
     });
-  }, [chapter, progress]);
+  }, [chapter, progress, layout]);
 
   const chapterContent = chapter?.content;
   useEffect(() => {
@@ -314,14 +321,16 @@ const Reader: React.FC = () => {
     if (!content || !chapter) return;
     let timeout: number | undefined;
     const saveProgress = () => {
-      const maxScroll = Math.max(content.scrollHeight - content.clientHeight, 1);
-      const percent = Math.min(100, Math.max(0, (content.scrollTop / maxScroll) * 100));
+      const paged = layout === "paged";
+      const offset = paged ? content.scrollLeft : content.scrollTop;
+      const maxOffset = paged ? content.scrollWidth - content.clientWidth : content.scrollHeight - content.clientHeight;
+      const percent = scrollPercent(offset, maxOffset);
       window.clearTimeout(timeout);
       timeout = window.setTimeout(() => {
         chapterService.updateReadingProgress(
           novel_id,
           chapter.chapter_number,
-          Math.round(content.scrollTop),
+          Math.round(offset),
           percent
         ).catch((err) => console.error("Failed to save reading progress", err));
       }, 500);
@@ -331,11 +340,21 @@ const Reader: React.FC = () => {
       content.removeEventListener("scroll", saveProgress);
       window.clearTimeout(timeout);
     };
-  }, [chapter, novel_id, restoredPosition]);
+  }, [chapter, novel_id, restoredPosition, layout]);
 
   const goToChapter = useCallback((target: number) => {
     navigate(`/library/${library_id}/novels/${novel_id}/${target}`);
   }, [library_id, novel_id, navigate]);
+
+  const paging = useReaderPaging({
+    contentRef,
+    paged: layout === "paged",
+    layoutKey: `${chapter?.id ?? 0}-${contentWidth}-${fontScale}-${lineHeight}`,
+    onPreviousChapter: () => goToChapter(chapter_number - 1),
+    onNextChapter: () => goToChapter(chapter_number + 1),
+  });
+  const changeAuthorNotes = (mode: AuthorNotesMode) => { setAuthorNotes(mode); writeAuthorNotesMode(mode); };
+  const changeLayout = (next: ReaderLayout) => { setLayout(next); writeLayout(next); };
 
   const decreaseFont = () => setFontScale((prev) => Math.max(0.85, prev - 0.1));
   const increaseFont = () => setFontScale((prev) => Math.min(1.3, prev + 0.1));
@@ -692,7 +711,7 @@ const Reader: React.FC = () => {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [chapter_number, goToChapter, addAnnotation]);
+  }, [chapter_number, goToChapter, addAnnotation, setFontScale]);
 
   const removeAnnotation = async (id: number) => {
     await chapterService.deleteReadingAnnotation(id);
@@ -804,7 +823,15 @@ const Reader: React.FC = () => {
         </div>
       </aside>
 
-      <article className="reader-body">
+      <ChapterDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        novelId={novel_id}
+        chapters={chapters}
+        currentChapter={chapter.chapter_number}
+        onSelect={goToChapter}
+      />
+      <article className={`reader-body${paging.chromeHidden ? " reader-body--chrome-hidden" : ""}`}>
         {error && <div className="reader-sidebar__status">{error}</div>}
         <header className="reader-toolbar">
           <div>
@@ -814,6 +841,9 @@ const Reader: React.FC = () => {
           </div>
           <div className="reader-toolbar__controls">
             <div className="reader-toolbar__actions" aria-label="Reader actions">
+              <div className="reader-type-controls" aria-label="Chapter list">
+                <button type="button" onClick={() => setDrawerOpen(true)}>Chapters</button>
+              </div>
               <div className="reader-type-controls" aria-label="Text size">
                 <button type="button" onClick={decreaseFont} aria-label="Decrease text size">A−</button>
                 <button type="button" onClick={increaseFont} aria-label="Increase text size">A+</button>
@@ -879,13 +909,13 @@ const Reader: React.FC = () => {
         <div
           ref={contentRef}
           className="reader-content"
-          style={{ fontSize: `${1.05 * fontScale}rem`, lineHeight, maxWidth: `${contentWidth}px` }}
+          style={{ fontSize: `${1.05 * fontScale}rem`, lineHeight, maxWidth: `${contentWidth}px`, ...paging.pagedStyle }}
+          onClick={paging.onContentClick}
         >
-          {chapter.content.split("\n").map((paragraph, index) => (
-            <p key={index}>{paragraph}</p>
-          ))}
+          <ChapterBody content={chapter.content} authorNotes={authorNotes} />
         </div>
 
+        {layout === "paged" && <p className="reader-page-indicator" aria-live="polite">page {paging.page + 1} / {paging.pageCount}</p>}
         <div className="reader-navigation">
           <button
             className="prev-button"
@@ -894,6 +924,11 @@ const Reader: React.FC = () => {
           >
             Previous
           </button>
+          {novel.next_unread_chapter_number && novel.next_unread_chapter_number !== chapter.chapter_number + 1 && (
+            <button type="button" className="continue-button" onClick={() => goToChapter(novel.next_unread_chapter_number!)}>
+              Next unread · {novel.next_unread_chapter_number}
+            </button>
+          )}
           <button
             className="next-button"
             onClick={() => goToChapter(chapter.chapter_number + 1)}
@@ -904,6 +939,15 @@ const Reader: React.FC = () => {
         </div>
       </article>
       <aside className="reader-inspector" aria-label="Reader settings and notes">
+        <ReaderPrefsControls
+          authorNotes={authorNotes}
+          onAuthorNotes={changeAuthorNotes}
+          layout={layout}
+          onLayout={changeLayout}
+          hasStoryOverride={typographyState.hasStoryOverride}
+          onUseForAll={typographyState.useForAllStories}
+          onResetToGlobal={typographyState.resetToGlobal}
+        />
         <section className="reader-inspector__section">
           <header><strong>Reader</strong></header>
           <label>Theme</label>
