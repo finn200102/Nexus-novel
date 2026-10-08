@@ -8,7 +8,7 @@ import { Novel, NovelFollowSettings } from "../types/novel";
 import { NovelDetailHeroSkeleton } from "../components/common/Skeleton";
 import { useToast } from "../context/ToastContext";
 import { Bell } from "lucide-react";
-import { insightService, CanonicalWork, InsightSignal, SimilarNovel } from "../services/insightService";
+import { insightService, CanonicalWork, InsightSignal, SimilarNovel, StoryGuide } from "../services/insightService";
 import "../styles/novel-detail.css";
 
 interface NovelDetailProps {
@@ -28,6 +28,11 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
   const [canonicalWork, setCanonicalWork] = useState<CanonicalWork | null>(null);
   const [analysisState, setAnalysisState] = useState<string>("not_started");
   const [enriching, setEnriching] = useState(false);
+  const [storyGuide, setStoryGuide] = useState<StoryGuide | null>(null);
+  const [buildingGuide, setBuildingGuide] = useState(false);
+  // Start at zero so no asynchronous guide request can reveal material before
+  // the reader's saved position has loaded.
+  const [guideCutoff, setGuideCutoff] = useState(0);
   const { addToast } = useToast();
   const fetchNovel = useCallback(async () => {
     try {
@@ -57,13 +62,31 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
   }, [fetchNovel]);
 
   useEffect(() => {
+    let active = true;
+    chapterService.getReadingProgress(novelId)
+      .then((progress) => { if (active) setGuideCutoff(Math.max(0, progress?.chapter_number || 0)); })
+      .catch(() => { if (active) setGuideCutoff(0); });
+    return () => { active = false; };
+  }, [novelId]);
+
+  useEffect(() => {
     if (!novel?.metadata_id) return;
     let active = true;
-    Promise.all([insightService.analysis(novel.metadata_id), insightService.similar(novel.metadata_id), insightService.editions(novel.metadata_id).catch(() => null)])
-      .then(([analysis, matches, work]) => { if (active) { setSignals(analysis.signals || []); setSimilar(matches.results || []); setCanonicalWork(work); setAnalysisState(analysis.state || "not_started"); } })
-      .catch(() => { if (active) { setSignals([]); setSimilar([]); setCanonicalWork(null); setAnalysisState("not_started"); } });
+    Promise.all([
+      insightService.analysis(novel.metadata_id).catch(() => ({ state: "not_started" as const, signals: [] })),
+      insightService.similar(novel.metadata_id).catch(() => ({ results: [] })),
+      insightService.editions(novel.metadata_id).catch(() => null),
+      insightService.storyGuide(novel.metadata_id, guideCutoff).catch(() => null),
+    ]).then(([analysis, matches, work, guide]) => {
+      if (!active) return;
+      setSignals(analysis.signals || []);
+      setSimilar(matches.results || []);
+      setCanonicalWork(work);
+      setStoryGuide(guide);
+      setAnalysisState(analysis.state || "not_started");
+    });
     return () => { active = false; };
-  }, [novel?.metadata_id]);
+  }, [novel?.metadata_id, guideCutoff]);
 
   const handleEnrich = async () => {
     if (!novel?.metadata_id) return;
@@ -76,6 +99,25 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
       addToast("Could not queue local insights. You can try again safely.", "error");
     } finally {
       setEnriching(false);
+    }
+  };
+
+  const handleBuildStoryGuide = async () => {
+    if (!novel?.metadata_id) return;
+    setBuildingGuide(true);
+    try {
+      const result = await insightService.backfillStoryGuide(novel.metadata_id);
+      if (!result.chapter_count) {
+        addToast("Download at least one public chapter before building a Story Guide.", "info");
+      } else if (result.queued) {
+        addToast(`Queued ${result.queued} downloaded chapter${result.queued === 1 ? "" : "s"} for private analysis.`, "success");
+      } else {
+        addToast("Every downloaded chapter is already in the Story Guide queue or guide.", "info");
+      }
+    } catch {
+      addToast("Could not queue Story Guide analysis. You can try again safely.", "error");
+    } finally {
+      setBuildingGuide(false);
     }
   };
 
@@ -365,6 +407,18 @@ const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
           {novel.metadata_id && <section className="novel-insights" aria-label="Nexus insights">
             <div className="novel-insights__panel"><p className="novel-insights__eyebrow">Nexus insights</p><h2>Text signals</h2><p className="novel-insights__notice">Local, cautious classifier signals. They never replace source facts.</p>{signals.length > 0 ? <div className="novel-insights__chips">{signals.map((signal) => <span key={`${signal.family}:${signal.value}`} title={`${signal.model_version} · ${(signal.confidence || 0) * 100}% confidence`}>{signal.family.replace(/_/g, " ")}: <strong>{signal.value}</strong></span>)}</div> : <div className="novel-insights__empty"><span>{analysisState === "queued" || analysisState === "running" ? "Analysis is running in the low-priority local worker." : "No local text signals yet."}</span><button type="button" className="novel-insights__browse" disabled={enriching || analysisState === "queued" || analysisState === "running"} onClick={() => void handleEnrich()}>{enriching ? "Queueing…" : analysisState === "queued" || analysisState === "running" ? "Analysis queued" : "Generate insights"}</button></div>}</div>
             {similar.length > 0 && <div className="novel-insights__panel"><p className="novel-insights__eyebrow">More to explore</p><h2>Similar stories</h2><div className="novel-insights__similar">{similar.map((match) => <button type="button" key={match.novel_id} onClick={() => window.location.assign(`/discover/all/${match.novel_id}`)}><strong>{match.title}</strong><small>{match.author || "Unknown author"} · {match.explanation}</small></button>)}</div><button type="button" className="novel-insights__browse" onClick={() => window.location.assign(`/discover/all?similar_to=${novel.id}`)}>Browse all similar stories</button></div>}
+            {storyGuide && !storyGuide.unavailable && <div className="novel-insights__panel novel-insights__guide">
+              <p className="novel-insights__eyebrow">Story guide</p>
+              <h2>Private chapter knowledge</h2>
+              {storyGuide.chapters_analyzed ? <>
+                <p className="novel-insights__notice">Built through chapter {storyGuide.through_chapter} · {storyGuide.provider === "fixture" ? "local structured extraction" : `citation-validated ${storyGuide.model || "analysis"}`}. Future chapters are excluded.</p>
+                <div className="novel-insights__guide-grid">
+                  <div><h3>Characters</h3>{storyGuide.characters.slice(0, 6).map((character) => <article key={character.name}><strong>{character.name}</strong><small>{character.roles.join(" · ")} · ch. {character.first_seen_chapter}–{character.last_seen_chapter}</small><p>{character.descriptions[0] || "Mentioned in the analyzed chapters."}</p></article>)}</div>
+                  <div><h3>Chapter index</h3>{storyGuide.chapters.slice(-3).reverse().map((chapter) => <article key={chapter.chapter}><strong>Chapter {chapter.chapter}: {chapter.title}</strong><p>{chapter.chapter_summary}</p><small>{chapter.point_of_view}{chapter.setting ? ` · ${chapter.setting}` : ""}</small>{chapter.tags.length > 0 && <div className="novel-insights__chips novel-insights__chapter-tags">{chapter.tags.map((tag) => <span key={`${tag.category}:${tag.label}`}>chapter tag: <strong>{tag.label}</strong></span>)}</div>}</article>)}</div>
+                </div>
+                <button type="button" className="novel-insights__browse" onClick={() => window.location.assign(`/story-guide/${novel.metadata_id}?through_chapter=${guideCutoff}`)}>Open full Story Guide</button>
+              </> : <div className="novel-insights__empty"><span>Build a spoiler-bounded private guide with characters, POV, settings, events, recaps, and chapter tags from your downloaded chapters.</span><button type="button" className="novel-insights__browse" disabled={buildingGuide} onClick={() => void handleBuildStoryGuide()}>{buildingGuide ? "Queueing guide…" : "Analyze downloaded chapters"}</button><button type="button" className="novel-insights__browse" onClick={() => window.location.assign(`/story-guide/${novel.metadata_id}?through_chapter=${guideCutoff}`)}>Open Story Guide</button></div>}
+            </div>}
             {canonicalWork && <div className="novel-insights__panel"><p className="novel-insights__eyebrow">Editions</p><h2>{canonicalWork.editions.length} linked edition{canonicalWork.editions.length === 1 ? "" : "s"}</h2><p className="novel-insights__notice">Source records and reading state stay separate; uncertain chapter mappings are never merged automatically.</p><div className="novel-insights__chips">{canonicalWork.editions.map((edition) => <span key={edition.id}>{edition.edition_kind}{edition.language ? ` · ${edition.language}` : ""}</span>)}</div></div>}
           </section>}
         </div>

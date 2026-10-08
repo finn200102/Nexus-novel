@@ -526,3 +526,25 @@ def test_update_events_are_user_scoped_and_markable(client_with_auth, db):
     )
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["read_at"] is not None
+
+
+def test_background_metadata_calls_run_on_the_owning_event_loop():
+    """The pooled metadata client must never be used from a second loop."""
+    import asyncio
+    import threading
+
+    from app.routers.novel import _run_metadata_call
+
+    loop = asyncio.new_event_loop()
+    thread = threading.Thread(target=loop.run_forever, daemon=True)
+    thread.start()
+
+    async def which_loop():
+        return asyncio.get_running_loop()
+
+    try:
+        assert _run_metadata_call(which_loop(), loop) is loop
+    finally:
+        loop.call_soon_threadsafe(loop.stop)
+        thread.join(timeout=5)
+        loop.close()

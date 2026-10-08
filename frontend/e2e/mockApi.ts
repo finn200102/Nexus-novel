@@ -91,12 +91,17 @@ export async function installMockApi(page: Page, options: MockApiOptions = {}) {
       await json(route, [{ site: "fanfiction", status: "degraded", circuit_state: "half_open", failure_count: 1, last_latency_ms: 1200, last_success_at: "2026-07-26T11:58:00Z", last_failure_at: "2026-07-26T11:59:00Z", last_error_code: "timeout", last_error: "Fixture timeout" }]);
       return;
     }
+    if (path.startsWith("/operations/source-policy")) {
+      await json(route, { hours: 24, sources: [{ site: "fanfiction", requests: 4, cache_hit_percent: 25, average_latency_ms: 1200, last_request_at: "2026-07-26T11:59:00Z", circuit_state: "half_open", last_error_category: "timeout", average_job_duration_seconds: 3, retention_days: 30 }] });
+      return;
+    }
     if (path.startsWith("/activity/feed") || path.startsWith("/novel/updates")) {
       await json(route, []);
       return;
     }
     if (path === "/catalog-scrapes/capabilities") {
-      await json(route, { modes: ["top_rated", "newest", "most_reviewed", "most_favorited", "most_followed", "genre", "crossover", "search", "custom_urls"], filters: ["fandom", "genres", "rating", "language", "status", "word_count", "statistics"], media: [{ value: "book", label: "Books" }, { value: "tv", label: "TV Shows" }], rate_limit: "1 request/sec" });
+      const capability = { site: "fanfiction", name: "FanFiction.net", adapter_version: 2, modes: ["top_rated", "newest", "most_reviewed", "most_favorited", "most_followed", "genre", "crossover", "search", "custom_urls"], filters: ["fandoms", "genres", "rating", "language", "status", "word_count", "statistics"], remote_filters: ["fandoms", "genres", "rating", "language", "status", "word_count", "statistics"], local_filters: ["min_words", "min_favorites", "min_follows", "min_reviews"], media: [{ value: "book", label: "Books" }, { value: "tv", label: "TV Shows" }], rate_limit: "1 request/sec", policy: "Fixture source" };
+      await json(route, { sources: [capability], default_site: "fanfiction", version: 2 });
       return;
     }
     if (path.startsWith("/catalog-scrapes/taxonomies/")) {

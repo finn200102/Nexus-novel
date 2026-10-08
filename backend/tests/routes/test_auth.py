@@ -80,3 +80,44 @@ def test_login_success(client, db):
 
     # Verify the returned ID matches the created user
     assert response.json()["id"] == db_user.id
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"username": "shortpass", "password": "1234567"},
+        {"username": "longpass", "password": "x" * 73},
+        {"username": "   ", "password": "password123"},
+    ],
+)
+def test_signup_rejects_invalid_credentials(client, db, payload):
+    response = client.post("/auth/signup", json=payload)
+
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+def test_insecure_default_secret_is_replaced_by_persisted_key(tmp_path, monkeypatch):
+    from config.settings import Settings
+
+    monkeypatch.delenv("NEXUS_SECRET_KEY_FILE", raising=False)
+    first = Settings(SECRET_KEY="nexus-local-development-secret-change-me", DOWNLOAD_PATH=str(tmp_path))
+    second = Settings(SECRET_KEY="", DOWNLOAD_PATH=str(tmp_path))
+
+    assert first.SECRET_KEY == second.SECRET_KEY
+    assert len(first.SECRET_KEY) >= 32
+    assert (tmp_path / ".nexus-secret-key").stat().st_mode & 0o777 == 0o600
+    assert Settings(SECRET_KEY="operator-chosen", DOWNLOAD_PATH=str(tmp_path)).SECRET_KEY == "operator-chosen"
+
+
+def test_bootstrap_admin_is_not_granted_when_an_admin_exists(db, monkeypatch):
+    from app import main
+    from app.models.user import User
+
+    db.add_all([User(username="owner", password="x", is_admin=True), User(username="user", password="x")])
+    db.commit()
+    monkeypatch.setattr(main, "SessionLocal", lambda: db)
+    monkeypatch.setattr(db, "close", lambda: None)
+
+    main.ensure_local_admin()
+
+    assert get_user_by_username(db, "user").first().is_admin is False

@@ -18,6 +18,6 @@ test.describe("Nexus smoke workflows", () => {
     await signedInPage.goto("/scrape-jobs");
     await expect(signedInPage.getByRole("heading", { name: "Scrape Jobs" })).toBeVisible();
     await expect(signedInPage.getByRole("button", { name: /custom url list/i })).toBeVisible();
-    await expect(signedInPage.getByRole("button", { name: /crossover list/i })).toBeVisible();
+    await expect(signedInPage.getByRole("button", { name: /^crossover$/i })).toBeVisible();
   });
 });

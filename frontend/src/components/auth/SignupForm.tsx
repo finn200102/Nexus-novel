@@ -71,6 +71,8 @@ const SignupForm: React.FC = () => {
           value={formData.password}
           onChange={handleChange}
           required
+          minLength={8}
+          autoComplete="new-password"
           className="form-input"
         />
       </div>

@@ -7,7 +7,7 @@ import { useToast } from "../context/ToastContext";
 import { DiscoveredNovel } from "../types/discovery";
 import NovelDetails from "../components/novel/NovelDetails";
 import { NovelDetailHeroSkeleton } from "../components/common/Skeleton";
-import { insightService, CanonicalWork, InsightSignal, SimilarNovel } from "../services/insightService";
+import { insightService, CanonicalWork, InsightSignal, SimilarNovel, StoryGuide } from "../services/insightService";
 import "../styles/novel-detail.css";
 
 const DiscoverNovelDetail: React.FC = () => {
@@ -25,6 +25,7 @@ const DiscoverNovelDetail: React.FC = () => {
   const [canonicalWork, setCanonicalWork] = useState<CanonicalWork | null>(null);
   const [analysisState, setAnalysisState] = useState<string>("not_started");
   const [enriching, setEnriching] = useState(false);
+  const [storyGuide, setStoryGuide] = useState<StoryGuide | null>(null);
 
   const fetchNovel = useCallback(async () => {
     if (!novelId) return;
@@ -48,9 +49,22 @@ const DiscoverNovelDetail: React.FC = () => {
   useEffect(() => {
     if (!novelId) return;
     let active = true;
-    Promise.all([insightService.analysis(Number(novelId)), insightService.similar(Number(novelId)), insightService.editions(Number(novelId)).catch(() => null)])
-      .then(([analysis, matches, work]) => { if (active) { setSignals(analysis.signals || []); setSimilar(matches.results || []); setCanonicalWork(work); setAnalysisState(analysis.state || "not_started"); } })
-      .catch(() => undefined);
+    Promise.all([
+      insightService.analysis(Number(novelId)).catch(() => ({ state: "not_started" as const, signals: [] })),
+      insightService.similar(Number(novelId)).catch(() => ({ results: [] })),
+      insightService.editions(Number(novelId)).catch(() => null),
+      // Discovery has no user-specific reading position. Keep the optional
+      // guide empty until the work is opened from a library and a safe cutoff
+      // can be supplied.
+      insightService.storyGuide(Number(novelId), 0).catch(() => null),
+    ]).then(([analysis, matches, work, guide]) => {
+      if (!active) return;
+      setSignals(analysis.signals || []);
+      setSimilar(matches.results || []);
+      setCanonicalWork(work);
+      setStoryGuide(guide);
+      setAnalysisState(analysis.state || "not_started");
+    });
     return () => { active = false; };
   }, [novelId]);
 
@@ -250,6 +264,7 @@ const DiscoverNovelDetail: React.FC = () => {
       <section className="novel-insights">
         <div className="novel-insights__panel"><p className="novel-insights__eyebrow">Nexus insights</p><h2>Text signals</h2><p className="novel-insights__notice">Local classifier output. Source genres and tags remain separate.</p>{signals.length > 0 ? <div className="novel-insights__chips">{signals.map((signal) => <span key={`${signal.family}:${signal.value}`} title={`${signal.model_version} · ${(signal.confidence || 0) * 100}% confidence`}>{signal.family.replace(/_/g, " ")}: <strong>{signal.value}</strong></span>)}</div> : <div className="novel-insights__empty"><span>{analysisState === "queued" || analysisState === "running" ? "Analysis is running in the low-priority local worker." : "No local text signals yet."}</span><button type="button" className="novel-insights__browse" disabled={enriching || analysisState === "queued" || analysisState === "running"} onClick={() => void handleEnrich()}>{enriching ? "Queueing…" : analysisState === "queued" || analysisState === "running" ? "Analysis queued" : "Generate insights"}</button></div>}</div>
         {similar.length > 0 && <div className="novel-insights__panel"><p className="novel-insights__eyebrow">More to explore</p><h2>Similar stories</h2><div className="novel-insights__similar">{similar.map((match) => <button type="button" key={match.novel_id} onClick={() => navigate(`/discover/all/${match.novel_id}`)}><strong>{match.title}</strong><small>{match.author || "Unknown author"} · {match.explanation}</small></button>)}</div><button type="button" className="novel-insights__browse" onClick={() => navigate(`/discover/all?similar_to=${novel.id}`)}>Browse all similar stories</button></div>}
+        {storyGuide && !storyGuide.unavailable && <div className="novel-insights__panel novel-insights__guide"><p className="novel-insights__eyebrow">Story guide</p><h2>Private chapter knowledge</h2>{storyGuide.chapters_analyzed ? <><p className="novel-insights__notice">Built through chapter {storyGuide.through_chapter}; future chapters are excluded.</p><div className="novel-insights__guide-grid"><div><h3>Characters</h3>{storyGuide.characters.slice(0, 6).map((character) => <article key={character.name}><strong>{character.name}</strong><small>{character.roles.join(" · ")} · ch. {character.first_seen_chapter}–{character.last_seen_chapter}</small><p>{character.descriptions[0] || "Mentioned in the analyzed chapters."}</p></article>)}</div><div><h3>Latest recap</h3>{storyGuide.chapters.slice(-2).reverse().map((chapter) => <article key={chapter.chapter}><strong>Chapter {chapter.chapter}: {chapter.title}</strong><p>{chapter.chapter_summary}</p><small>{chapter.point_of_view}{chapter.setting ? ` · ${chapter.setting}` : ""}</small></article>)}</div></div></> : <p className="novel-insights__notice">A Story Guide appears after a public chapter is downloaded and analyzed.</p>}</div>}
         {canonicalWork && <div className="novel-insights__panel"><p className="novel-insights__eyebrow">Editions</p><h2>{canonicalWork.editions.length} linked edition{canonicalWork.editions.length === 1 ? "" : "s"}</h2><p className="novel-insights__notice">Source records and reader state are kept separate. Uncertain chapter mappings remain visible for review.</p><div className="novel-insights__chips">{canonicalWork.editions.map((edition) => <span key={edition.id}>{edition.edition_kind}{edition.language ? ` · ${edition.language}` : ""}</span>)}</div></div>}
       </section>
     </div>

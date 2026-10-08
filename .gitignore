@@ -42,3 +42,6 @@ backend/app/data/voices-v1.0.bin
 # Browser acceptance artifacts are generated locally and can be large.
 frontend/playwright-report/
 frontend/test-results/
+
+# Playwright acceptance output
+frontend/artifacts/

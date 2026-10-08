@@ -26,17 +26,9 @@ import sys
 from dotenv import load_dotenv
 from app.logging_config import get_logger, get_request_id
 
-import pybindings
-from app.services.novel_downloader.fetcher import fetch_story_data_by_url, fetch_chapter
 from app.services import metadata_client
-from app.services.novel_downloader.parser import (
-    parse_novel_data,
-    parse_author_data,
-    parse_chapter_data,
-    parse_single_chapter_data,
-)
 import asyncio
-from datetime import datetime
+from datetime import UTC, datetime
 from io import BytesIO
 from html import escape
 from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
@@ -104,7 +96,7 @@ def run_queued_download(job_id: int, db_session_factory):
         # the downloader opens its worker session.
         if chapter.content_status == ContentStatus.MISSING:
             chapter.content_status = ContentStatus.PROCESSING
-            chapter.download_started_at = datetime.utcnow()
+            chapter.download_started_at = datetime.now(UTC)
             chapter.download_error = None
             db.commit()
         download_chapter_background(
@@ -178,7 +170,7 @@ def download_chapter_background(
                 chapter_id,
                 {
                     "content_status": ContentStatus.FAILED,
-                    "download_finished_at": datetime.utcnow(),
+                    "download_finished_at": datetime.now(UTC),
                     "download_error": "Novel not found",
                 },
             )
@@ -194,7 +186,7 @@ def download_chapter_background(
                 chapter_id,
                 {
                     "content_status": ContentStatus.FAILED,
-                    "download_finished_at": datetime.utcnow(),
+                    "download_finished_at": datetime.now(UTC),
                     "download_error": "Novel has no Nexus Server identity; refresh metadata first",
                 },
             )
@@ -210,7 +202,6 @@ def download_chapter_background(
                 # still calls only Nexus Server, which remains the sole owner
                 # of external source access.
                 fetched = metadata_client.fetch_public_chapter_text_sync(int(metadata_id), chapter_number) if metadata_id else None
-                py_chapter = None
                 if not fetched:
                     raise RuntimeError("Chapter has no metadata-server identity")
             except asyncio.TimeoutError:
@@ -224,7 +215,7 @@ def download_chapter_background(
                     chapter_id,
                     {
                         "content_status": ContentStatus.FAILED,
-                        "download_finished_at": datetime.utcnow(),
+                        "download_finished_at": datetime.now(UTC),
                         "download_error": f"Download timed out after {os.getenv('NEXUS_CHAPTER_DOWNLOAD_TIMEOUT', '180')} seconds",
                     },
                 )
@@ -234,11 +225,14 @@ def download_chapter_background(
                 f"Chapter download took {elapsed:.2f} seconds", chapter_id=chapter_id
             )
 
-            chapter_data = {"content": fetched.get("text"), "title": fetched.get("title") or chapter.title} if fetched else parse_single_chapter_data(py_chapter)
+            chapter_data = {
+                "content": fetched.get("text"),
+                "title": fetched.get("title") or chapter.title,
+            }
 
             if chapter_data:
                 chapter_data["content_status"] = ContentStatus.PRESENT
-                chapter_data["download_finished_at"] = datetime.utcnow()
+                chapter_data["download_finished_at"] = datetime.now(UTC)
                 chapter_services.update_chapter(db, chapter_id, chapter_data)
                 logger.info(
                     "Background chapter download completed",
@@ -252,7 +246,7 @@ def download_chapter_background(
                     chapter_id,
                     {
                         "content_status": ContentStatus.FAILED,
-                        "download_finished_at": datetime.utcnow(),
+                        "download_finished_at": datetime.now(UTC),
                         "download_error": "No data returned from scraper",
                     },
                 )
@@ -273,7 +267,7 @@ def download_chapter_background(
                 chapter_id,
                 {
                     "content_status": ContentStatus.FAILED,
-                    "download_finished_at": datetime.utcnow(),
+                    "download_finished_at": datetime.now(UTC),
                     "download_error": error_msg,
                 },
             )
@@ -289,7 +283,7 @@ def download_chapter_background(
                 chapter_id,
                 {
                     "content_status": ContentStatus.FAILED,
-                    "download_finished_at": datetime.utcnow(),
+                    "download_finished_at": datetime.now(UTC),
                     "download_error": error_msg,
                 },
             )
@@ -436,7 +430,7 @@ def download_chapter(
         chapter.id,
         {
             "content_status": ContentStatus.PROCESSING,
-            "download_started_at": datetime.utcnow(),
+            "download_started_at": datetime.now(UTC),
             "download_finished_at": None,
             "download_error": None,
             "retry_count": (chapter.retry_count or 0) + 1,

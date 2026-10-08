@@ -32,6 +32,30 @@ export type WebhookDelivery = {
   last_error?: string | null;
 };
 
+export type GuideReviewAssertion = {
+  id: string;
+  subject?: string | null;
+  predicate?: string | null;
+  object?: string | null;
+  chapter?: number | null;
+  state?: string | null;
+  review_state: "machine_suggested" | "approved" | "hidden" | "superseded";
+  confidence?: number | null;
+  qualifiers?: Record<string, string>;
+  citations: Array<{ chapter: number; quote: string; start_offset?: number; end_offset?: number; anchor_state?: string }>;
+  available_actions?: string[];
+};
+
+export type GuideReviewHistoryItem = {
+  id: string;
+  assertion_id: string;
+  action: string;
+  from_state?: string | null;
+  to_state?: string | null;
+  reason?: string | null;
+  created_at?: string | null;
+};
+
 export const adminIntegrationService = {
   async mergeReviews() { return (await apiClient.get("/admin/integrations/merge-reviews")).data.data as MergeReview[]; },
   async decideMerge(id: number, action: "approve" | "reject" | "revert", note?: string) {
@@ -45,4 +69,16 @@ export const adminIntegrationService = {
   async testWebhook(id: string) { return (await apiClient.post(`/admin/integrations/webhooks/${id}/test`)).data as { queued: boolean; event_id: string }; },
   async rotateSecret(id: string, secret: string) { return (await apiClient.post(`/admin/integrations/webhooks/${id}/rotate-secret`, { secret })).data as WebhookSubscription; },
   async webhookHistory(id: string) { return (await apiClient.get(`/admin/integrations/webhooks/${id}/history`)).data.data as WebhookDelivery[]; },
+  async storyGuideReviewQueue(novelId: number) {
+    return (await apiClient.get(`/admin/integrations/story-guides/${novelId}/review-queue`)).data as { data?: GuideReviewAssertion[]; assertions?: GuideReviewAssertion[] };
+  },
+  async storyGuideReviewHistory(novelId: number) {
+    return (await apiClient.get(`/admin/integrations/story-guides/${novelId}/review-history`)).data as { data?: GuideReviewHistoryItem[]; history?: GuideReviewHistoryItem[] };
+  },
+  async reviewStoryGuideAssertion(assertionId: string, review_state: "machine_suggested" | "approved" | "hidden", reason?: string) {
+    return (await apiClient.post(`/admin/integrations/story-guides/assertions/${assertionId}/review`, { review_state, reason: reason || null })).data;
+  },
+  async restoreStoryGuideAssertion(assertionId: string, reason?: string) {
+    return (await apiClient.post(`/admin/integrations/story-guides/assertions/${assertionId}/restore`, { reason: reason || null })).data;
+  },
 };

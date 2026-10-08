@@ -56,6 +56,10 @@ def ensure_local_admin() -> None:
         return
     db = SessionLocal()
     try:
+        # Only recover an instance without any administrator. Otherwise anyone
+        # able to register the bootstrap username would gain admin on restart.
+        if db.query(User).filter(User.is_admin.is_(True)).first():
+            return
         user = db.query(User).filter(User.username == username).first()
         if user and not user.is_admin:
             user.is_admin = True

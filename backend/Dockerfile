@@ -1,48 +1,27 @@
-FROM rust:1.88-bookworm AS rust-toolchain
-
 FROM python:3.12-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-ENV CARGO_HOME=/root/.cargo
-ENV RUSTUP_HOME=/usr/local/rustup
-ENV PATH="/usr/local/cargo/bin:${PATH}"
-ENV CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse
-ENV CARGO_NET_RETRY=10
-ENV CARGO_HTTP_TIMEOUT=120
 WORKDIR /app
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential curl libpq-dev pkg-config libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=rust-toolchain /usr/local/cargo /usr/local/cargo
-COPY --from=rust-toolchain /usr/local/rustup /usr/local/rustup
-
 COPY backend/pyproject.toml backend/uv.lock backend/README.md ./backend/
 
 WORKDIR /app/backend
 
-RUN --mount=type=cache,target=/root/.cache/uv \
-    --mount=type=cache,target=/root/.cargo/registry \
-    --mount=type=cache,target=/root/.cargo/git \
-    pip install --no-cache-dir uv \
+ARG UV_VERSION=0.8.14
+
+# Keep the installer reproducible while allowing subsequent dependency-layer
+# rebuilds to reuse the downloaded uv wheel and resolved package artifacts.
+# The cache is optional: clean builders still work by fetching the pinned
+# version from PyPI, and no locally named project image is required.
+RUN --mount=type=cache,id=nexus-novel-pip,target=/root/.cache/pip,sharing=locked \
+    --mount=type=cache,id=nexus-novel-uv,target=/root/.cache/uv,sharing=locked \
+    python -m pip install --disable-pip-version-check --no-compile "uv==${UV_VERSION}" \
     && uv sync --locked --no-dev
-
-# Keep the expensive Rust extension layer independent from Python application
-# source changes. Backend edits can now reuse this layer and only rebuild the
-# final source-copy layer.
-COPY rustbindings /app/rustbindings
-
-ARG BUILD_RUSTBINDINGS=1
-
-RUN --mount=type=cache,target=/root/.cache/uv \
-    --mount=type=cache,target=/root/.cargo/registry \
-    --mount=type=cache,target=/root/.cargo/git \
-    if [ "$BUILD_RUSTBINDINGS" = "1" ]; then \
-      cd /app/rustbindings/pybindings \
-      && VIRTUAL_ENV=/app/backend/.venv /app/backend/.venv/bin/maturin develop --release; \
-    fi
 
 COPY backend /app/backend
 

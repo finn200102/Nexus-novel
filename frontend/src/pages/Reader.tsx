@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import axios from "axios";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Pause, Play, RotateCcw, SkipBack, SkipForward, Trash2, Volume2, WandSparkles } from "lucide-react";
 import { chapterService } from "../services/chapterService";
 import { novelService } from "../services/novelService";
@@ -66,10 +66,12 @@ const Reader: React.FC = () => {
     chapterNumber: string;
   }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const chapter_number = Number(chapterNumber);
   const library_id = Number(libraryId);
   const novel_id = Number(novelId);
+  const citationOffset = Number(searchParams.get("offset"));
 
   const [chapter, setChapter] = useState<ChapterContent | null>(null);
   const [novel, setNovel] = useState<Novel | null>(null);
@@ -264,6 +266,19 @@ const Reader: React.FC = () => {
       setRestoredPosition(true);
     });
   }, [chapter, progress]);
+
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content || !chapter || !Number.isFinite(citationOffset) || citationOffset < 0) return;
+    // Evidence stores source-character offsets. The reader renders normalized
+    // paragraphs, so navigate proportionally rather than claiming a brittle,
+    // exact DOM range after source formatting changes.
+    const ratio = Math.min(1, citationOffset / Math.max(chapter.content.length, 1));
+    const frame = window.requestAnimationFrame(() => {
+      content.scrollTop = ratio * Math.max(content.scrollHeight - content.clientHeight, 0);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [chapter?.id, chapter?.content, citationOffset]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

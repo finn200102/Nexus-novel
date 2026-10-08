@@ -34,6 +34,7 @@ from app.auth.dependencies import get_current_user
 from app.services import metadata_client
 from app.services.download_job_service import queue_missing_chapters
 from app.logging_config import get_logger
+import hmac
 import os
 import shutil
 
@@ -217,7 +218,9 @@ def receive_metadata_event(
     webhook_secret: str | None = Header(default=None, alias="X-Nexus-Webhook-Secret"),
 ):
     expected_secret = os.getenv("NEXUS_NOVEL_WEBHOOK_SECRET", "").strip()
-    if not expected_secret or webhook_secret != expected_secret:
+    if not expected_secret or not hmac.compare_digest(
+        (webhook_secret or "").encode(), expected_secret.encode()
+    ):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid webhook secret")
     if not claim_metadata_webhook_delivery(db, event):
         return {"accepted": True, "created_events": 0, "queued_downloads": 0}
@@ -332,10 +335,23 @@ def receive_metadata_event(
     return {"accepted": True, "created_events": created_events, "queued_downloads": queued_downloads}
 
 
+def _run_metadata_call(coro, loop: asyncio.AbstractEventLoop | None):
+    """Run a metadata client coroutine from a background-task thread.
+
+    The pooled metadata client belongs to the application's event loop; using
+    it from a fresh ``asyncio.run`` loop fails with "bound to a different event
+    loop". Schedule the call on the loop that owns the client instead.
+    """
+    if loop is None:
+        return asyncio.run(coro)
+    return asyncio.run_coroutine_threadsafe(coro, loop).result()
+
+
 def scrape_novel_background(
     novel_id: int,
     metadata_id: int,
     db_session_factory,
+    loop: asyncio.AbstractEventLoop | None = None,
 ):
     """Background task to scrape and update novel metadata."""
     db = db_session_factory()
@@ -347,8 +363,8 @@ def scrape_novel_background(
         )
 
         try:
-            scraped_data = asyncio.run(
-                metadata_client.wait_for_scrape_complete(metadata_id)
+            scraped_data = _run_metadata_call(
+                metadata_client.wait_for_scrape_complete(metadata_id), loop
             )
             if scraped_data.get("status") == "error":
                 raise RuntimeError(
@@ -382,8 +398,8 @@ def scrape_novel_background(
 
             novel_services.update_novel(db, novel_id, novel_data)
 
-            chapters_data = asyncio.run(
-                metadata_client.get_chapters_from_metadata(metadata_id)
+            chapters_data = _run_metadata_call(
+                metadata_client.get_chapters_from_metadata(metadata_id), loop
             )
             for chapter_meta in chapters_data:
                 chapter_data = {
@@ -535,6 +551,7 @@ async def add_novel(
         int(novel_obj.id),
         metadata_id,
         SessionLocal,
+        asyncio.get_running_loop(),
     )
 
     return novel_obj
@@ -722,6 +739,7 @@ async def rescrape_novel(
             int(novel_id),
             metadata_id,
             SessionLocal,
+            asyncio.get_running_loop(),
         )
     else:
         try:

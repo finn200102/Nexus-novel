@@ -10,9 +10,9 @@ from app.services import metadata_client
 router = APIRouter(prefix="/admin/integrations", tags=["admin-integrations"])
 
 
-async def metadata_admin(method: str, path: str, payload: dict | None = None):
+async def metadata_admin(method: str, path: str, payload: dict | None = None, params: dict | None = None):
     try:
-        return await metadata_client.admin_request(method, path, json=payload)
+        return await metadata_client.admin_request(method, path, json=payload, params=params)
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail="Nexus Server administrator service is unavailable") from exc
 
@@ -31,6 +31,15 @@ class WebhookWrite(BaseModel):
 
 class RotateWebhookSecret(BaseModel):
     secret: str = Field(min_length=16, max_length=512)
+
+
+class GuideReviewDecision(BaseModel):
+    review_state: str = Field(pattern="^(approved|machine_suggested|hidden)$")
+    reason: str | None = Field(default=None, max_length=1000)
+
+
+class GuideRestoreDecision(BaseModel):
+    reason: str | None = Field(default=None, max_length=1000)
 
 
 @router.get("/merge-reviews")
@@ -78,3 +87,32 @@ async def test_webhook(subscription_id: str, _: User = Depends(require_admin)):
 @router.get("/webhooks/{subscription_id}/history")
 async def webhook_history(subscription_id: str, _: User = Depends(require_admin)):
     return await metadata_admin("GET", f"/webhooks/{subscription_id}/history")
+
+
+@router.get("/story-guides/{novel_id}/review-queue")
+async def story_guide_review_queue(novel_id: int, _: User = Depends(require_admin)):
+    """Administrator-only editorial workbench feed; never used by reader pages."""
+    return await metadata_admin("GET", f"/analysis/novels/{novel_id}/story-guide/review-queue")
+
+
+@router.get("/story-guides/{novel_id}/review-history")
+async def story_guide_review_history(novel_id: int, limit: int = 100, _: User = Depends(require_admin)):
+    return await metadata_admin("GET", f"/analysis/novels/{novel_id}/story-guide/review-history", params={"limit": min(max(limit, 1), 500)})
+
+
+@router.post("/story-guides/assertions/{assertion_id}/review")
+async def review_story_guide_assertion(assertion_id: str, payload: GuideReviewDecision, _: User = Depends(require_admin)):
+    return await metadata_admin(
+        "POST",
+        f"/analysis/story-guide/assertions/{assertion_id}/review",
+        params=payload.model_dump(exclude_none=True),
+    )
+
+
+@router.post("/story-guides/assertions/{assertion_id}/restore")
+async def restore_story_guide_assertion(assertion_id: str, payload: GuideRestoreDecision, _: User = Depends(require_admin)):
+    return await metadata_admin(
+        "POST",
+        f"/analysis/story-guide/assertions/{assertion_id}/restore",
+        params=payload.model_dump(exclude_none=True),
+    )

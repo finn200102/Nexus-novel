@@ -8,8 +8,9 @@ load_dotenv()
 # Use a local SQLite database if no DATABASE_URL is provided
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./dev.db")
 
-# create engine
-engine = create_engine(DATABASE_URL, echo=True)
+# SQL echo logs every statement with its parameters (including password
+# hashes), so it is opt-in for debugging only.
+engine = create_engine(DATABASE_URL, echo=os.getenv("SQL_ECHO", "").lower() in {"1", "true", "yes"})
 
 # create session factory
 SessionLocal = sessionmaker(autocommit=False,

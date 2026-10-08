@@ -15,7 +15,10 @@ import os
 from pathlib import Path
 from app.routers.chapter import extract_story_id_from_url
 from app.models.download_job import ChapterDownloadJob
+from app.models.chapter import Chapter, ContentStatus
 from app.services.download_job_service import retry_job
+from app.routers.chapter import download_chapter_background, run_queued_download
+from tests.routes.conftest import TestingSessionLocal
 
 
 def create_test_user(db):
@@ -183,8 +186,51 @@ def test_get_downloaded_chapter_content(client, db):
     assert response.json()["content"] == "First paragraph.\n\nSecond paragraph."
 
 
-def test_download_chapter(client, db):
-    pytest.skip("Download functionality requires pybindings and metadata server")
+def test_queued_download_delegates_to_metadata_server(client, db, monkeypatch):
+    novel, _, _, _, library = create_test_novel(db)
+    novel.metadata_id = 9876
+    response = add_chapter(client, novel.id, get_auth_headers(library.user_id))
+    chapter_id = response.json()["id"]
+    job = ChapterDownloadJob(
+        user_id=library.user_id,
+        library_id=library.id,
+        novel_id=novel.id,
+        chapter_id=chapter_id,
+        status="queued",
+        max_attempts=3,
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+
+    calls = []
+
+    def fake_fetch(metadata_id, chapter_number):
+        calls.append((metadata_id, chapter_number))
+        return {"title": "Downloaded title", "text": "Downloaded through Nexus Server."}
+
+    monkeypatch.setattr(
+        "app.services.metadata_client.fetch_public_chapter_text_sync", fake_fetch
+    )
+
+    run_queued_download(job.id, TestingSessionLocal)
+
+    db.expire_all()
+    downloaded = db.query(Chapter).filter(Chapter.id == chapter_id).one()
+    completed_job = db.query(ChapterDownloadJob).filter(ChapterDownloadJob.id == job.id).one()
+    assert calls == [(9876, 1)]
+    assert downloaded.content == "Downloaded through Nexus Server."
+    assert downloaded.content_status == ContentStatus.PRESENT
+    assert completed_job.status == "completed"
+
+
+def test_chapter_router_has_no_runtime_pybindings_dependency():
+    import inspect
+    import app.routers.chapter as chapter_router
+
+    source = inspect.getsource(chapter_router)
+    assert "pybindings" not in source
+    assert "novel_downloader" not in source
 
 
 @pytest.mark.parametrize(

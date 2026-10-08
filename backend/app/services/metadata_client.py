@@ -172,13 +172,19 @@ def _response_detail(response: httpx.Response) -> str:
     return "Request rejected by metadata server"
 
 
-async def admin_request(method: str, path: str, *, json: dict | None = None) -> Any:
+async def admin_request(
+    method: str,
+    path: str,
+    *,
+    json: dict | None = None,
+    params: dict | None = None,
+) -> Any:
     """Call Nexus Server's admin surface after Novel has authorized the user.
 
     The browser never receives the metadata API/admin keys; this module is the
     only bridge between the two server processes.
     """
-    response = await _request(method, path, timeout=BACKGROUND_TIMEOUT, admin=True, json=json)
+    response = await _request(method, path, timeout=BACKGROUND_TIMEOUT, admin=True, json=json, params=params)
     return response.json() if response.content else None
 
 
@@ -273,6 +279,110 @@ async def enqueue_novel_analysis(metadata_novel_id: int) -> dict:
 async def get_similar_novels(metadata_novel_id: int, limit: int = 12) -> dict:
     response = await _request("GET", f"/analysis/novels/{metadata_novel_id}/similar", timeout=INTERACTIVE_TIMEOUT, params={"limit": limit})
     return response.json()
+
+
+async def get_story_guide(metadata_novel_id: int, through_chapter: int | None = None) -> dict:
+    """Fetch auxiliary story knowledge without making the detail page depend on it."""
+    # Chapter zero is meaningful: it is the reader-safe empty cutoff for a
+    # direct Story Guide link.  Do not collapse it to "latest" here.
+    params = {"through_chapter": through_chapter} if through_chapter is not None else None
+    response = await _request("GET", f"/analysis/novels/{metadata_novel_id}/story-guide", timeout=INTERACTIVE_TIMEOUT, params=params)
+    return response.json()
+
+
+async def get_story_guide_entities(metadata_novel_id: int, through_chapter: int) -> dict:
+    response = await _request(
+        "GET",
+        f"/analysis/novels/{metadata_novel_id}/story-guide/entities",
+        timeout=INTERACTIVE_TIMEOUT,
+        params={"through_chapter": through_chapter},
+    )
+    return response.json()
+
+
+async def get_story_guide_relationships(metadata_novel_id: int, through_chapter: int) -> dict:
+    response = await _request(
+        "GET",
+        f"/analysis/novels/{metadata_novel_id}/story-guide/relationships",
+        timeout=INTERACTIVE_TIMEOUT,
+        params={"through_chapter": through_chapter},
+    )
+    return response.json()
+
+
+async def get_story_guide_projection(metadata_novel_id: int, through_chapter: int) -> dict:
+    response = await _request(
+        "GET",
+        f"/analysis/novels/{metadata_novel_id}/story-guide/projection",
+        timeout=INTERACTIVE_TIMEOUT,
+        params={"through_chapter": through_chapter},
+    )
+    return response.json()
+
+
+async def get_story_guide_changes(metadata_novel_id: int, from_chapter: int, through_chapter: int) -> dict:
+    response = await _request("GET", f"/analysis/novels/{metadata_novel_id}/story-guide/changes", timeout=INTERACTIVE_TIMEOUT, params={"from_chapter": from_chapter, "through_chapter": through_chapter})
+    return response.json()
+
+
+async def get_story_guide_entity_profile(metadata_novel_id: int, entity_id: str, through_chapter: int) -> dict:
+    response = await _request("GET", f"/analysis/novels/{metadata_novel_id}/story-guide/entities/{entity_id}/profile", timeout=INTERACTIVE_TIMEOUT, params={"through_chapter": through_chapter})
+    return response.json()
+
+
+async def get_story_guide_relationship_timeline(metadata_novel_id: int, through_chapter: int, entity_id: str | None = None) -> dict:
+    params = {"through_chapter": through_chapter}
+    if entity_id:
+        params["entity_id"] = entity_id
+    response = await _request("GET", f"/analysis/novels/{metadata_novel_id}/story-guide/relationships/timeline", timeout=INTERACTIVE_TIMEOUT, params=params)
+    return response.json()
+
+
+async def get_story_guide_chapter_dossier(metadata_novel_id: int, chapter_number: int, through_chapter: int) -> dict:
+    response = await _request(
+        "GET",
+        f"/analysis/novels/{metadata_novel_id}/story-guide/chapters/{chapter_number}",
+        timeout=INTERACTIVE_TIMEOUT,
+        params={"through_chapter": through_chapter},
+    )
+    return response.json()
+
+
+async def get_story_guide_entity_article(metadata_novel_id: int, entity_id: str, through_chapter: int) -> dict:
+    response = await _request(
+        "GET",
+        f"/analysis/novels/{metadata_novel_id}/story-guide/entities/{entity_id}",
+        timeout=INTERACTIVE_TIMEOUT,
+        params={"through_chapter": through_chapter},
+    )
+    return response.json()
+
+
+async def regenerate_story_guide(metadata_novel_id: int, through_chapter: int | None = None) -> dict:
+    # Preserve an explicit zero cutoff for spoiler-safe guide rebuilds.
+    params = {"through_chapter": through_chapter} if through_chapter is not None else None
+    response = await _request("POST", f"/analysis/novels/{metadata_novel_id}/story-guide/regenerate", timeout=INTERACTIVE_TIMEOUT, params=params)
+    return response.json()
+
+
+async def backfill_story_guide(metadata_novel_id: int) -> dict:
+    """Queue analysis for chapters already stored in Nexus.
+
+    This touches no external source and lets a library build a guide after the
+    engine was enabled later.
+    """
+    response = await _request("POST", f"/analysis/novels/{metadata_novel_id}/story-guide/backfill", timeout=INTERACTIVE_TIMEOUT)
+    return response.json()
+
+
+async def create_story_guide_portrait(metadata_novel_id: int, payload: dict) -> dict:
+    response = await _request("POST", f"/analysis/novels/{metadata_novel_id}/story-guide/characters/portrait", json=payload, timeout=INTERACTIVE_TIMEOUT)
+    return response.json()
+
+
+async def get_story_guide_media(artifact_id: str) -> tuple[bytes, str]:
+    response = await _request("GET", f"/analysis/story-guide/media/{artifact_id}", timeout=INTERACTIVE_TIMEOUT)
+    return response.content, response.headers.get("content-type", "image/webp")
 
 
 async def get_canonical_work(metadata_novel_id: int) -> dict:
