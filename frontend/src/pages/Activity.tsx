@@ -12,22 +12,24 @@ const Activity: React.FC = () => {
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [days, setDays] = useState<ActivityDay[]>([]);
   const [loading, setLoading] = useState(true);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (activeLibraryId === undefined) { setEvents([]); setDays([]); setLoading(false); return; }
-    setLoading(true);
+    // Reloads after inbox actions keep the page in place instead of showing "Loading".
+    if (reloadKey === 0) setLoading(true);
     Promise.all([activityService.getFeed(activeLibraryId), activityService.getCalendar(activeLibraryId)])
       .then(([feed, calendar]) => { setEvents(feed); setDays(calendar); })
       .catch((error) => console.error("Failed to load activity", error))
       .finally(() => setLoading(false));
-  }, [activeLibraryId]);
+  }, [activeLibraryId, reloadKey]);
 
   return <div className="activity-page">
     <header className="activity-page__header"><div><p className="library-workspace__eyebrow">Activity</p><h1>Updates & activity</h1><p>Follow changes, source failures, and download progress in one place.</p></div><RefreshCw size={20} aria-hidden="true" /></header>
     {loading && <p className="activity-page__empty">Loading activity…</p>}
     {!loading && !activeLibrary && <p className="activity-page__empty">Create or select a library to see activity.</p>}
     {!loading && activeLibrary && <>
-      <UpdatesInbox libraryId={activeLibrary.id} />
+      <UpdatesInbox libraryId={activeLibrary.id} onChanged={() => setReloadKey((key) => key + 1)} />
       <section className="activity-calendar" aria-label="Activity calendar">
         <div className="activity-section__title"><CalendarDays size={18} /><h2>Recent days</h2></div>
         {days.length === 0 && <p className="activity-page__empty">No activity recorded yet.</p>}

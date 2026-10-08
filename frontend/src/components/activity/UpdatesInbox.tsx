@@ -6,9 +6,11 @@ import type { InboxNovel } from "../../types/activity";
 
 interface UpdatesInboxProps {
   libraryId: number;
+  /** Called after an action changed read state, so other views can reload. */
+  onChanged?: () => void;
 }
 
-const UpdatesInbox: React.FC<UpdatesInboxProps> = ({ libraryId }) => {
+const UpdatesInbox: React.FC<UpdatesInboxProps> = ({ libraryId, onChanged }) => {
   const navigate = useNavigate();
   const [rows, setRows] = useState<InboxNovel[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,6 +39,7 @@ const UpdatesInbox: React.FC<UpdatesInboxProps> = ({ libraryId }) => {
     try {
       await action();
       await load();
+      onChanged?.();
     } catch {
       setError("That did not work. Try again.");
     } finally {

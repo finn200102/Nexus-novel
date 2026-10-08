@@ -31,11 +31,11 @@ function LocationProbe() {
   return <div data-testid="location">{location.pathname}</div>;
 }
 
-function renderInbox() {
+function renderInbox(onChanged?: () => void) {
   return render(
     <MemoryRouter initialEntries={["/activity"]}>
       <Routes>
-        <Route path="/activity" element={<UpdatesInbox libraryId={3} />} />
+        <Route path="/activity" element={<UpdatesInbox libraryId={3} onChanged={onChanged} />} />
         <Route path="*" element={<LocationProbe />} />
       </Routes>
     </MemoryRouter>,
@@ -90,10 +90,13 @@ describe("UpdatesInbox", () => {
   });
 
   it("marks every update in the library read", async () => {
-    renderInbox();
+    const onChanged = vi.fn();
+    renderInbox(onChanged);
     fireEvent.click(await screen.findByRole("button", { name: /mark all read/i }));
 
     await waitFor(() => expect(activityService.markAllRead).toHaveBeenCalledWith(3));
+    // The Activity page reloads its feed so read badges update too.
+    await waitFor(() => expect(onChanged).toHaveBeenCalled());
   });
 
   it("shows an error when loading fails", async () => {
