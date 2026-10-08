@@ -221,6 +221,12 @@ def test_delete_novel_rejects_novel_from_another_library(client_with_auth, db):
     assert response.status_code == status.HTTP_404_NOT_FOUND
     assert get_novel_by_url(db, url).first() is not None
 
+    response = client_with_auth.get(
+        f"/novel/{victim_novel.id}?library_id={attacker_library.id}",
+        headers=bearer_headers(attacker.id),
+    )
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+
 
 def test_update_novel(client_with_auth, db):
     response, headers, novel_data, url, library = add_novel_resources(

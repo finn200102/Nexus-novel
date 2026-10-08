@@ -591,7 +591,7 @@ async def refresh_novel_metadata(
     check_library(db, library_id, current_user)
 
     novel = novel_services.get_novel_by_id(db, novel_id)
-    if not novel:
+    if not novel or novel.library_id != library_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Novel with ID {novel_id} not found",
@@ -715,7 +715,7 @@ async def rescrape_novel(
 ):
     check_library(db, library_id, current_user)
     novel = novel_services.get_novel_by_id(db, novel_id)
-    if not novel:
+    if not novel or novel.library_id != library_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Novel with ID {novel_id} not found",
@@ -1028,7 +1028,7 @@ async def get_novel_by_id(
 ):
     check_library(db, library_id, current_user)
     novel = novel_services.get_novel_by_id(db, novel_id)
-    if not novel:
+    if not novel or novel.library_id != library_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Novel with ID {novel_id} not found",
