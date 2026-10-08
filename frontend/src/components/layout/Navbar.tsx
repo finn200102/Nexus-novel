@@ -12,6 +12,7 @@ import {
   X,
   Server,
   Link2,
+  Users,
 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import LibrarySwitcher from "./LibrarySwitcher";
@@ -30,9 +31,14 @@ const navItems = [
   { label: "Discover", to: "/discover/all", icon: Compass },
   { label: "Downloads", to: "/downloads", icon: Download },
   { label: "Activity", to: "/activity", icon: Bell },
-  { label: "Operations", to: "/operations", icon: Server },
-  { label: "Scrape Jobs", to: "/scrape-jobs", icon: Search },
-  { label: "Integrations", to: "/integrations", icon: Link2 },
+];
+
+// Instance-wide tools; the API refuses them to non-administrators.
+const adminNavItems = [
+  { label: "Operations", to: "/operations", icon: Server, exact: false },
+  { label: "Scrape Jobs", to: "/scrape-jobs", icon: Search, exact: false },
+  { label: "Integrations", to: "/integrations", icon: Link2, exact: false },
+  { label: "Users", to: "/admin/users", icon: Users, exact: false },
 ];
 
 const Navbar: React.FC<NavbarProps> = ({ onRequestCreateLibrary }) => {
@@ -120,7 +126,7 @@ const Navbar: React.FC<NavbarProps> = ({ onRequestCreateLibrary }) => {
         </button>
 
         <nav className={mobileNavOpen ? "sidebar__nav is-mobile-open" : "sidebar__nav"} aria-label="Primary navigation" onClick={() => setMobileNavOpen(false)}>
-          {navItems.map(({ label, to, icon: Icon, exact }) => (
+          {[...navItems, ...(user?.is_admin ? adminNavItems : [])].map(({ label, to, icon: Icon, exact }) => (
             <Link key={to} to={to} className={isActive(to, exact) ? "is-active" : ""}>
               <Icon size={18} aria-hidden="true" />
               {label}
@@ -146,8 +152,9 @@ const Navbar: React.FC<NavbarProps> = ({ onRequestCreateLibrary }) => {
             <span className="sidebar__avatar">{(user?.username || "R").slice(0, 1).toUpperCase()}</span>
             <div>
               <strong>{isAuthenticated ? user?.username || "Reader" : "Local reader"}</strong>
+              {isAuthenticated && <Link to="/account">Account</Link>}
               {isAuthenticated && <Link to="/notifications">Notifications</Link>}
-              {isAuthenticated && <button type="button" onClick={logout}>Sign out</button>}
+              {isAuthenticated && <button type="button" onClick={() => void logout()}>Sign out</button>}
             </div>
           </div>
         </div>

@@ -23,9 +23,12 @@ test.describe("Nexus real-stack smoke", () => {
     await page.getByRole("button", { name: "Login" }).click();
 
     await expect(page).not.toHaveURL(/\/login(?:$|\?)/);
-    await page.goto("/library");
-    await expect(page).toHaveURL(/\/library/);
-    await expect(page.getByRole("button", { name: /acceptance library|my library|select a library/i })).toBeVisible();
+    // A full reload drops the in-memory access token; the refresh cookie
+    // must restore the session.
+    await page.reload();
+    await expect(page).not.toHaveURL(/\/login(?:$|\?)/);
+    await page.getByRole("button", { name: "My library" }).click();
+    await expect(page).toHaveURL(/\/library\/\d+/);
     expect(apiFailures, apiFailures.join("\n")).toEqual([]);
   });
 });

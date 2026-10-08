@@ -1,14 +1,15 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { authService, AuthResponse } from "../services/authService";
+import { authService, AuthResponse, RegisterData } from "../services/authService";
+import { onSessionChange } from "../services/apiClient";
 
 interface AuthContextType {
   user: AuthResponse | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (username: string, password: string) => Promise<void>;
-  register: (username: string, password: string) => Promise<void>;
-  logout: () => void;
+  register: (data: RegisterData) => Promise<void>;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -18,26 +19,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const token = authService.getToken();
-    if (token) {
-      setUser({ id: 0, username: "", message: "", access_token: token, token_type: "bearer" });
-    }
-    setIsLoading(false);
+    // apiClient reports every session change: sign-in, silent refresh, and
+    // a refresh the server rejected (signed out elsewhere, disabled, …).
+    const unsubscribe = onSessionChange(setUser);
+    authService
+      .restore()
+      .catch(() => null)
+      .finally(() => setIsLoading(false));
+    return unsubscribe;
   }, []);
 
   const login = async (username: string, password: string) => {
-    const response = await authService.login({ username, password });
-    setUser(response);
+    await authService.login({ username, password });
   };
 
-  const register = async (username: string, password: string) => {
-    const response = await authService.register({ username, password });
-    setUser(response);
+  const register = async (data: RegisterData) => {
+    await authService.register(data);
   };
 
-  const logout = () => {
-    authService.logout();
-    setUser(null);
+  const logout = async () => {
+    await authService.logout().catch(() => undefined);
   };
 
   return (

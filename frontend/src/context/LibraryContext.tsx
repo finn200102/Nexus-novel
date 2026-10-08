@@ -5,6 +5,7 @@ import React, {
   useState,
 } from "react";
 import { libraryService } from "../services/libraryService";
+import { hasAccessToken } from "../services/apiClient";
 import { Library } from "../types/library";
 import { useAuth } from "./AuthContext";
 import { LibraryContext, LibraryContextValue } from "./LibraryContextObject";
@@ -47,8 +48,7 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   const refreshLibraries = useCallback(async () => {
-    const token = localStorage.getItem("token");
-    if (!token) {
+    if (!hasAccessToken()) {
       setLibraries([]);
       setIsLoading(false);
       return;

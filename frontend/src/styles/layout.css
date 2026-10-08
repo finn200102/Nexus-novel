@@ -40,7 +40,7 @@
 .sidebar__avatar { display: grid; flex: 0 0 auto; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: #253149; color: #dfe5ef; font-size: 12px; font-weight: 800; }
 .sidebar__account > div { display: grid; min-width: 0; flex: 1; }
 .sidebar__account strong { overflow: hidden; color: #eef1f6; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.sidebar__account button { width: fit-content; color: #7e8999; font-size: 11px; }
+.sidebar__account button, .sidebar__account a { width: fit-content; color: #7e8999; font-size: 11px; text-decoration: none; }
 
 .app-topbar { grid-column: 2; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 0 30px; border-bottom: 1px solid #202735; background: #0d121a; }
 .app-topbar__search { display: flex; align-items: center; gap: 10px; width: min(475px, 48vw); height: 38px; padding: 0 10px 0 12px; color: #8490a2; background: #111822; border: 1px solid #293343; border-radius: 5px; }

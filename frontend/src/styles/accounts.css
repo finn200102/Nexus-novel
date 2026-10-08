@@ -1,0 +1,25 @@
+/* Users (admin) and Account pages. Builds on integrations.css panels. */
+.accounts-modes { display: grid; gap: 8px; margin-top: 14px; }
+.accounts-mode { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid #223353; border-radius: 10px; background: rgba(25, 42, 76, .35); cursor: pointer; }
+.accounts-mode.is-selected { border-color: #6337d8; background: rgba(99, 55, 216, .18); }
+.accounts-mode input { margin-top: 3px; accent-color: #6337d8; }
+.accounts-mode strong, .accounts-mode small { display: block; }
+.accounts-mode small { margin-top: 2px; color: #96a4bd; font-size: 12px; }
+.accounts-subheading { margin: 22px 0 0; font-size: 15px; }
+.accounts-invite-form { grid-template-columns: minmax(0, 1fr) 90px 110px; align-items: end; }
+.accounts-invite-form label { display: grid; gap: 4px; color: #96a4bd; font-size: 11px; }
+.accounts-invite-form .operations-action { grid-column: 1 / -1; display: inline-flex; align-items: center; gap: 6px; }
+.accounts-secret { display: grid; gap: 6px; margin-top: 12px; padding: 12px; border: 1px solid rgba(107, 229, 166, .35); border-radius: 10px; background: rgba(32, 92, 70, .25); font-size: 12px; color: #c9f3dd; }
+.accounts-secret code { font-size: 13px; color: #eef2ff; word-break: break-all; user-select: all; }
+.accounts-secret .operations-action { justify-self: start; display: inline-flex; align-items: center; gap: 5px; }
+.integration-row strong .integration-good, .integration-row strong .integration-warning { font-size: 11px; font-weight: 600; }
+.account-page { max-width: 640px; }
+.account-page .integrations-panel + .integrations-panel { margin-top: 14px; }
+.account-form { display: grid; gap: 10px; margin-top: 14px; }
+.account-form label { display: grid; gap: 4px; color: #96a4bd; font-size: 12px; }
+.account-form input { border: 1px solid #33456b; border-radius: 8px; background: #0b1730; color: #eef2ff; padding: 9px; }
+.account-form .operations-action { justify-self: start; }
+@media (max-width: 720px) {
+  .accounts-invite-form { grid-template-columns: 1fr 1fr; }
+  .accounts-invite-form input[aria-label="Invite label"] { grid-column: 1 / -1; }
+}

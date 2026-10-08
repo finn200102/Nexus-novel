@@ -1,4 +1,4 @@
-import apiClient from "./apiClient";
+import apiClient, { refreshSession, SessionResponse, setSession } from "./apiClient";
 
 export interface LoginCredentials {
   username: string;
@@ -8,43 +8,60 @@ export interface LoginCredentials {
 export interface RegisterData {
   username: string;
   password: string;
+  invite_code?: string;
 }
 
-export interface AuthResponse {
-  id: number;
-  username: string;
-  message: string;
-  access_token: string;
-  token_type: string;
-  is_admin?: boolean;
+export type AuthResponse = SessionResponse;
+
+export type SignupMode = "open" | "invite" | "closed";
+
+export interface SignupConfig {
+  signup_mode: SignupMode;
+  /** No account exists yet: the first sign-up becomes the administrator. */
+  first_user: boolean;
 }
 
 export const authService = {
   async login(credentials: LoginCredentials): Promise<AuthResponse> {
     const response = await apiClient.post<AuthResponse>("/auth/login", credentials);
-    const { access_token } = response.data;
-    localStorage.setItem("token", access_token);
+    setSession(response.data);
     return response.data;
   },
 
   async register(data: RegisterData): Promise<AuthResponse> {
     const response = await apiClient.post<AuthResponse>("/auth/signup", data);
-    const { access_token } = response.data;
-    localStorage.setItem("token", access_token);
+    setSession(response.data);
     return response.data;
   },
 
-  logout() {
-    localStorage.removeItem("token");
-    delete apiClient.defaults.headers.common["Authorization"];
-    window.location.href = "/login";
+  /** Restore the session from the refresh cookie, e.g. after a page load. */
+  restore(): Promise<AuthResponse | null> {
+    return refreshSession();
   },
 
-  getToken(): string | null {
-    return localStorage.getItem("token");
+  async logout(): Promise<void> {
+    try {
+      await apiClient.post("/auth/logout");
+    } finally {
+      setSession(null);
+    }
   },
 
-  isAuthenticated(): boolean {
-    return !!this.getToken();
+  async logoutOtherDevices(): Promise<number> {
+    const response = await apiClient.post<{ revoked_sessions: number }>("/auth/logout-others");
+    return response.data.revoked_sessions;
+  },
+
+  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+    await apiClient.post("/auth/password", { current_password: currentPassword, new_password: newPassword });
+  },
+
+  async resetPassword(token: string, newPassword: string): Promise<void> {
+    await apiClient.post("/auth/password-reset", { token, new_password: newPassword });
+  },
+
+  async signupConfig(): Promise<SignupConfig> {
+    const response = await apiClient.get<SignupConfig>("/auth/config");
+    return response.data;
   },
 };

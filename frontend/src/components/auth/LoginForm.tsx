@@ -1,5 +1,5 @@
 import React, { FormEvent, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../../context/AuthContext";
 import "../../styles/auth-styles.css";
@@ -18,11 +18,13 @@ const LoginForm: React.FC = () => {
   const [submitStatus, setSubmitStatus] = useState<"success" | "error" | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>("");
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const [params] = useSearchParams();
+  const { login, isAuthenticated } = useAuth();
 
   useEffect(() => {
-    // The protected route redirects authenticated users away from this page.
-  }, [navigate]);
+    // A restored session (refresh cookie) needs no new sign-in.
+    if (isAuthenticated) navigate("/", { replace: true });
+  }, [isAuthenticated, navigate]);
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -92,6 +94,9 @@ const LoginForm: React.FC = () => {
       <button type="submit" disabled={isSubmitting} className="login-button">
         {isSubmitting ? "Logging in..." : "Login"}
       </button>
+      {params.get("reset") && submitStatus === null && (
+        <p className="status-message success">Password changed. Sign in with your new password.</p>
+      )}
       {submitStatus === "success" && (
         <p className="status-message success">Login successful!</p>
       )}

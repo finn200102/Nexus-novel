@@ -3,9 +3,20 @@ import { Page, Route } from "@playwright/test";
 type MockApiOptions = {
   admin?: boolean;
   previewFailure?: "timeout" | "source";
+  signupMode?: "open" | "invite" | "closed";
 };
 
-const token = "e2e-token";
+type MockUser = { id: number; username: string; is_admin: boolean; is_disabled: boolean; active_sessions: number };
+
+/** Handles the tests use to change the fake server's state mid-test. */
+export type MockApi = {
+  /** End every session, as "sign out other devices" or an admin would. */
+  revokeSessions: () => void;
+  /** An invite code the fake server accepts once. */
+  addInvite: (code: string) => void;
+  /** A password reset token the fake server accepts once. */
+  addResetToken: (token: string) => void;
+};
 
 const json = (route: Route, body: unknown, status = 200) =>
   route.fulfill({
@@ -21,39 +32,154 @@ const pathAndQuery = (route: Route) => {
   return `${url.pathname.replace(/^\/api(?=\/|$)/, "")}${url.search}`;
 };
 
-export async function installMockApi(page: Page, options: MockApiOptions = {}) {
+export async function installMockApi(page: Page, options: MockApiOptions = {}): Promise<MockApi> {
   let catalogJobStatus = "running";
   let previewCalls = 0;
+  // The fake server mirrors the real session model: the refresh "cookie" is
+  // this flag (the page keeps it across reloads), access tokens are
+  // numbered, and revoking sessions invalidates all of them at once.
+  let signedIn = false;
+  let signedInUser = authUser.username;
+  let tokenCounter = 0;
+  const validTokens = new Set<string>();
+  let signupMode = options.signupMode ?? "open";
+  const invites = new Set<string>();
+  const resetTokens = new Set<string>();
+  const users: MockUser[] = [
+    { id: 7, username: authUser.username, is_admin: !!options.admin, is_disabled: false, active_sessions: 1 },
+    { id: 8, username: "second-reader", is_admin: false, is_disabled: false, active_sessions: 0 },
+  ];
 
-  await page.route(/\/auth\/login$|\/auth\/signup$/, async (route) => {
-    const request = route.request();
-    const data = request.postDataJSON() as { username?: string; password?: string };
-    if (request.url().endsWith("/auth/login") && data.username === "invalid") {
-      await json(route, { detail: "Invalid credentials" }, 401);
-      return;
-    }
-    await json(route, {
-      access_token: token,
+  const startSession = (username: string) => {
+    signedIn = true;
+    signedInUser = username;
+    tokenCounter += 1;
+    const accessToken = `e2e-token-${tokenCounter}`;
+    validTokens.add(accessToken);
+    return {
+      access_token: accessToken,
       token_type: "bearer",
+      expires_in: 900,
       id: 7,
-      username: data.username || "e2e-user",
+      username,
+      is_admin: !!options.admin,
       message: "authenticated",
-    });
-  });
+    };
+  };
+
+  const api: MockApi = {
+    revokeSessions: () => {
+      signedIn = false;
+      validTokens.clear();
+    },
+    addInvite: (code) => invites.add(code),
+    addResetToken: (token) => resetTokens.add(token),
+  };
 
   await page.route(/127\.0\.0\.1:8000|localhost:8000|\/api\//, async (route) => {
     const request = route.request();
     const path = pathAndQuery(route);
     const method = request.method();
 
-    if (path.startsWith("/auth/login") || path.startsWith("/auth/signup")) {
+    if (path === "/auth/login") {
       const data = request.postDataJSON() as { username?: string; password?: string };
-      if (path.startsWith("/auth/login") && data.username === "invalid") {
+      if (data.username === "invalid") {
         await json(route, { detail: "Invalid credentials" }, 401);
         return;
       }
-      await json(route, { access_token: token, token_type: "bearer", id: 7, username: "e2e-user", message: "authenticated" });
+      await json(route, startSession(data.username || authUser.username));
       return;
+    }
+    if (path === "/auth/signup") {
+      const data = request.postDataJSON() as { username?: string; invite_code?: string };
+      if (signupMode === "closed") {
+        await json(route, { detail: "Sign-up is closed on this instance." }, 403);
+        return;
+      }
+      if (signupMode === "invite") {
+        if (!data.invite_code || !invites.has(data.invite_code)) {
+          await json(route, { detail: "This invite code is not valid." }, 403);
+          return;
+        }
+        invites.delete(data.invite_code);
+      }
+      await json(route, startSession(data.username || authUser.username), 201);
+      return;
+    }
+    if (path === "/auth/refresh") {
+      if (!signedIn) {
+        await json(route, { detail: "Session ended. Please sign in again." }, 401);
+        return;
+      }
+      await json(route, startSession(signedInUser));
+      return;
+    }
+    if (path === "/auth/logout") {
+      api.revokeSessions();
+      await route.fulfill({ status: 204 });
+      return;
+    }
+    if (path === "/auth/config") {
+      await json(route, { signup_mode: signupMode, first_user: false });
+      return;
+    }
+    if (path === "/auth/password-reset") {
+      const data = request.postDataJSON() as { token?: string };
+      if (!data.token || !resetTokens.has(data.token)) {
+        await json(route, { detail: "This password reset link is invalid or has expired." }, 400);
+        return;
+      }
+      resetTokens.delete(data.token);
+      await json(route, { message: "Password changed. Please sign in." });
+      return;
+    }
+
+    // Everything else needs a live access token, like the real API.
+    const authorization = request.headers()["authorization"] || "";
+    if (!validTokens.has(authorization.replace(/^Bearer /, ""))) {
+      await json(route, { detail: "Session ended. Please sign in again." }, 401);
+      return;
+    }
+
+    if (path === "/auth/logout-others" && method === "POST") {
+      await json(route, { revoked_sessions: 2 });
+      return;
+    }
+    if (path.startsWith("/admin/")) {
+      if (!options.admin) {
+        await json(route, { detail: "Administrator access required" }, 403);
+        return;
+      }
+      if (path === "/admin/users" && method === "GET") {
+        await json(route, users.map((user) => ({ ...user, created_at: "2026-07-26T12:00:00Z", last_seen_at: null })));
+        return;
+      }
+      const userMatch = path.match(/^\/admin\/users\/(\d+)(\/password-reset)?$/);
+      if (userMatch) {
+        const user = users.find((item) => item.id === Number(userMatch[1]))!;
+        if (userMatch[2]) {
+          resetTokens.add("reset-from-admin");
+          await json(route, { token: "reset-from-admin", path: "/reset-password?token=reset-from-admin", expires_at: "2026-07-27T12:00:00Z" });
+          return;
+        }
+        Object.assign(user, request.postDataJSON());
+        await json(route, { ...user, created_at: null, last_seen_at: null });
+        return;
+      }
+      if (path === "/admin/settings") {
+        if (method === "PUT") signupMode = request.postDataJSON().signup_mode;
+        await json(route, { signup_mode: signupMode });
+        return;
+      }
+      if (path === "/admin/invites" && method === "POST") {
+        invites.add("fresh-invite-code");
+        await json(route, { id: 1, label: request.postDataJSON().label ?? null, max_uses: 1, use_count: 0, expires_at: null, revoked_at: null, created_at: null, status: "active", code: "fresh-invite-code" }, 201);
+        return;
+      }
+      if (path === "/admin/invites") {
+        await json(route, [...invites].map((_code, index) => ({ id: index + 1, label: "Fixture invite", max_uses: 1, use_count: 0, expires_at: null, revoked_at: null, created_at: null, status: "active", code: null })));
+        return;
+      }
     }
     if (!options.admin && path.startsWith("/catalog-scrapes")) {
       await json(route, { detail: "Administrator access is required." }, 403);
@@ -167,6 +293,8 @@ export async function installMockApi(page: Page, options: MockApiOptions = {}) {
     // Keep incidental layout requests deterministic and non-blocking.
     await json(route, {});
   });
+
+  return api;
 }
 
 export const authUser = { username: "e2e-user", password: "NexusE2E-1234" };

@@ -1,116 +1,107 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import SignupForm from "../../src/components/auth/SignupForm";
-import apiClient from "../../src/services/apiClient";
+import { authService } from "../../src/services/authService";
 import { AuthProvider } from "../../src/context/AuthContext";
 
-vi.mock("../../src/services/apiClient");
+vi.mock("../../src/services/authService", () => ({
+  authService: {
+    signupConfig: vi.fn(),
+    register: vi.fn(),
+    restore: vi.fn(),
+  },
+}));
 
-const mockedApiClient = apiClient as jest.Mocked<typeof apiClient>;
+const mocked = vi.mocked(authService);
 
-const renderWithRouter = (ui: React.ReactElement) => {
-  return render(
-    <MemoryRouter>
-      <AuthProvider>{ui}</AuthProvider>
+const renderForm = (path = "/signup") =>
+  render(
+    <MemoryRouter initialEntries={[path]}>
+      <AuthProvider>
+        <SignupForm />
+      </AuthProvider>
     </MemoryRouter>
   );
+
+const fillCredentials = async (user: ReturnType<typeof userEvent.setup>) => {
+  await user.type(await screen.findByLabelText(/username/i), "testuser");
+  await user.type(screen.getByLabelText(/^password/i), "password123");
 };
 
 describe("SignupForm", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocked.restore.mockResolvedValue(null);
+    mocked.signupConfig.mockResolvedValue({ signup_mode: "open", first_user: false });
   });
 
-  it("renders the form correctly", () => {
-    renderWithRouter(<SignupForm />);
+  it("submits username and password when sign-up is open", async () => {
+    mocked.register.mockResolvedValueOnce({} as never);
+    renderForm();
+    const user = userEvent.setup();
 
-    expect(screen.getByLabelText(/username/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/password/i)).toBeInTheDocument();
+    await fillCredentials(user);
+    await user.click(screen.getByRole("button", { name: /submit/i }));
+
+    expect(mocked.register).toHaveBeenCalledWith({ username: "testuser", password: "password123", invite_code: undefined });
+    expect(screen.queryByLabelText(/invite code/i)).not.toBeInTheDocument();
+  });
+
+  it("tells the first user they will administer the instance", async () => {
+    mocked.signupConfig.mockResolvedValueOnce({ signup_mode: "closed", first_user: true });
+    renderForm();
+
+    expect(await screen.findByText(/first account/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /submit/i })).toBeInTheDocument();
   });
 
-  it("updates form values when user types", async () => {
-    renderWithRouter(<SignupForm />);
+  it("asks for an invite code in invite mode and prefills it from the link", async () => {
+    mocked.signupConfig.mockResolvedValueOnce({ signup_mode: "invite", first_user: false });
+    mocked.register.mockResolvedValueOnce({} as never);
+    renderForm("/signup?invite=abc123");
     const user = userEvent.setup();
 
-    const usernameInput = screen.getByLabelText(/username/i);
-    const passwordInput = screen.getByLabelText(/password/i);
-
-    await user.type(usernameInput, "testuser");
-    await user.type(passwordInput, "password123");
-
-    expect(usernameInput).toHaveValue("testuser");
-    expect(passwordInput).toHaveValue("password123");
-  });
-
-  it("submits the form and shows success message", async () => {
-    mockedApiClient.post.mockResolvedValueOnce({ data: { success: true } });
-
-    renderWithRouter(<SignupForm />);
-    const user = userEvent.setup();
-
-    await user.type(screen.getByLabelText(/username/i), "testuser");
-    await user.type(screen.getByLabelText(/password/i), "password123");
-
+    expect(await screen.findByLabelText(/invite code/i)).toHaveValue("abc123");
+    await fillCredentials(user);
     await user.click(screen.getByRole("button", { name: /submit/i }));
 
-    expect(mockedApiClient.post).toHaveBeenCalledWith("/auth/signup", {
-      username: "testuser",
-      password: "password123",
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText(/signup successful/i)).toBeInTheDocument();
-    });
-
-    expect(screen.getByLabelText(/username/i)).toHaveValue("");
-    expect(screen.getByLabelText(/password/i)).toHaveValue("");
+    expect(mocked.register).toHaveBeenCalledWith({ username: "testuser", password: "password123", invite_code: "abc123" });
   });
 
-  it("shows error message when API call fails", async () => {
-    mockedApiClient.post.mockRejectedValueOnce(new Error("API Error"));
+  it("explains that sign-up is closed", async () => {
+    mocked.signupConfig.mockResolvedValueOnce({ signup_mode: "closed", first_user: false });
+    renderForm();
 
-    renderWithRouter(<SignupForm />);
+    expect(await screen.findByText(/sign-up is closed/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /submit/i })).not.toBeInTheDocument();
+  });
+
+  it("shows the server's error and keeps the input", async () => {
+    mocked.register.mockRejectedValueOnce(new Error("API Error"));
+    renderForm();
     const user = userEvent.setup();
 
-    await user.type(screen.getByLabelText(/username/i), "testuser");
-    await user.type(screen.getByLabelText(/password/i), "password123");
-
+    await fillCredentials(user);
     await user.click(screen.getByRole("button", { name: /submit/i }));
 
     await waitFor(() => {
       expect(screen.getByText(/error signing up/i)).toBeInTheDocument();
     });
-
     expect(screen.getByLabelText(/username/i)).toHaveValue("testuser");
-    expect(screen.getByLabelText(/password/i)).toHaveValue("password123");
   });
 
-  it("disables submit button while submitting", async () => {
-    mockedApiClient.post.mockImplementationOnce(
-      () =>
-        new Promise((resolve) =>
-          setTimeout(() => resolve({ data: { success: true } }), 100)
-        )
-    );
-
-    renderWithRouter(<SignupForm />);
+  it("disables submit while submitting", async () => {
+    let finish: () => void = () => undefined;
+    mocked.register.mockImplementationOnce(() => new Promise((resolve) => { finish = () => resolve({} as never); }));
+    renderForm();
     const user = userEvent.setup();
 
-    await user.type(screen.getByLabelText(/username/i), "testuser");
-    await user.type(screen.getByLabelText(/password/i), "password123");
+    await fillCredentials(user);
     await user.click(screen.getByRole("button", { name: /submit/i }));
 
-    expect(screen.getByRole("button")).toBeDisabled();
-    expect(screen.getByText(/submitting/i)).toBeInTheDocument();
-
-    await waitFor(() => {
-      expect(screen.getByRole("button")).not.toBeDisabled();
-      expect(
-        screen.getByRole("button", { name: /submit/i })
-      ).toBeInTheDocument();
-    });
+    expect(screen.getByRole("button", { name: /submitting/i })).toBeDisabled();
+    finish();
   });
 });
