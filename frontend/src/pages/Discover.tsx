@@ -278,7 +278,7 @@ const Discover: React.FC = () => {
   };
 
   const handleNovelClick = (novel: DiscoveredNovel) => {
-    navigate(`/discover/${currentSite}/${novel.id}`);
+    navigate(`/story/${novel.id}`);
   };
 
   const getSiteDisplayName = (siteValue: string) => {

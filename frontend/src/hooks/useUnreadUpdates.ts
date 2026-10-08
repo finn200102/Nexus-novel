@@ -19,7 +19,8 @@ export function useUnreadUpdates(libraryId: number | null | undefined) {
     }
     setLoading(true);
     try {
-      setRows(await activityService.getInbox(libraryId));
+      const data = await activityService.getInbox(libraryId);
+      setRows(Array.isArray(data) ? data : []);
       setError(false);
     } catch {
       setRows([]);

@@ -21,6 +21,7 @@ import type { Shelf } from "../types/organization";
 import "../styles/novel-detail.css";
 import "../styles/organization.css";
 import { displayTitle } from "../utils/displayTitle";
+import { usePageTitle } from "../hooks/usePageTitle";
 
 interface NovelDetailProps {
   novelId: number;
@@ -29,6 +30,7 @@ interface NovelDetailProps {
 
 const NovelDetail: React.FC<NovelDetailProps> = ({ novelId, libraryId }) => {
   const [novel, setNovel] = useState<Novel | null>(null);
+  usePageTitle(novel ? displayTitle(novel) : null, { back: { to: "/library", label: "Back to Library" } });
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [updating, setUpdating] = useState<boolean>(false);

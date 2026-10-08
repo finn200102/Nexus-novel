@@ -3,7 +3,7 @@ import { SegmentedControl } from "../components/ui";
 import { useTheme } from "./useTheme";
 import type { ThemePreference } from "./themeStore";
 
-/** System / Light / Dark switch. Used in Account until the D4 account menu takes it over. */
+/** System / Light / Dark switch: sidebar profile menu and the phone More page (Settings › Appearance in D12). */
 export function ThemeSwitcher({ className }: { className?: string }) {
   const { preference, setPreference } = useTheme();
   return (

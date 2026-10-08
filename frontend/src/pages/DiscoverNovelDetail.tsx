@@ -11,6 +11,8 @@ import { insightService, CanonicalWork, InsightSignal, SimilarNovel, StoryGuide 
 import { HideButton } from "../components/organization/HideButton";
 import { ReasonList } from "../components/organization/ReasonList";
 import { TermHideList } from "../components/organization/TermHideList";
+import { usePageTitle } from "../hooks/usePageTitle";
+import { displayTitle } from "../utils/displayTitle";
 import "../styles/novel-detail.css";
 import "../styles/organization.css";
 
@@ -28,6 +30,7 @@ const DiscoverNovelDetail: React.FC = () => {
   const [similar, setSimilar] = useState<SimilarNovel[]>([]);
   const [canonicalWork, setCanonicalWork] = useState<CanonicalWork | null>(null);
   const [analysisState, setAnalysisState] = useState<string>("not_started");
+  usePageTitle(novel ? displayTitle(novel) : loading ? null : "Story not found", { back: { to: "/discover", label: "Back to Discover" } });
   const [enriching, setEnriching] = useState(false);
   const [storyGuide, setStoryGuide] = useState<StoryGuide | null>(null);
 
@@ -123,7 +126,7 @@ const DiscoverNovelDetail: React.FC = () => {
       <div className="library-workspace">
         <div className="discover-error">
           <p>{error || "Novel not found"}</p>
-          <button onClick={() => navigate(`/discover/${site}`)}>
+          <button onClick={() => navigate(site ? `/discover/${site}` : "/discover")}>
             Back to Discover
           </button>
         </div>
@@ -187,7 +190,7 @@ const DiscoverNovelDetail: React.FC = () => {
       >
         <button
           className="novel-hero__back"
-          onClick={() => navigate(`/discover/${site}`)}
+          onClick={() => navigate(site ? `/discover/${site}` : "/discover")}
         >
           ← Back to Discover
         </button>
@@ -273,7 +276,7 @@ const DiscoverNovelDetail: React.FC = () => {
       </div>
       <section className="novel-insights">
         <div className="novel-insights__panel"><p className="novel-insights__eyebrow">Nexus insights</p><h2>Text signals</h2><p className="novel-insights__notice">Local classifier output. Source genres and tags remain separate.</p>{signals.length > 0 ? <div className="novel-insights__chips">{signals.map((signal) => <span key={`${signal.family}:${signal.value}`} title={`${signal.model_version} · ${(signal.confidence || 0) * 100}% confidence`}>{signal.family.replace(/_/g, " ")}: <strong>{signal.value}</strong></span>)}</div> : <div className="novel-insights__empty"><span>{analysisState === "queued" || analysisState === "running" ? "Analysis is running in the low-priority local worker." : "No local text signals yet."}</span><button type="button" className="novel-insights__browse" disabled={enriching || analysisState === "queued" || analysisState === "running"} onClick={() => void handleEnrich()}>{enriching ? "Queueing…" : analysisState === "queued" || analysisState === "running" ? "Analysis queued" : "Generate insights"}</button></div>}</div>
-        {similar.length > 0 && <div className="novel-insights__panel"><p className="novel-insights__eyebrow">More to explore</p><h2>Similar stories</h2><div className="novel-insights__similar">{similar.map((match) => <button type="button" key={match.novel_id} onClick={() => navigate(`/discover/all/${match.novel_id}`)}><strong>{match.title}</strong><small>{match.author || "Unknown author"} · {match.explanation}</small><ReasonList reasons={match.reasons} inline /></button>)}</div><button type="button" className="novel-insights__browse" onClick={() => navigate(`/discover/all?similar_to=${novel.id}`)}>Browse all similar stories</button></div>}
+        {similar.length > 0 && <div className="novel-insights__panel"><p className="novel-insights__eyebrow">More to explore</p><h2>Similar stories</h2><div className="novel-insights__similar">{similar.map((match) => <button type="button" key={match.novel_id} onClick={() => navigate(`/story/${match.novel_id}`)}><strong>{match.title}</strong><small>{match.author || "Unknown author"} · {match.explanation}</small><ReasonList reasons={match.reasons} inline /></button>)}</div><button type="button" className="novel-insights__browse" onClick={() => navigate(`/discover/all?similar_to=${novel.id}`)}>Browse all similar stories</button></div>}
         {storyGuide && !storyGuide.unavailable && <div className="novel-insights__panel novel-insights__guide"><p className="novel-insights__eyebrow">Story guide</p><h2>Private chapter knowledge</h2>{storyGuide.chapters_analyzed ? <><p className="novel-insights__notice">Built through chapter {storyGuide.through_chapter}; future chapters are excluded.</p><div className="novel-insights__guide-grid"><div><h3>Characters</h3>{storyGuide.characters.slice(0, 6).map((character) => <article key={character.name}><strong>{character.name}</strong><small>{character.roles.join(" · ")} · ch. {character.first_seen_chapter}–{character.last_seen_chapter}</small><p>{character.descriptions[0] || "Mentioned in the analyzed chapters."}</p></article>)}</div><div><h3>Latest recap</h3>{storyGuide.chapters.slice(-2).reverse().map((chapter) => <article key={chapter.chapter}><strong>Chapter {chapter.chapter}: {chapter.title}</strong><p>{chapter.chapter_summary}</p><small>{chapter.point_of_view}{chapter.setting ? ` · ${chapter.setting}` : ""}</small></article>)}</div></div></> : <p className="novel-insights__notice">A Story Guide appears after a public chapter is downloaded and analyzed.</p>}</div>}
         {canonicalWork && <div className="novel-insights__panel"><p className="novel-insights__eyebrow">Editions</p><h2>{canonicalWork.editions.length} linked edition{canonicalWork.editions.length === 1 ? "" : "s"}</h2><p className="novel-insights__notice">Source records and reader state are kept separate. Uncertain chapter mappings remain visible for review.</p><div className="novel-insights__chips">{canonicalWork.editions.map((edition) => <span key={edition.id}>{edition.edition_kind}{edition.language ? ` · ${edition.language}` : ""}</span>)}</div></div>}
       </section>

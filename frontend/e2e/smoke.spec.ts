@@ -10,7 +10,7 @@ test.describe("Nexus smoke workflows", () => {
   test("metadata outage leaves a usable error state", async ({ signedInPage }) => {
     await signedInPage.route("**/api/operations/summary**", (route) => route.abort("timedout"));
     await signedInPage.goto("/operations");
-    await expect(signedInPage).toHaveURL(/\/operations/);
+    await expect(signedInPage).toHaveURL(/\/admin\/status/);
     await expect(signedInPage.getByRole("heading", { name: "Operations" })).toBeVisible();
   });
 

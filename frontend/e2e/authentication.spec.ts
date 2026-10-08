@@ -13,7 +13,7 @@ test.describe("Nexus authentication", () => {
   test("signs in without a library/signup fallback race", async ({ page }) => {
     await installMockApi(page, { admin: true });
     await signIn(page);
-    await expect(page.getByRole("link", { name: /Nexus Novel dashboard/i })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Main" })).toBeVisible();
     await expect(page).not.toHaveURL(/signup/);
   });
 
@@ -25,7 +25,7 @@ test.describe("Nexus authentication", () => {
 
     await page.reload();
     await expect(page).toHaveURL("http://127.0.0.1:4173/");
-    await expect(page.getByRole("link", { name: /Nexus Novel dashboard/i })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Main" })).toBeVisible();
   });
 
   test("a revoked session is rejected and returns the reader to sign-in", async ({ page }) => {
@@ -75,7 +75,9 @@ test.describe("Nexus authentication", () => {
     await page.getByRole("button", { name: "Submit" }).click();
     await expect(page).toHaveURL("http://127.0.0.1:4173/");
 
-    await page.getByRole("button", { name: "Sign out" }).click();
+    await page.getByRole("button", { name: /invited-reader/ }).click();
+    await page.getByRole("dialog", { name: "Account" }).getByRole("button", { name: "Sign out" }).click();
+    await expect(page).toHaveURL(/\/login$/);
     await page.goto("/signup?invite=welcome-code");
     await page.getByLabel("Username:").fill("second-try");
     await page.getByLabel("Password:").fill(authUser.password);
@@ -104,7 +106,8 @@ test.describe("Nexus authentication", () => {
   test("administrators manage sign-up, invites and reset links", async ({ page }) => {
     await installMockApi(page, { admin: true, signupMode: "closed" });
     await signIn(page);
-    await page.getByRole("link", { name: "Users" }).click();
+    await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Admin" }).click();
+    await page.getByRole("navigation", { name: "Admin sections" }).getByRole("link", { name: "Users" }).click();
     await expect(page.getByRole("heading", { name: "Users" })).toBeVisible();
 
     await page.getByLabel("Invite only").check();
@@ -120,8 +123,11 @@ test.describe("Nexus authentication", () => {
   test("readers do not see administrator navigation", async ({ page }) => {
     await installMockApi(page, { admin: false });
     await signIn(page);
-    await expect(page.getByRole("link", { name: "Account" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Users" })).toHaveCount(0);
-    await expect(page.getByRole("link", { name: "Scrape Jobs" })).toHaveCount(0);
+    const nav = page.getByRole("navigation", { name: "Main" });
+    await expect(nav.getByRole("link", { name: "Updates" })).toBeVisible();
+    await expect(nav.getByRole("link", { name: "Admin" })).toHaveCount(0);
+    await nav.getByRole("button", { name: new RegExp(authUser.username) }).click();
+    await expect(page.getByRole("dialog", { name: "Account" }).getByRole("link", { name: "Settings" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Admin" })).toHaveCount(0);
   });
 });

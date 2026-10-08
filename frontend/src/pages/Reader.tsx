@@ -15,6 +15,8 @@ import { AuthorNotesMode, readAuthorNotesMode, readLayout, ReaderLayout, writeAu
 import { scrollPercent } from "../components/reader/pagedMath";
 import { useReaderPaging } from "../hooks/useReaderPaging";
 import { useReaderTypography } from "../hooks/useReaderTypography";
+import { usePageTitle } from "../hooks/usePageTitle";
+import { displayTitle } from "../utils/displayTitle";
 import "../styles/Reader.css";
 
 interface ChapterContent {
@@ -86,6 +88,7 @@ const Reader: React.FC = () => {
 
   const [chapter, setChapter] = useState<ChapterContent | null>(null);
   const [novel, setNovel] = useState<Novel | null>(null);
+  usePageTitle(chapter && novel ? `${chapter.title} · ${displayTitle(novel)}` : null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [chapters, setChapters] = useState<ChapterSummary[]>([]);

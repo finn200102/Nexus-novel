@@ -223,6 +223,18 @@ export async function installMockApi(page: Page | BrowserContext, options: MockA
       await json(route, { hours: 24, sources: [{ site: "fanfiction", requests: 4, cache_hit_percent: 25, average_latency_ms: 1200, last_request_at: "2026-07-26T11:59:00Z", circuit_state: "half_open", last_error_category: "timeout", average_job_duration_seconds: 3, retention_days: 30 }] });
       return;
     }
+    if (path.startsWith("/shelves") && method === "GET") {
+      await json(route, []);
+      return;
+    }
+    if (path.startsWith("/personal/tags")) {
+      await json(route, { tags: [] });
+      return;
+    }
+    if (path.startsWith("/activity/inbox") || path.startsWith("/activity/calendar")) {
+      await json(route, []);
+      return;
+    }
     if (path.startsWith("/activity/feed") || path.startsWith("/novel/updates")) {
       await json(route, []);
       return;
