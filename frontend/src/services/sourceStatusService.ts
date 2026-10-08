@@ -14,7 +14,8 @@ export interface SourceStatus {
 export const sourceStatusService = {
   async list(): Promise<SourceStatus[]> {
     const response = await apiClient.get<{ sites: SourceStatus[] }>("/sources/status");
-    return response.data.sites;
+    // A banner that crashes would take the whole app shell down with it.
+    return Array.isArray(response.data?.sites) ? response.data.sites : [];
   },
 };
 

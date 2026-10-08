@@ -12,7 +12,8 @@ export default defineConfig({
     channel: process.env.NEXUS_E2E_CHANNEL || "chrome",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
-    video: "retain-on-failure",
+    // NEXUS_E2E_VIDEO=off skips recording where the ffmpeg build is not installed.
+    video: process.env.NEXUS_E2E_VIDEO === "off" ? "off" : "retain-on-failure",
     // The production PWA service worker can intercept fetches before the test
     // fixture router sees them. Acceptance tests must use their deterministic
     // API fixtures rather than a persisted browser cache.
