@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -7,6 +9,9 @@ from app.models.novel import Novel
 from app.models.reading_progress import ReadingProgress
 from app.models.user import User
 from app.services import metadata_client
+from app.services.blocklist_service import apply_blocklist, merged_exclusions
+from app.services.library_organization_service import personal_for_novels
+from app.services.recommendation_reasons import ReasonSource, build_reasons, terms_of
 
 router = APIRouter(
     prefix="/discovery",
@@ -91,9 +96,23 @@ async def get_novels(
     sort_order: str = Query("desc", pattern="^(asc|desc)$"),
     limit: int = Query(20, ge=1, le=100, description="Max items to return"),
     cursor: Optional[int] = Query(None, description="Pagination cursor"),
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Get novels from metadata server with optional filtering."""
+    """Get novels from metadata server with optional filtering.
+
+    The user's blocklist is merged into the exclude_* parameters, and blocked
+    rows are dropped again from the page the server returned.
+    """
+    blocked = merged_exclusions(
+        db,
+        current_user,
+        exclude_tag=exclude_tag,
+        exclude_fandom=exclude_fandom,
+        exclude_genre=exclude_genre,
+        exclude_author=exclude_author,
+        exclude_text=exclude_text,
+    )
     data = await metadata_client.list_novels_metadata(
         site=site,
         author=author,
@@ -102,11 +121,11 @@ async def get_novels(
         tag_mode=tag_mode,
         fandom=fandom,
         genre=genre,
-        exclude_tag=exclude_tag,
-        exclude_fandom=exclude_fandom,
-        exclude_genre=exclude_genre,
-        exclude_author=exclude_author,
-        exclude_text=exclude_text,
+        exclude_tag=blocked["exclude_tag"],
+        exclude_fandom=blocked["exclude_fandom"],
+        exclude_genre=blocked["exclude_genre"],
+        exclude_author=blocked["exclude_author"],
+        exclude_text=blocked["exclude_text"],
         language=language,
         complete_only=complete_only,
         crossover=crossover,
@@ -127,6 +146,8 @@ async def get_novels(
         limit=limit,
         cursor=cursor,
     )
+    if isinstance(data, dict) and isinstance(data.get("data"), list):
+        data = {**data, "data": apply_blocklist(db, current_user, data["data"])}
     return data
 
 
@@ -155,9 +176,51 @@ async def enqueue_novel_analysis(novel_id: int, current_user: User = Depends(get
 async def get_similar_novels(
     novel_id: int,
     limit: int = Query(8, ge=1, le=24),
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return await metadata_client.get_similar_novels(novel_id, limit)
+    """Similar works with a "why this" reason list for each row."""
+    data = await metadata_client.get_similar_novels(novel_id, limit)
+    rows = data.get("data", []) if isinstance(data, dict) else list(data or [])
+    if not rows:
+        return data
+    source_metadata = await _safe_metadata(novel_id)
+    source = _reason_source(db, current_user, novel_id, source_metadata)
+
+    candidates = await asyncio.gather(*(_safe_metadata(int(row["novel_id"])) for row in rows if row.get("novel_id")))
+    candidate_by_id = {int(row["novel_id"]): meta for row, meta in zip([r for r in rows if r.get("novel_id")], candidates)}
+    enriched = []
+    for row in rows:
+        metadata = candidate_by_id.get(int(row["novel_id"])) if row.get("novel_id") else None
+        merged = {**(metadata or {}), **row}
+        merged["reasons"] = build_reasons(merged, [source]) if source else []
+        enriched.append(merged)
+    blocked_filtered = apply_blocklist(db, current_user, enriched)
+    if isinstance(data, dict):
+        return {**data, "data": blocked_filtered}
+    return blocked_filtered
+
+
+async def _safe_metadata(novel_id: int) -> dict | None:
+    try:
+        return await metadata_client.get_novel_metadata(novel_id)
+    except Exception:
+        return None
+
+
+def _reason_source(db: Session, current_user: User, novel_id: int, metadata: dict | None) -> ReasonSource | None:
+    if not metadata:
+        return None
+    local = _reader_novel(db, current_user=current_user, metadata_novel_id=novel_id)
+    rating = None
+    if local is not None:
+        rating = personal_for_novels(db, current_user, [local.id]).get(local.id, {}).get("rating")
+    return ReasonSource(
+        title=metadata.get("title") or "this story",
+        terms=terms_of(metadata),
+        author=metadata.get("author"),
+        rating=rating,
+    )
 
 
 @router.get("/novels/{novel_id}/story-guide")

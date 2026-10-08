@@ -36,6 +36,14 @@ class ExportAnnotation(BaseModel):
     note: Optional[str] = None
 
 
+class ExportPersonal(BaseModel):
+    """Private notes, personal rating and user tags. Optional on each novel."""
+
+    notes: Optional[str] = Field(default=None, max_length=20000)
+    rating: Optional[int] = Field(default=None, ge=1, le=5)
+    user_tags: list[str] = Field(default_factory=list, max_length=30)
+
+
 class ExportNovel(BaseModel):
     url: str = Field(min_length=1, max_length=255)
     title: Optional[str] = None
@@ -46,6 +54,7 @@ class ExportNovel(BaseModel):
     progress: Optional[ExportProgress] = None
     history: list[ExportHistoryPoint] = Field(default_factory=list)
     annotations: list[ExportAnnotation] = Field(default_factory=list)
+    personal: Optional[ExportPersonal] = None
 
 
 class ExportLibrary(BaseModel):
@@ -59,9 +68,30 @@ class ExportSavedSearch(BaseModel):
     notify_on_match: bool = False
 
 
+class ExportShelfNovel(BaseModel):
+    """A shelf member, identified by library name and source URL."""
+
+    library: str = Field(min_length=1, max_length=100)
+    url: str = Field(min_length=1, max_length=255)
+
+
+class ExportShelf(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    position: int = 0
+    novels: list[ExportShelfNovel] = Field(default_factory=list)
+
+
+class ExportBlocklistEntry(BaseModel):
+    kind: Literal["tag", "fandom", "genre", "author", "word"]
+    value: str = Field(min_length=1, max_length=200)
+
+
 class UserDataDocument(BaseModel):
     format: Literal["nexus-user-export"]
     version: int
     exported_at: Optional[datetime] = None
     libraries: list[ExportLibrary] = Field(default_factory=list)
     saved_searches: list[ExportSavedSearch] = Field(default_factory=list)
+    # Optional keys added within format version 1: older exports omit them.
+    shelves: list[ExportShelf] = Field(default_factory=list)
+    blocklist: list[ExportBlocklistEntry] = Field(default_factory=list)

@@ -12,6 +12,7 @@ from config.settings import settings
 from app.routers import auth, novel, library, chapter, discovery, follow, download, activity, operations, catalog_scrape, audio, saved_search, recommendations, admin_integrations, admin_users, notifications
 from app.routers import user_data
 from app.routers import app_passwords, kosync, opds
+from app.routers import blocklist, personal, shelves
 from app.db_migrations import upgrade_database
 from app.services import metadata_client
 from app.logging_config import (
@@ -78,6 +79,9 @@ app.include_router(notifications.router)
 app.include_router(app_passwords.router)
 app.include_router(opds.router)
 app.include_router(kosync.router)
+app.include_router(blocklist.router)
+app.include_router(shelves.router)
+app.include_router(personal.router)
 
 
 @app.middleware("http")

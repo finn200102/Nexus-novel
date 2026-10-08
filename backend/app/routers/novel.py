@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status, HTTPException, BackgroundTasks, Header
+from fastapi import APIRouter, Depends, status, HTTPException, BackgroundTasks, Header, Query
 import httpx
 from sqlalchemy import desc
 from sqlalchemy.exc import IntegrityError
@@ -21,6 +21,7 @@ from app.models.update_event import NovelUpdateEvent
 from app.models.download_job import ChapterDownloadJob
 from app.models.metadata_webhook_delivery import MetadataWebhookDelivery
 import app.services.novel_services as novel_services
+import app.services.library_organization_service as organization
 from app.services.chapter_services import (
     create_chapter,
     get_chapters_by_novel_id,
@@ -914,6 +915,10 @@ async def get_novels(
     search: str = "",
     author_name: str | None = None,
     genre_id: int | None = None,
+    shelf_id: int | None = None,
+    user_tag: str | None = None,
+    min_rating: int | None = Query(None, ge=1, le=5),
+    sort_by: str = Query("default", pattern="^(default|updated_since_read|personal_rating)$"),
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
@@ -935,7 +940,22 @@ async def get_novels(
     if search:
         query = query.filter(Novel.title.like(f"%{search}%"))
 
-    novels = query.offset(skip).limit(limit).all()
+    if shelf_id is not None:
+        shelf_novels = organization.novel_ids_on_shelf(db, current_user, shelf_id)
+        query = query.filter(Novel.id.in_(list(shelf_novels)))
+
+    if user_tag:
+        query = query.filter(Novel.id.in_(list(organization.novel_ids_with_user_tag(db, current_user, user_tag))))
+
+    if min_rating is not None:
+        query = query.filter(Novel.id.in_(list(organization.novel_ids_with_min_rating(db, current_user, min_rating))))
+
+    if sort_by != "default":
+        # User-data sorts need every match before paginating.
+        ordered = organization.sort_novels(db, current_user, query.all(), sort_by)
+        novels = ordered[skip : skip + limit]
+    else:
+        novels = query.offset(skip).limit(limit).all()
 
     for novel in novels:
         if novel.metadata_id and not novel.title:
