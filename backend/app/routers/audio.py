@@ -54,7 +54,6 @@ def _check_provider(request: ProviderCheckRequest, provider_id: str | None = Non
         raise HTTPException(status_code=503, detail=f"Audio provider is unavailable: {exc}") from exc
 
 
-@router.post("/providers/preview")
 def _preview_provider(request: ProviderPreviewRequest, provider_id: str | None = None):
     capability = capability_for(provider_id or request.provider_id)
     try:
@@ -69,22 +68,22 @@ def _preview_provider(request: ProviderPreviewRequest, provider_id: str | None =
 
 
 @router.post("/providers/check")
-def check_provider(request: ProviderCheckRequest):
+def check_provider(request: ProviderCheckRequest, current_user: User = Depends(get_current_user)):
     return _check_provider(request)
 
 
 @router.post("/providers/{provider_id}/check")
-def check_named_provider(provider_id: str, request: ProviderCheckRequest):
+def check_named_provider(provider_id: str, request: ProviderCheckRequest, current_user: User = Depends(get_current_user)):
     return _check_provider(request, provider_id)
 
 
 @router.post("/providers/preview")
-def preview_provider(request: ProviderPreviewRequest):
+def preview_provider(request: ProviderPreviewRequest, current_user: User = Depends(get_current_user)):
     return _preview_provider(request)
 
 
 @router.post("/providers/{provider_id}/preview")
-def preview_named_provider(provider_id: str, request: ProviderPreviewRequest):
+def preview_named_provider(provider_id: str, request: ProviderPreviewRequest, current_user: User = Depends(get_current_user)):
     return _preview_provider(request, provider_id)
 
 
