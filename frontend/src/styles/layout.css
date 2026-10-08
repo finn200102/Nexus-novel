@@ -346,7 +346,4 @@
 
 /* ---------- Reader frame (no shell) ---------- */
 .reader-frame { min-height: 100vh; min-height: 100dvh; background: var(--bg); }
-.reader-frame__bar { display: flex; align-items: center; min-height: 48px; padding: 0 var(--sp-4); border-bottom: 1px solid var(--border); background: var(--surface); }
-.reader-frame__back { display: inline-flex; align-items: center; gap: var(--sp-2); min-height: 44px; color: var(--text); font-weight: 500; text-decoration: none; }
-.reader-frame__back svg { width: 20px; height: 20px; }
-.reader-frame__main { min-width: 0; padding: var(--sp-4); }
+.reader-frame__main { min-width: 0; }

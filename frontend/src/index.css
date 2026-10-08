@@ -5,10 +5,7 @@
 :root,
 .nx-theme-light,
 .nx-theme-dark,
-[data-reader-theme],
-.reader-shell--paper,
-.reader-shell--night,
-.reader-shell--dusk {
+[data-reader-theme] {
   --bg-base: var(--bg);
   --bg-main: var(--bg);
   --bg-surface: var(--surface);

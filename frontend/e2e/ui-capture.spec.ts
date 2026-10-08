@@ -203,11 +203,7 @@ async function buildEntries(page: Page): Promise<Entry[]> {
           {
             name: "reader-settings",
             path: reader,
-            prep: async (p: Page) => {
-              const inspector = p.locator('[aria-label="Reader settings and notes"]').first();
-              if ((await inspector.count()) > 0) await inspector.scrollIntoViewIfNeeded();
-              else await p.getByRole("button", { name: /settings|preferences|display/i }).first().click();
-            },
+            prep: clickByName(/^Text settings$/),
           },
           { name: "reader-chapter-drawer", path: reader, prep: clickByName(/^Chapters$/) },
         ]

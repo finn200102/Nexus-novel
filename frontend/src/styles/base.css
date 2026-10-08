@@ -182,8 +182,6 @@ html {
  * already-resolved value from the page theme. */
 .nx-theme-light,
 .nx-theme-dark,
-[data-reader-theme],
-.reader-shell--night,
-.reader-shell--dusk {
+[data-reader-theme] {
   color: var(--text);
 }

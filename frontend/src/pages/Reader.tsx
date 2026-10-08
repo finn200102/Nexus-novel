@@ -1,21 +1,43 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { Pause, Play, RotateCcw, SkipBack, SkipForward, Trash2, Volume2, WandSparkles } from "lucide-react";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { BookOpenText, Download, FileJson, HardDriveDownload, Keyboard, NotebookPen, Quote, ScrollText, StickyNote } from "lucide-react";
 import { chapterService } from "../services/chapterService";
 import { novelService } from "../services/novelService";
-import { ChapterAudioJob, chapterAudioJobStore, chapterAudioStore, offlineReaderStore } from "../services/offlineReaderStore";
-import { mergeAudioSegments, OpenAICompatibleTtsConfig, splitTextForSynthesis, TtsProviderPresetId, TTS_PROVIDER_PRESETS, TtsRequestError, ttsService } from "../services/ttsService";
-import { audioService, ServerAudioJob } from "../services/audioService";
+import { offlineReaderStore } from "../services/offlineReaderStore";
 import OfflineBadge from "../components/reader/OfflineBadge";
 import ChapterBody from "../components/reader/ChapterBody";
 import ChapterDrawer from "../components/reader/ChapterDrawer";
-import ReaderPrefsControls from "../components/reader/ReaderPrefsControls";
-import { AuthorNotesMode, readAuthorNotesMode, readLayout, ReaderLayout, writeAuthorNotesMode, writeLayout } from "../components/reader/readerSettings";
+import { entryLabel } from "../components/reader/chapterLabels";
+import ReaderTopBar from "../components/reader/ReaderTopBar";
+import ReaderBottomBar from "../components/reader/ReaderBottomBar";
+import ReaderEndOfChapter from "../components/reader/ReaderEndOfChapter";
+import ReaderSettingsControl from "../components/reader/ReaderSettingsSheet";
+import ListenPlayer from "../components/reader/ListenPlayer";
+import { AnnotationsSheet, NoteDialog, ReadingAnnotation, RecapData, RecapSheet, ShortcutsDialog } from "../components/reader/ReaderPanels";
+import {
+  AuthorNotesMode,
+  FONT_SIZE_MAX,
+  FONT_SIZE_MIN,
+  readAuthorNotesMode,
+  readLayout,
+  ReaderLayout,
+  readShortcutsEnabled,
+  resolveReaderTheme,
+  writeAuthorNotesMode,
+  writeLayout,
+  writeShortcutsEnabled,
+} from "../components/reader/readerSettings";
+import { typographyStyle } from "../components/reader/typographyStyle";
 import { scrollPercent } from "../components/reader/pagedMath";
+import { Banner, type MenuItem } from "../components/ui";
 import { useReaderPaging } from "../hooks/useReaderPaging";
 import { useReaderTypography } from "../hooks/useReaderTypography";
+import { useReaderShortcuts } from "../hooks/useReaderShortcuts";
+import { useMediaQuery } from "../hooks/useMediaQuery";
 import { usePageTitle } from "../hooks/usePageTitle";
+import { useTheme } from "../theme/useTheme";
+import { useToast } from "../context/useToast";
 import { displayTitle } from "../utils/displayTitle";
 import "../styles/Reader.css";
 
@@ -50,26 +72,15 @@ interface ReadingProgress {
   percent: number;
 }
 
-interface ReadingAnnotation {
-  id: number;
-  chapter_number: number;
-  annotation_type: "bookmark" | "note" | "highlight";
-  position: number;
-  percent: number;
-  quote?: string | null;
-  note?: string | null;
-}
+const WORDS_PER_MINUTE = 230;
 
-const themeOptions: { value: "night" | "dusk" | "paper"; label: string }[] = [
-  { value: "night", label: "Night" },
-  { value: "dusk", label: "Dusk" },
-  { value: "paper", label: "Paper" },
-];
-
-const formatAudioTime = (seconds: number) => {
-  if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
-  const wholeSeconds = Math.floor(seconds);
-  return `${Math.floor(wholeSeconds / 60)}:${String(wholeSeconds % 60).padStart(2, "0")}`;
+const download = (blob: Blob, filename: string) => {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
 };
 
 const Reader: React.FC = () => {
@@ -80,6 +91,9 @@ const Reader: React.FC = () => {
   }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { addToast } = useToast();
+  const { theme: appTheme } = useTheme();
+  const compact = useMediaQuery("(max-width: 767px)", false);
 
   const chapter_number = Number(chapterNumber);
   const library_id = Number(libraryId);
@@ -94,49 +108,45 @@ const Reader: React.FC = () => {
   const [chapters, setChapters] = useState<ChapterSummary[]>([]);
   const [chaptersLoading, setChaptersLoading] = useState<boolean>(true);
   const [chaptersError, setChaptersError] = useState<string | null>(null);
-  const typographyState = useReaderTypography(novel_id);
-  const { fontScale, lineHeight, contentWidth, theme } = typographyState.typography;
-  const { setFontScale, setLineHeight, setContentWidth, setTheme } = typographyState;
+  const typo = useReaderTypography(novel_id);
+  const t = typo.typography;
+  const readerTheme = resolveReaderTheme(t.theme, appTheme);
   const [authorNotes, setAuthorNotes] = useState<AuthorNotesMode>(readAuthorNotesMode);
   const [layout, setLayout] = useState<ReaderLayout>(readLayout);
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [chapterQuery, setChapterQuery] = useState("");
+  const [shortcutsEnabled, setShortcutsEnabled] = useState(readShortcutsEnabled);
   const [progress, setProgress] = useState<ReadingProgress | null>(null);
+  const [percent, setPercent] = useState(0);
   const [annotations, setAnnotations] = useState<ReadingAnnotation[]>([]);
   const [restoredPosition, setRestoredPosition] = useState(false);
-  const [ttsAvailable] = useState(() => typeof window !== "undefined" && "speechSynthesis" in window);
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [voiceName, setVoiceName] = useState(() => localStorage.getItem("nexus-reader-tts-voice") || "");
-  const [ttsRate, setTtsRate] = useState(() => Number(localStorage.getItem("nexus-reader-tts-rate")) || 1);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [ttsEngine, setTtsEngine] = useState<"native" | "openai_compatible">(() => (localStorage.getItem("nexus-reader-tts-engine") as "native" | "openai_compatible") || "native");
-  const [ttsPreset, setTtsPreset] = useState<TtsProviderPresetId>(() => (localStorage.getItem("nexus-reader-tts-preset") as TtsProviderPresetId) || "kokoro_mps");
-  const [providerConfig, setProviderConfig] = useState<OpenAICompatibleTtsConfig>(() => ({
-    baseUrl: localStorage.getItem("nexus-reader-tts-url") || "http://localhost:8880/v1",
-    apiKey: localStorage.getItem("nexus-reader-tts-key") || "",
-    model: localStorage.getItem("nexus-reader-tts-model") || "kokoro",
-    voice: localStorage.getItem("nexus-reader-tts-provider-voice") || "af_bella",
-    languageCode: localStorage.getItem("nexus-reader-tts-language") || undefined,
-  }));
-  const [ttsExecutionMode, setTtsExecutionMode] = useState<"browser" | "server">(() => (localStorage.getItem("nexus-reader-tts-execution") as "browser" | "server") || "browser");
-  const [offlineChapterCount, setOfflineChapterCount] = useState(0);
-  const [chapterAudioReady, setChapterAudioReady] = useState(false);
-  const [audioJob, setAudioJob] = useState<ChapterAudioJob | null>(null);
-  const [serverAudioJob, setServerAudioJob] = useState<ServerAudioJob | null>(null);
-  const [audioPlayerError, setAudioPlayerError] = useState<string | null>(null);
-  const [audioCurrentTime, setAudioCurrentTime] = useState(0);
-  const [audioDuration, setAudioDuration] = useState(0);
-  const [sleepMinutes, setSleepMinutes] = useState(() => Number(localStorage.getItem("nexus-reader-audio-sleep-minutes")) || 0);
-  const [providerDiagnostic, setProviderDiagnostic] = useState<string | null>(null);
   const [readingHistory, setReadingHistory] = useState<{ chapters_touched: number; active_days: number; current_streak_days: number } | null>(null);
-  const [recap, setRecap] = useState<{ summary: string; spoiler_boundary_chapter: number; chapters: { number: number; title: string }[] } | null>(null);
-  const [hiatus, setHiatus] = useState<{ state: string; confidence: number; reason: string; baseline_days?: number; observed_updates?: number } | null>(null);
+  const [recap, setRecap] = useState<RecapData | null>(null);
+  const [recapLoading, setRecapLoading] = useState(false);
+  const [hiatus, setHiatus] = useState<{ state: string; confidence: number; reason: string } | null>(null);
+  // Overlays
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [listenOpen, setListenOpen] = useState(false);
+  const [noteQuote, setNoteQuote] = useState<string | null>(null);
+  const [annotationsOpen, setAnnotationsOpen] = useState(false);
+  const [recapOpen, setRecapOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [barsFocused, setBarsFocused] = useState(false);
   const contentRef = useRef<HTMLDivElement | null>(null);
-  const providerAudioRef = useRef<HTMLAudioElement | null>(null);
-  const audioControllerRef = useRef<AbortController | null>(null);
-  const audioObjectUrlRef = useRef<string | null>(null);
-  const audioJobRunningRef = useRef(false);
-  const sleepTimerRef = useRef<number | null>(null);
+  const chaptersButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  // Reading fonts ship in their own CSS chunk, loaded only here.
+  useEffect(() => { void import("../components/reader/readerFonts"); }, []);
+
+  // The shortcuts switch can also change in Settings › Reading (another tab or page).
+  useEffect(() => {
+    const sync = () => setShortcutsEnabled(readShortcutsEnabled());
+    window.addEventListener("nexus-reader-shortcuts", sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener("nexus-reader-shortcuts", sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -148,26 +158,11 @@ const Reader: React.FC = () => {
         setChapter(chapterData);
         setProgress(savedProgress);
         setRestoredPosition(false);
-        void Promise.all([
-          chapterAudioStore.get(novel_id, chapter_number),
-          chapterAudioJobStore.get(novel_id, chapter_number),
-        ]).then(([audio, job]) => {
-          setChapterAudioReady(Boolean(audio));
-          setAudioJob(job);
-          setAudioCurrentTime(Number(localStorage.getItem(`nexus-reader-audio-position-${novel_id}-${chapter_number}`)) || 0);
-          setAudioPlayerError(null);
-        }).catch(() => {
-          setChapterAudioReady(false);
-          setAudioJob(null);
-        });
         localStorage.setItem(`nexus-reader-chapter-${novel_id}-${chapter_number}`, JSON.stringify(chapterData));
-        void offlineReaderStore.save(chapterData).then(() => offlineReaderStore.countForNovel(novel_id)).then(setOfflineChapterCount).catch(() => undefined);
+        void offlineReaderStore.save(chapterData).catch(() => undefined);
 
         if (chapterData && chapterData.novel_id) {
-          const novelData = await novelService.getNovelById(
-            library_id,
-            chapterData.novel_id
-          );
+          const novelData = await novelService.getNovelById(library_id, chapterData.novel_id);
           setNovel(novelData);
         }
         setError(null);
@@ -181,8 +176,8 @@ const Reader: React.FC = () => {
         } else {
           const detail = axios.isAxiosError(err) ? String(err.response?.data?.detail || "") : "";
           setError(detail === "Chapter content is not downloaded"
-            ? "This chapter has not been downloaded yet. Queue it from the novel page, then return here to read or generate audio."
-            : "Failed to load content. Please try again later.");
+            ? "This chapter has not been downloaded yet. Queue it from the story page, then come back to read or listen."
+            : "Couldn’t load this chapter. Check your connection and try again.");
         }
         console.error("Error fetching data:", err);
       } finally {
@@ -202,66 +197,6 @@ const Reader: React.FC = () => {
   useEffect(() => {
     void chapterService.getReadingHistory(novel_id).then(setReadingHistory).catch(() => setReadingHistory(null));
   }, [novel_id, chapter_number]);
-
-  useEffect(() => {
-    localStorage.setItem("nexus-reader-tts-voice", voiceName);
-  }, [voiceName]);
-
-  useEffect(() => {
-    localStorage.setItem("nexus-reader-tts-rate", String(ttsRate));
-    if (providerAudioRef.current) providerAudioRef.current.playbackRate = ttsRate;
-  }, [ttsRate]);
-
-  useEffect(() => {
-    localStorage.setItem("nexus-reader-tts-engine", ttsEngine);
-    localStorage.setItem("nexus-reader-tts-preset", ttsPreset);
-    localStorage.setItem("nexus-reader-tts-url", providerConfig.baseUrl);
-    localStorage.setItem("nexus-reader-tts-key", providerConfig.apiKey);
-    localStorage.setItem("nexus-reader-tts-model", providerConfig.model);
-    localStorage.setItem("nexus-reader-tts-provider-voice", providerConfig.voice);
-    localStorage.setItem("nexus-reader-tts-execution", ttsExecutionMode);
-    if (providerConfig.languageCode) localStorage.setItem("nexus-reader-tts-language", providerConfig.languageCode);
-    else localStorage.removeItem("nexus-reader-tts-language");
-  }, [providerConfig, ttsEngine, ttsPreset, ttsExecutionMode]);
-
-  useEffect(() => {
-    localStorage.setItem("nexus-reader-audio-sleep-minutes", String(sleepMinutes));
-    if (sleepTimerRef.current) window.clearTimeout(sleepTimerRef.current);
-    sleepTimerRef.current = null;
-    if (!sleepMinutes || !isSpeaking) return;
-    sleepTimerRef.current = window.setTimeout(() => {
-      providerAudioRef.current?.pause();
-      if (ttsAvailable) window.speechSynthesis.cancel();
-      setIsSpeaking(false);
-      setProviderDiagnostic("Sleep timer paused chapter audio.");
-    }, sleepMinutes * 60_000);
-    return () => {
-      if (sleepTimerRef.current) window.clearTimeout(sleepTimerRef.current);
-      sleepTimerRef.current = null;
-    };
-  }, [sleepMinutes, isSpeaking, ttsAvailable]);
-
-  useEffect(() => {
-    if (!ttsAvailable) return;
-    const refreshVoices = () => setVoices(window.speechSynthesis.getVoices());
-    refreshVoices();
-    window.speechSynthesis.addEventListener("voiceschanged", refreshVoices);
-    return () => window.speechSynthesis.removeEventListener("voiceschanged", refreshVoices);
-  }, [ttsAvailable]);
-
-  useEffect(() => {
-    // Never allow narration from the previous chapter to continue after
-    // navigation or when the reader unmounts.
-    return () => {
-      if (ttsAvailable) window.speechSynthesis.cancel();
-      audioControllerRef.current?.abort();
-      providerAudioRef.current?.pause();
-      if (sleepTimerRef.current) window.clearTimeout(sleepTimerRef.current);
-      if (audioObjectUrlRef.current) URL.revokeObjectURL(audioObjectUrlRef.current);
-      providerAudioRef.current = null;
-      audioObjectUrlRef.current = null;
-    };
-  }, [chapter?.id, ttsAvailable]);
 
   useEffect(() => {
     const content = contentRef.current;
@@ -292,7 +227,6 @@ const Reader: React.FC = () => {
     return () => window.cancelAnimationFrame(frame);
   }, [chapter?.id, chapterContent, citationOffset]);
 
-
   useEffect(() => {
     const fetchChapters = async () => {
       if (!novel_id) return;
@@ -300,17 +234,14 @@ const Reader: React.FC = () => {
         setChaptersLoading(true);
         const list = await chapterService.getChapters(novel_id);
         if (Array.isArray(list)) {
-          const sorted = [...list].sort(
-            (a, b) => a.chapter_number - b.chapter_number
-          );
-          setChapters(sorted);
+          setChapters([...list].sort((a, b) => a.chapter_number - b.chapter_number));
           setChaptersError(null);
         } else {
           setChapters([]);
         }
       } catch (err) {
         console.error("Failed to load chapter list", err);
-        setChaptersError("Unable to load chapters");
+        setChaptersError("Couldn’t load the chapter list.");
       } finally {
         setChaptersLoading(false);
       }
@@ -319,32 +250,6 @@ const Reader: React.FC = () => {
     fetchChapters();
   }, [novel_id]);
 
-  useEffect(() => {
-    const content = contentRef.current;
-    if (!content || !chapter) return;
-    let timeout: number | undefined;
-    const saveProgress = () => {
-      const paged = layout === "paged";
-      const offset = paged ? content.scrollLeft : content.scrollTop;
-      const maxOffset = paged ? content.scrollWidth - content.clientWidth : content.scrollHeight - content.clientHeight;
-      const percent = scrollPercent(offset, maxOffset);
-      window.clearTimeout(timeout);
-      timeout = window.setTimeout(() => {
-        chapterService.updateReadingProgress(
-          novel_id,
-          chapter.chapter_number,
-          Math.round(offset),
-          percent
-        ).catch((err) => console.error("Failed to save reading progress", err));
-      }, 500);
-    };
-    content.addEventListener("scroll", saveProgress, { passive: true });
-    return () => {
-      content.removeEventListener("scroll", saveProgress);
-      window.clearTimeout(timeout);
-    };
-  }, [chapter, novel_id, restoredPosition, layout]);
-
   const goToChapter = useCallback((target: number) => {
     navigate(`/library/${library_id}/novels/${novel_id}/${target}`);
   }, [library_id, novel_id, navigate]);
@@ -352,479 +257,298 @@ const Reader: React.FC = () => {
   const paging = useReaderPaging({
     contentRef,
     paged: layout === "paged",
-    layoutKey: `${chapter?.id ?? 0}-${contentWidth}-${fontScale}-${lineHeight}`,
+    layoutKey: `${chapter?.id ?? 0}-${t.width}-${t.fontSize}-${t.lineHeight}-${t.font}-${t.letterSpacing}-${t.wordSpacing}-${t.paragraphStyle}-${compact}-${listenOpen}`,
     onPreviousChapter: () => goToChapter(chapter_number - 1),
     onNextChapter: () => goToChapter(chapter_number + 1),
   });
+  const { setChromeHidden } = paging;
+
+  // Progress saving (debounced, queued offline by the service), live percent and
+  // immersive bars: scrolling down hides them, scrolling up shows them again.
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content || !chapter) return;
+    let timeout: number | undefined;
+    let frame = 0;
+    let lastTop = content.scrollTop;
+    const onScroll = () => {
+      const paged = layout === "paged";
+      const offset = paged ? content.scrollLeft : content.scrollTop;
+      const maxOffset = paged ? content.scrollWidth - content.clientWidth : content.scrollHeight - content.clientHeight;
+      const value = scrollPercent(offset, maxOffset);
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => setPercent(value));
+      if (!paged) {
+        const delta = content.scrollTop - lastTop;
+        if (delta > 12 && content.scrollTop > 120 && value < 98) setChromeHidden(true);
+        else if (delta < -12 || value >= 98) setChromeHidden(false);
+        lastTop = content.scrollTop;
+      }
+      window.clearTimeout(timeout);
+      timeout = window.setTimeout(() => {
+        chapterService.updateReadingProgress(novel_id, chapter.chapter_number, Math.round(offset), value)
+          .catch((err) => console.error("Failed to save reading progress", err));
+      }, 500);
+    };
+    content.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      content.removeEventListener("scroll", onScroll);
+      window.clearTimeout(timeout);
+      window.cancelAnimationFrame(frame);
+    };
+  }, [chapter, novel_id, restoredPosition, layout, setChromeHidden]);
+
+  useEffect(() => { setChromeHidden(false); setPercent(0); }, [chapter?.id, layout, setChromeHidden]);
+
   const changeAuthorNotes = (mode: AuthorNotesMode) => { setAuthorNotes(mode); writeAuthorNotesMode(mode); };
   const changeLayout = (next: ReaderLayout) => { setLayout(next); writeLayout(next); };
+  const changeShortcuts = (enabled: boolean) => { setShortcutsEnabled(enabled); writeShortcutsEnabled(enabled); };
 
-  const decreaseFont = () => setFontScale((prev) => Math.max(0.85, prev - 0.1));
-  const increaseFont = () => setFontScale((prev) => Math.min(1.3, prev + 0.1));
-
-  const keepChapterOffline = async () => {
-    if (!chapter) return;
-    await offlineReaderStore.save(chapter);
-    setOfflineChapterCount(await offlineReaderStore.countForNovel(novel_id));
-  };
-
-  const stopTts = () => {
-    if (ttsAvailable) window.speechSynthesis.cancel();
-    providerAudioRef.current?.pause();
-    setIsSpeaking(false);
-  };
-
-  const audioPositionKey = () => `nexus-reader-audio-position-${novel_id}-${chapter_number}`;
-
-  const saveAudioJob = async (job: ChapterAudioJob) => {
-    await chapterAudioJobStore.save(job);
-    setAudioJob({ ...job, updated_at: Date.now() });
-  };
-
-  const generateServerAudio = async () => {
-    if (!chapter) return;
-    try {
-      if (serverAudioJob && ["failed", "cancelled", "retry_wait"].includes(serverAudioJob.status)) {
-        setServerAudioJob(await audioService.retry(serverAudioJob.id));
-        setAudioPlayerError(null);
-        return;
-      }
-      const job = await audioService.create({
-        library_id,
-        novel_id,
-        chapter_number: chapter.chapter_number,
-        provider: {
-          id: ttsPreset,
-          base_url: providerConfig.baseUrl,
-          model: providerConfig.model,
-          voice: providerConfig.voice,
-          language_code: providerConfig.languageCode,
-          execution_mode: "server",
-        },
-      });
-      setServerAudioJob(job);
-      setAudioPlayerError(null);
-    } catch (error) {
-      setAudioPlayerError(error instanceof Error ? error.message : "Could not start the server audio job.");
-    }
-  };
-
-  const generateChapterAudio = async () => {
-    if (!chapter || audioJob?.status === "generating" || audioJobRunningRef.current) return;
-    if (ttsExecutionMode === "server") {
-      await generateServerAudio();
-      return;
-    }
-    audioJobRunningRef.current = true;
-    const controller = new AbortController();
-    audioControllerRef.current = controller;
-    setAudioPlayerError(null);
-    let job: ChapterAudioJob | null = null;
-    try {
-      const existing = await chapterAudioJobStore.get(novel_id, chapter.chapter_number);
-      const activeProvider = existing?.provider || {
-        base_url: providerConfig.baseUrl,
-        model: providerConfig.model,
-        voice: providerConfig.voice,
-        language_code: providerConfig.languageCode,
-      };
-      const completedChunks = existing?.status === "failed" || existing?.status === "cancelled" || existing?.status === "queued"
-        ? existing.completed_chunks : 0;
-      const isSparkProvider = activeProvider.model.includes("Spark-TTS");
-      // Spark-TTS is happiest with short passages.  Preserve completed parts,
-      // but re-chunk only the pending long passages on resume so a recoverable
-      // job becomes more reliable without discarding any local audio.
-      const chunks = existing?.chunks?.length
-        ? (isSparkProvider
-          ? [
-              ...existing.chunks.slice(0, completedChunks),
-              ...existing.chunks.slice(completedChunks).flatMap((chunk) => splitTextForSynthesis(chunk, 380)),
-            ]
-          : existing.chunks)
-        : splitTextForSynthesis(`${chapter.title}. ${chapter.content}`, isSparkProvider ? 380 : 1_100);
-      if (!chunks.length) {
-        setAudioPlayerError("This chapter has no text to turn into audio.");
-        return;
-      }
-      job = {
-        cache_key: `${novel_id}:${chapter.chapter_number}`,
-        novel_id,
-        chapter_number: chapter.chapter_number,
-        chunks,
-        completed_chunks: completedChunks,
-        provider: activeProvider,
-        status: "generating",
-        created_at: existing?.created_at || Date.now(),
-        updated_at: Date.now(),
-      };
-      await saveAudioJob(job);
-      for (let index = job.completed_chunks; index < job.chunks.length; index += 1) {
-        const audio = await ttsService.synthesize(job.chunks[index], {
-          ...providerConfig,
-          baseUrl: job.provider?.base_url || providerConfig.baseUrl,
-          model: job.provider?.model || providerConfig.model,
-          voice: job.provider?.voice || providerConfig.voice,
-          languageCode: job.provider?.language_code || providerConfig.languageCode,
-        }, controller.signal);
-        await chapterAudioJobStore.saveSegment(novel_id, chapter.chapter_number, index, audio);
-        job.completed_chunks = index + 1;
-        await saveAudioJob(job);
-      }
-      const segments = await chapterAudioJobStore.segments(novel_id, chapter.chapter_number);
-      await chapterAudioStore.save(novel_id, chapter.chapter_number, await mergeAudioSegments(segments));
-      await chapterAudioJobStore.clearSegments(novel_id, chapter.chapter_number);
-      job.status = "ready";
-      job.error = undefined;
-      await saveAudioJob(job);
-      setChapterAudioReady(true);
-    } catch (error) {
-      if (!job) {
-        setAudioPlayerError("Could not start the audio job. Please retry.");
-        return;
-      }
-      if (error instanceof DOMException && error.name === "AbortError") {
-        job.status = "cancelled";
-        job.error = "Generation cancelled. You can resume from the last completed part.";
-      } else {
-        const providerError = error instanceof TtsRequestError ? error : null;
-        job.status = "failed";
-        job.error = providerError?.message || "Audio generation failed. Retry to continue from the last completed part.";
-      }
-      await saveAudioJob(job);
-      setAudioPlayerError(job.error || "Audio generation failed.");
-    } finally {
-      if (audioControllerRef.current === controller) audioControllerRef.current = null;
-      audioJobRunningRef.current = false;
-    }
-  };
-
-  const cancelAudioGeneration = async () => {
-    if (ttsExecutionMode === "server" && serverAudioJob && ["queued", "processing", "retry_wait"].includes(serverAudioJob.status)) {
-      try { setServerAudioJob(await audioService.cancel(serverAudioJob.id)); }
-      catch (error) { setAudioPlayerError(error instanceof Error ? error.message : "Could not pause the server audio job."); }
-      return;
-    }
-    audioControllerRef.current?.abort();
-  };
-
-  const chapterId = chapter?.id;
-  useEffect(() => {
-    if (chapterId === undefined) return;
-    let active = true;
-    audioService.list(chapterId).then((jobs) => {
-      if (active) setServerAudioJob(jobs[0] || null);
-    }).catch(() => undefined);
-    return () => { active = false; };
-  }, [chapterId]);
-
-  const serverAudioJobId = serverAudioJob?.id;
-  const serverAudioJobStatus = serverAudioJob?.status;
-  useEffect(() => {
-    if (serverAudioJobId === undefined || !["queued", "processing", "retry_wait"].includes(serverAudioJobStatus ?? "")) return;
-    const timer = window.setInterval(() => {
-      audioService.get(serverAudioJobId).then((job) => {
-        setServerAudioJob(job);
-        if (job.audio_ready) setChapterAudioReady(true);
-      }).catch(() => undefined);
-    }, 3000);
-    return () => window.clearInterval(timer);
-  }, [serverAudioJobId, serverAudioJobStatus]);
-
-  const loadChapterAudioPlayer = async (): Promise<HTMLAudioElement | null> => {
-    if (!chapter) return null;
-    if (providerAudioRef.current) return providerAudioRef.current;
-    const audioBlob = serverAudioJob?.audio_ready
-      ? await audioService.audio(serverAudioJob.id)
-      : await chapterAudioStore.get(novel_id, chapter.chapter_number);
-    if (!audioBlob) {
-      setChapterAudioReady(false);
-      return null;
-    }
-    const audio = new Audio();
-    const url = URL.createObjectURL(audioBlob);
-    audioObjectUrlRef.current = url;
-    audio.src = url;
-    audio.preload = "metadata";
-    audio.playbackRate = ttsRate;
-    audio.onloadedmetadata = () => {
-      setAudioDuration(Number.isFinite(audio.duration) ? audio.duration : 0);
-      const saved = Number(localStorage.getItem(audioPositionKey())) || 0;
-      audio.currentTime = Math.min(saved, Number.isFinite(audio.duration) ? audio.duration : saved);
-      setAudioCurrentTime(audio.currentTime);
-    };
-    audio.ontimeupdate = () => {
-      setAudioCurrentTime(audio.currentTime);
-      localStorage.setItem(audioPositionKey(), String(audio.currentTime));
-    };
-    audio.onended = () => {
-      localStorage.setItem(audioPositionKey(), "0");
-      setAudioCurrentTime(0);
-      setIsSpeaking(false);
-    };
-    audio.onerror = () => {
-      setAudioPlayerError("The saved chapter audio could not be played. Generate it again to repair it.");
-      setIsSpeaking(false);
-    };
-    providerAudioRef.current = audio;
-    return audio;
-  };
-
-  const playChapterAudio = async () => {
-    if (!chapter) return;
-    const audio = await loadChapterAudioPlayer();
-    if (!audio) return;
-    if (isSpeaking) {
-      audio.pause();
-      setIsSpeaking(false);
-      return;
-    }
-    try {
-      audio.playbackRate = ttsRate;
-      await audio.play();
-      setIsSpeaking(true);
-      setAudioPlayerError(null);
-    } catch {
-      setAudioPlayerError("Your browser could not start saved chapter audio.");
-    }
-  };
-
-  const seekChapterAudio = async (seconds: number) => {
-    const audio = await loadChapterAudioPlayer();
-    if (!audio) return;
-    const duration = Number.isFinite(audio.duration) ? audio.duration : audioDuration;
-    audio.currentTime = Math.max(0, Math.min(duration || Number.MAX_SAFE_INTEGER, audio.currentTime + seconds));
-    setAudioCurrentTime(audio.currentTime);
-    localStorage.setItem(audioPositionKey(), String(audio.currentTime));
-  };
-
-  const setChapterAudioPosition = async (position: number) => {
-    const audio = await loadChapterAudioPlayer();
-    if (!audio) return;
-    const duration = Number.isFinite(audio.duration) ? audio.duration : audioDuration;
-    audio.currentTime = Math.max(0, Math.min(duration || Number.MAX_SAFE_INTEGER, position));
-    setAudioCurrentTime(audio.currentTime);
-    localStorage.setItem(audioPositionKey(), String(audio.currentTime));
-  };
-
-  const deleteChapterAudio = async () => {
-    if (!chapter) return;
-    stopTts();
-    if (audioObjectUrlRef.current) URL.revokeObjectURL(audioObjectUrlRef.current);
-    providerAudioRef.current = null;
-    audioObjectUrlRef.current = null;
-    if (ttsExecutionMode === "server" && serverAudioJob) {
-      try {
-        await audioService.remove(serverAudioJob.id);
-        setServerAudioJob(null);
-      } catch (error) {
-        setAudioPlayerError(error instanceof Error ? error.message : "Could not delete the durable audio job.");
-        return;
-      }
-    } else {
-      await chapterAudioStore.remove(novel_id, chapter.chapter_number);
-      await chapterAudioJobStore.remove(novel_id, chapter.chapter_number);
-    }
-    setChapterAudioReady(false);
-    setAudioJob(null);
-    setAudioDuration(0);
-    setAudioCurrentTime(0);
-    localStorage.removeItem(audioPositionKey());
-  };
-
-  const diagnoseProvider = async (preview = false) => {
-    if (ttsExecutionMode !== "server") {
-      setProviderDiagnostic("Browser-local providers are checked by the browser when generation starts.");
-      return;
-    }
-    if (providerConfig.apiKey) {
-      setProviderDiagnostic("Server jobs do not store browser API keys. Use a self-hosted server URL without a browser-only key, or switch to This browser.");
-      return;
-    }
-    try {
-      const request = { id: ttsPreset, execution_mode: "server" as const, base_url: providerConfig.baseUrl, model: providerConfig.model, voice: providerConfig.voice, language_code: providerConfig.languageCode };
-      const result = preview ? await audioService.preview(request) : await audioService.check(request);
-      setProviderDiagnostic(preview ? `Preview succeeded (${result.bytes} bytes of valid WAV audio).` : "Provider is reachable from the Nexus server.");
-    } catch (error) {
-      setProviderDiagnostic(error instanceof Error ? error.message : "Provider check failed.");
-    }
-  };
-
-  const applyTtsPreset = (presetId: TtsProviderPresetId) => {
-    setTtsPreset(presetId);
-    if (presetId === "custom") return;
-    const preset = TTS_PROVIDER_PRESETS.find((item) => item.id === presetId);
-    if (!preset) return;
-    setTtsEngine("openai_compatible");
-    setTtsExecutionMode("browser");
-    setProviderConfig((current) => ({ ...preset.config, apiKey: current.apiKey }));
-  };
-
-  const toggleTts = () => {
-    if (!chapter) return;
-    if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
-      stopTts();
-      return;
-    }
-    if (providerAudioRef.current || isSpeaking) { stopTts(); return; }
-    if (ttsEngine === "openai_compatible") { return; }
-    if (!ttsAvailable) return;
-    const utterance = new SpeechSynthesisUtterance(`${chapter.title}. ${chapter.content}`);
-    const selectedVoice = voices.find((voice) => voice.name === voiceName);
-    if (selectedVoice) utterance.voice = selectedVoice;
-    utterance.rate = ttsRate;
-    utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
-    setIsSpeaking(true);
-    window.speechSynthesis.speak(utterance);
-  };
-
-  const addAnnotation = useCallback(async (annotationType: "bookmark" | "note") => {
+  const addAnnotation = useCallback(async (annotationType: "bookmark" | "note", note?: string, quote?: string) => {
     if (!chapter || !contentRef.current) return;
     const content = contentRef.current;
-    const maxScroll = Math.max(content.scrollHeight - content.clientHeight, 1);
-    const percent = Math.min(100, Math.max(0, (content.scrollTop / maxScroll) * 100));
-    const selection = window.getSelection()?.toString().trim() || "";
-    const note = annotationType === "note" ? window.prompt("Private note (optional)") : null;
-    if (annotationType === "note" && note === null) return;
+    const value = layout === "paged"
+      ? scrollPercent(content.scrollLeft, content.scrollWidth - content.clientWidth)
+      : scrollPercent(content.scrollTop, content.scrollHeight - content.clientHeight);
+    const selection = quote ?? (window.getSelection()?.toString().trim() || "");
     try {
       const created = await chapterService.createReadingAnnotation(novel_id, {
         chapter_number: chapter.chapter_number,
         annotation_type: annotationType,
-        position: Math.round(content.scrollTop),
-        percent,
+        position: Math.round(layout === "paged" ? content.scrollLeft : content.scrollTop),
+        percent: value,
         quote: selection || undefined,
         note: note || undefined,
       });
       setAnnotations((current) => [created, ...current]);
+      addToast(annotationType === "bookmark" ? "Bookmarked." : "Note saved.", "success");
     } catch (err) {
       console.error("Failed to save reader annotation", err);
+      addToast(annotationType === "bookmark" ? "Couldn’t save the bookmark." : "Couldn’t save the note.", "error");
     }
-  }, [chapter, novel_id]);
+  }, [chapter, novel_id, layout, addToast]);
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
-      if (event.key === "ArrowLeft") goToChapter(chapter_number - 1);
-      if (event.key === "ArrowRight") goToChapter(chapter_number + 1);
-      if (event.key.toLowerCase() === "b") void addAnnotation("bookmark");
-      if (event.key.toLowerCase() === "j") goToChapter(chapter_number + 1);
-      if (event.key.toLowerCase() === "k") goToChapter(chapter_number - 1);
-      if (event.key === "[") setFontScale((value) => Math.max(0.85, value - 0.1));
-      if (event.key === "]") setFontScale((value) => Math.min(1.3, value + 0.1));
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [chapter_number, goToChapter, addAnnotation, setFontScale]);
+  const removeAnnotation = useCallback(async (id: number) => {
+    try {
+      await chapterService.deleteReadingAnnotation(id);
+      setAnnotations((current) => current.filter((annotation) => annotation.id !== id));
+    } catch {
+      addToast("Couldn’t delete it. Try again.", "error");
+    }
+  }, [addToast]);
 
-  const removeAnnotation = async (id: number) => {
-    await chapterService.deleteReadingAnnotation(id);
-    setAnnotations((current) => current.filter((annotation) => annotation.id !== id));
+  const chapterBookmark = annotations.find((a) => a.chapter_number === chapter_number && a.annotation_type === "bookmark");
+  const toggleBookmark = useCallback(() => {
+    if (chapterBookmark) {
+      void removeAnnotation(chapterBookmark.id).then(() => addToast("Bookmark removed."));
+    } else {
+      void addAnnotation("bookmark");
+    }
+  }, [chapterBookmark, removeAnnotation, addAnnotation, addToast]);
+
+  const jumpToAnnotation = (annotation: ReadingAnnotation) => {
+    setAnnotationsOpen(false);
+    if (annotation.chapter_number !== chapter_number) { goToChapter(annotation.chapter_number); return; }
+    const content = contentRef.current;
+    if (!content) return;
+    if (layout === "paged") paging.goToPage(Math.round((annotation.percent / 100) * (paging.pageCount - 1)));
+    else content.scrollTop = (annotation.percent / 100) * Math.max(content.scrollHeight - content.clientHeight, 0);
+  };
+
+  const keepChapterOffline = async () => {
+    if (!chapter) return;
+    try {
+      await offlineReaderStore.save(chapter, { pinned: true });
+      const count = await offlineReaderStore.countForNovel(novel_id);
+      addToast(`Saved offline. ${count} chapter${count === 1 ? "" : "s"} of this story are on this device.`, "success");
+    } catch {
+      addToast("Couldn’t save this chapter on this device.", "error");
+    }
+  };
+
+  const downloadEpub = async () => {
+    try {
+      download(await chapterService.exportNovelEpub(novel_id), `${novel ? displayTitle(novel) : "story"}.epub`);
+    } catch {
+      addToast("Couldn’t create the EPUB. Try again later.", "error");
+    }
   };
 
   const exportReadingState = () => {
-    const payload = {
-      exported_at: new Date().toISOString(),
-      novel_id: novel_id,
-      novel_title: novel?.title,
-      progress,
-      annotations,
-    };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `nexus-reading-state-${novel_id}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
+    const payload = { exported_at: new Date().toISOString(), novel_id, novel_title: novel?.title, progress, annotations };
+    download(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }), `nexus-reading-state-${novel_id}.json`);
   };
 
-  const exportSelectedQuote = async () => {
+  const copyQuote = async () => {
     const quote = window.getSelection()?.toString().trim();
-    if (!quote) { setAudioPlayerError("Select text in the chapter first, then export the quote."); return; }
+    if (!quote) { addToast("Select some text in the chapter first, then choose Copy quote."); return; }
     const payload = `“${quote}”\n— ${novel?.title || "Nexus"}, chapter ${chapter?.chapter_number || ""}`;
-    try { await navigator.clipboard.writeText(payload); setProviderDiagnostic("Quote copied to your clipboard."); }
-    catch { const blob = new Blob([payload], { type: "text/plain" }); const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = "nexus-quote.txt"; link.click(); URL.revokeObjectURL(url); }
+    try { await navigator.clipboard.writeText(payload); addToast("Quote copied.", "success"); }
+    catch { download(new Blob([payload], { type: "text/plain" }), "nexus-quote.txt"); }
   };
 
-  const loadSpoilerSafeRecap = async () => {
+  const openRecap = async () => {
+    setRecapOpen(true);
+    setRecapLoading(true);
     try { setRecap(await chapterService.getSpoilerSafeRecap(novel_id)); }
-    catch { setAudioPlayerError("Could not create a spoiler-safe recap right now."); }
+    catch { setRecap(null); }
+    finally { setRecapLoading(false); }
   };
 
-  if (loading) return <div className="reader-loading">Loading content...</div>;
-  if (error && !chapter) return <div className="reader-error">{error}</div>;
-  if (!chapter || !novel)
-    return <div className="reader-not-found">Content not found</div>;
+  const openNote = () => setNoteQuote(window.getSelection()?.toString().trim() || "");
 
-  const readerClass = `reader-shell reader-shell--${theme}`;
-  const audioProgress = ttsExecutionMode === "server"
-    ? (serverAudioJob?.total_parts ? Math.round((serverAudioJob.completed_parts / serverAudioJob.total_parts) * 100) : 0)
-    : (audioJob?.chunks.length ? Math.round((audioJob.completed_chunks / audioJob.chunks.length) * 100) : 0);
-  const audioJobLabel = ttsExecutionMode === "server"
-    ? serverAudioJob?.status === "processing"
-      ? `Generating ${serverAudioJob.completed_parts}/${serverAudioJob.total_parts} parts on Nexus`
-      : serverAudioJob?.status === "queued"
-        ? "Queued on Nexus server"
-        : serverAudioJob?.status === "retry_wait"
-          ? `Retry scheduled · ${serverAudioJob.completed_parts}/${serverAudioJob.total_parts} parts saved`
-          : serverAudioJob?.status === "failed"
-            ? `Failed at part ${serverAudioJob.completed_parts + 1}/${serverAudioJob.total_parts}`
-            : serverAudioJob?.status === "cancelled"
-              ? `Paused at ${serverAudioJob.completed_parts}/${serverAudioJob.total_parts} parts`
-              : chapterAudioReady ? "Ready to play" : "Not generated"
-    : audioJob?.status === "generating"
-    ? `Generating ${audioJob.completed_chunks}/${audioJob.chunks.length} parts`
-    : audioJob?.status === "queued"
-      ? `Queued · ${audioJob.completed_chunks}/${audioJob.chunks.length} parts saved`
-      : audioJob?.status === "failed"
-        ? `Failed at part ${audioJob.completed_chunks + 1}/${audioJob.chunks.length}`
-        : audioJob?.status === "cancelled"
-          ? `Paused at ${audioJob.completed_chunks}/${audioJob.chunks.length} parts`
-          : chapterAudioReady ? "Ready to play" : "Not generated";
+  const next = () => (layout === "paged" ? paging.advance(1) : goToChapter(chapter_number + 1));
+  const previous = () => (layout === "paged" ? paging.advance(-1) : goToChapter(chapter_number - 1));
+  const anyOverlay = drawerOpen || settingsOpen || noteQuote !== null || annotationsOpen || recapOpen || shortcutsOpen;
+  useReaderShortcuts({
+    next: () => { if (!anyOverlay && chapter && (layout === "paged" || chapter_number < (novel?.total_chapters ?? Infinity))) next(); },
+    previous: () => { if (!anyOverlay && chapter && (layout === "paged" || chapter_number > 1)) previous(); },
+    bookmark: () => { if (!anyOverlay) toggleBookmark(); },
+    chapters: () => setDrawerOpen(true),
+    textSettings: () => setSettingsOpen(true),
+    smaller: () => typo.set("fontSize", (v) => Math.max(FONT_SIZE_MIN, v - 1)),
+    larger: () => typo.set("fontSize", (v) => Math.min(FONT_SIZE_MAX, v + 1)),
+    help: () => setShortcutsOpen(true),
+  }, shortcutsEnabled);
+
+  const words = useMemo(() => (chapterContent ? chapterContent.split(/\s+/).filter(Boolean).length : 0), [chapterContent]);
+
+  if (loading && !chapter) return <div className="reader-state" role="status" data-reader-theme={readerTheme}>Loading chapter…</div>;
+  if (error && !chapter) {
+    return (
+      <div className="reader-state" data-reader-theme={readerTheme}>
+        <h1>Chapter unavailable</h1>
+        <p>{error}</p>
+        <Link className="ui-button ui-button--secondary" to={`/library/${library_id}/novels/${novel_id}`}><span className="ui-button__label">Back to story</span></Link>
+      </div>
+    );
+  }
+  if (!chapter) return <div className="reader-state" data-reader-theme={readerTheme}><h1>Chapter not found</h1></div>;
+
+  const storyTitle = novel ? displayTitle(novel) : "Story";
+  const totalChapters = novel?.total_chapters ?? Math.max(chapters.length, chapter.chapter_number);
+  const currentEntry = chapters.find((item) => item.chapter_number === chapter.chapter_number);
+  const label = currentEntry ? entryLabel(currentEntry) : `Chapter ${chapter.chapter_number}`;
+  const heading = chapter.title || label;
+  const showLabel = !heading.toLowerCase().startsWith(label.toLowerCase());
+  const nextEntry = chapters.find((item) => item.chapter_number === chapter.chapter_number + 1)
+    ?? (chapter.chapter_number < totalChapters ? { chapter_number: chapter.chapter_number + 1, title: "" } : null);
+  const nextUnread = novel?.next_unread_chapter_number && novel.next_unread_chapter_number !== chapter.chapter_number + 1 && novel.next_unread_chapter_number !== chapter.chapter_number
+    ? novel.next_unread_chapter_number : null;
+  const paged = layout === "paged";
+  const minutesLeft = words ? Math.max(1, Math.ceil((words * (1 - percent / 100)) / WORDS_PER_MINUTE)) : null;
+  const barsHidden = paging.chromeHidden && !barsFocused && !anyOverlay && !listenOpen;
+  const storyHref = `/library/${library_id}/novels/${novel_id}`;
+  const chapterHref = (n: number) => `/library/${library_id}/novels/${novel_id}/${n}`;
+
+  const moreItems: MenuItem[] = [
+    { label: "Add note", icon: <NotebookPen aria-hidden="true" />, onSelect: openNote },
+    { label: "Copy quote", icon: <Quote aria-hidden="true" />, onSelect: () => void copyQuote() },
+    { label: `Bookmarks and notes${annotations.length ? ` (${annotations.length})` : ""}`, icon: <StickyNote aria-hidden="true" />, onSelect: () => setAnnotationsOpen(true) },
+    { label: "Recap so far", icon: <ScrollText aria-hidden="true" />, onSelect: () => void openRecap() },
+    { type: "separator" },
+    { label: "Save chapter offline", icon: <HardDriveDownload aria-hidden="true" />, onSelect: () => void keepChapterOffline() },
+    { label: "Download EPUB", icon: <Download aria-hidden="true" />, onSelect: () => void downloadEpub() },
+    { label: "Export notes and progress", icon: <FileJson aria-hidden="true" />, onSelect: exportReadingState },
+    { type: "separator" },
+    { label: "Keyboard shortcuts", icon: <Keyboard aria-hidden="true" />, onSelect: () => setShortcutsOpen(true), hint: "?" },
+    { label: "Back to story", icon: <BookOpenText aria-hidden="true" />, onSelect: () => navigate(storyHref) },
+  ];
+
+  const barFocusProps = {
+    onFocus: () => setBarsFocused(true),
+    onBlur: (event: React.FocusEvent<HTMLElement>) => {
+      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setBarsFocused(false);
+    },
+  };
 
   return (
-    <div className={readerClass}>
-      <OfflineBadge novelId={novel_id} chapterNumber={chapter.chapter_number} />
-      <aside className="reader-sidebar">
-        <div className="reader-sidebar__header">
-          <p>Chapters</p>
-          <span>
-            {chapter.chapter_number}/{novel.total_chapters}
-          </span>
-        </div>
-        <label className="reader-sidebar__jump">Jump to chapter<input aria-label="Search chapters" value={chapterQuery} onChange={(event) => setChapterQuery(event.target.value)} placeholder="Number or title" /></label>
-        <div className="reader-sidebar__list">
-          {chaptersLoading && (
-            <p className="reader-sidebar__status">Loading…</p>
+    <div
+      className={`reader${paged ? " reader--paged" : ""}${barsHidden ? " reader--bars-hidden" : ""}${listenOpen ? " reader--listening" : ""}`}
+      data-reader-theme={readerTheme}
+      data-paragraphs={t.paragraphStyle}
+    >
+      <header className="reader__top" {...barFocusProps}>
+        <ReaderTopBar
+          storyTitle={storyTitle}
+          chapterTitle={heading}
+          chapterLine={`${storyTitle} · ${label}`}
+          backTo={storyHref}
+          compact={compact}
+          bookmarked={Boolean(chapterBookmark)}
+          listening={listenOpen}
+          onChapters={() => setDrawerOpen(true)}
+          onBookmark={toggleBookmark}
+          onListen={() => setListenOpen((value) => !value)}
+          chaptersRef={chaptersButtonRef}
+          moreItems={moreItems}
+          settings={(
+            <ReaderSettingsControl
+              open={settingsOpen}
+              onOpenChange={setSettingsOpen}
+              compact={compact}
+              typography={t}
+              resolvedTheme={readerTheme}
+              appTheme={appTheme === "dark" ? "night" : "paper"}
+              onChange={(key, value) => typo.set(key, value)}
+              layout={layout}
+              onLayout={changeLayout}
+              authorNotes={authorNotes}
+              onAuthorNotes={changeAuthorNotes}
+              storyOnly={typo.storyOnly}
+              onStoryOnly={typo.setStoryOnly}
+              onUseForAll={typo.useForAllStories}
+            />
           )}
-          {chaptersError && (
-            <p className="reader-sidebar__status reader-sidebar__status--error">
-              {chaptersError}
-            </p>
-          )}
-          {!chaptersLoading && !chaptersError && (
-            <ul>
-              {chapters.filter((item) => !chapterQuery || String(item.chapter_number).includes(chapterQuery) || item.title.toLowerCase().includes(chapterQuery.toLowerCase())).map((item) => (
-                <li key={item.id}>
-                  <button
-                    type="button"
-                    className={
-                      item.chapter_number === chapter.chapter_number
-                        ? "is-active"
-                        : ""
-                    }
-                    onClick={() => goToChapter(item.chapter_number)}
-                  >
-                    <span className="chapter-number">{item.chapter_number}</span>
-                    <span className="chapter-title">{item.title || "Untitled"}</span>
-                    {progress?.chapter_number && item.chapter_number > progress.chapter_number && <span className="reader-unread-marker" aria-label="Unread chapter">New</span>}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </aside>
+        />
+      </header>
+
+      <div
+        ref={contentRef}
+        className="reader__content"
+        style={{ ...typographyStyle(t), ...paging.pagedStyle }}
+        onClick={paging.onContentClick}
+      >
+        <article className="reader__text" aria-labelledby="reader-chapter-title">
+          <OfflineBadge novelId={novel_id} chapterNumber={chapter.chapter_number} />
+          {error && <Banner tone="warning">{error}</Banner>}
+          {showLabel && <p className="reader__chapter-label">{label}</p>}
+          <h1 id="reader-chapter-title" tabIndex={-1}>{heading}</h1>
+          <ChapterBody content={chapter.content} authorNotes={authorNotes} />
+          <ReaderEndOfChapter
+            chapterNumber={chapter.chapter_number}
+            next={nextEntry ? { chapter_number: nextEntry.chapter_number, title: nextEntry.title, label: entryLabel(nextEntry) } : null}
+            nextUnread={nextUnread}
+            chapterHref={chapterHref}
+            storyHref={storyHref}
+          />
+        </article>
+      </div>
+
+      <footer className="reader__bottom" {...barFocusProps}>
+        <ListenPlayer
+          chapter={chapter}
+          libraryId={library_id}
+          novelId={novel_id}
+          open={listenOpen}
+          onClose={() => setListenOpen(false)}
+        />
+        <ReaderBottomBar
+          chapterNumber={chapter.chapter_number}
+          totalChapters={totalChapters}
+          percent={percent}
+          minutesLeft={minutesLeft}
+          paged={paged}
+          page={paging.page}
+          pageCount={paging.pageCount}
+          hasPrevious={chapter.chapter_number > 1}
+          hasNext={chapter.chapter_number < totalChapters}
+          onPrevious={() => goToChapter(chapter.chapter_number - 1)}
+          onNext={() => goToChapter(chapter.chapter_number + 1)}
+          onPreviousPage={() => paging.goToPage(paging.page - 1)}
+          onNextPage={() => paging.goToPage(paging.page + 1)}
+        />
+      </footer>
 
       <ChapterDrawer
         open={drawerOpen}
@@ -832,168 +556,27 @@ const Reader: React.FC = () => {
         novelId={novel_id}
         chapters={chapters}
         currentChapter={chapter.chapter_number}
+        lastReadChapter={progress?.chapter_number ?? null}
+        loading={chaptersLoading}
+        error={chaptersError}
         onSelect={goToChapter}
       />
-      <article className={`reader-body${paging.chromeHidden ? " reader-body--chrome-hidden" : ""}`}>
-        {error && <div className="reader-sidebar__status">{error}</div>}
-        <header className="reader-toolbar">
-          <div>
-            <p className="reader-toolbar__eyebrow">{novel.author}</p>
-            <h1>{chapter.title}</h1>
-            <span>Chapter {chapter.chapter_number}</span>
-          </div>
-          <div className="reader-toolbar__controls">
-            <div className="reader-toolbar__actions" aria-label="Reader actions">
-              <div className="reader-type-controls" aria-label="Chapter list">
-                <button type="button" onClick={() => setDrawerOpen(true)}>Chapters</button>
-              </div>
-              <div className="reader-type-controls" aria-label="Text size">
-                <button type="button" onClick={decreaseFont} aria-label="Decrease text size">A−</button>
-                <button type="button" onClick={increaseFont} aria-label="Increase text size">A+</button>
-              </div>
-              <div className="reader-type-controls" aria-label="Chapter actions">
-                <button type="button" onClick={() => void addAnnotation("bookmark")}>Bookmark</button>
-                <button type="button" onClick={() => void addAnnotation("note")}>Note</button>
-                <button type="button" onClick={() => void exportSelectedQuote()}>Quote</button>
-                <button type="button" onClick={() => void loadSpoilerSafeRecap()}>Recap</button>
-                <button type="button" onClick={exportReadingState}>Export</button>
-                <button type="button" onClick={() => void keepChapterOffline()}>Offline {offlineChapterCount}</button>
-              </div>
-            </div>
-          </div>
-        </header>
-
-        <section className="reader-audio-panel" aria-label="Chapter audio">
-          <div className="reader-audio-panel__header">
-            <div>
-              <span className="reader-audio-panel__eyebrow"><Volume2 size={14} /> AUDIOBOOK</span>
-              <strong>Chapter audio</strong>
-              <span className={`reader-audio-status reader-audio-status--${ttsExecutionMode === "server" ? serverAudioJob?.status || "idle" : audioJob?.status || "idle"}`}>{audioJobLabel}</span>
-            </div>
-            {ttsExecutionMode === "server" && serverAudioJob ? <small className="reader-audio-provider">{serverAudioJob.provider_model} · {serverAudioJob.provider_voice} · durable</small> : audioJob?.provider && <small className="reader-audio-provider">{audioJob.provider.model} · {audioJob.provider.voice} · local-only</small>}
-          </div>
-          {ttsEngine === "openai_compatible" ? (
-            <>
-              {((ttsExecutionMode === "server" && serverAudioJob && ["queued", "processing", "retry_wait", "failed", "cancelled"].includes(serverAudioJob.status)) || (ttsExecutionMode !== "server" && (audioJob?.status === "generating" || audioJob?.status === "queued" || audioJob?.status === "failed" || audioJob?.status === "cancelled"))) && (
-                <div className="reader-audio-progress" aria-live="polite">
-                  <div><span>{audioJobLabel}</span><strong>{audioProgress}%</strong></div>
-                  <progress value={ttsExecutionMode === "server" ? serverAudioJob?.completed_parts || 0 : audioJob?.completed_chunks || 0} max={ttsExecutionMode === "server" ? serverAudioJob?.total_parts || 1 : audioJob?.chunks.length || 1} />
-                  {(ttsExecutionMode === "server" ? serverAudioJob?.error : audioJob?.error) && <small>{ttsExecutionMode === "server" ? serverAudioJob?.error : audioJob?.error}</small>}
-                </div>
-              )}
-              {chapterAudioReady ? (
-                <div className="reader-audio-player">
-                  <div className="reader-audio-player__transport">
-                    <button type="button" onClick={() => void seekChapterAudio(-15)} aria-label="Back 15 seconds"><SkipBack size={17} /><span>15</span></button>
-                    <button type="button" className="reader-audio-player__primary" onClick={() => void playChapterAudio()} aria-label={isSpeaking ? "Pause chapter audio" : "Play chapter audio"}>{isSpeaking ? <Pause size={21} fill="currentColor" /> : <Play size={21} fill="currentColor" />}</button>
-                    <button type="button" onClick={() => void seekChapterAudio(15)} aria-label="Forward 15 seconds"><SkipForward size={17} /><span>15</span></button>
-                  </div>
-                  <label className="reader-audio-scrubber" aria-label="Audio progress"><span>{formatAudioTime(audioCurrentTime)}</span><input type="range" min="0" max={Math.max(audioDuration, 1)} step="0.1" value={Math.min(audioCurrentTime, Math.max(audioDuration, 1))} onChange={(event) => void setChapterAudioPosition(Number(event.target.value))} /><span>{formatAudioTime(audioDuration)}</span></label>
-                  <div className="reader-audio-player__settings"><label>Speed <select aria-label="Chapter audio speed" value={ttsRate} onChange={(event) => setTtsRate(Number(event.target.value))}>{[0.8, 1, 1.2, 1.4, 1.6].map((rate) => <option key={rate} value={rate}>{rate}×</option>)}</select></label><label>Sleep <select aria-label="Audio sleep timer" value={sleepMinutes} onChange={(event) => setSleepMinutes(Number(event.target.value))}><option value={0}>Off</option><option value={15}>15m</option><option value={30}>30m</option><option value={45}>45m</option><option value={60}>60m</option></select></label><button type="button" className="reader-audio-player__delete" onClick={() => void deleteChapterAudio()} aria-label="Delete chapter audio"><Trash2 size={16} /></button></div>
-                </div>
-              ) : (
-                <div className="reader-audio-actions">
-                  <button type="button" className="reader-audio-player__primary" onClick={() => void generateChapterAudio()} disabled={ttsExecutionMode === "server" ? ["queued", "processing"].includes(serverAudioJob?.status || "") : audioJob?.status === "generating"}>{(ttsExecutionMode === "server" ? ["queued", "processing"].includes(serverAudioJob?.status || "") : audioJob?.status === "generating") ? "Generating…" : <><WandSparkles size={17} /> {(ttsExecutionMode === "server" ? serverAudioJob?.completed_parts : audioJob?.completed_chunks) ? "Resume generation" : "Generate chapter audio"}</>}</button>
-                  {(ttsExecutionMode === "server" ? ["queued", "processing", "retry_wait"].includes(serverAudioJob?.status || "") : audioJob?.status === "generating") && <button type="button" onClick={() => void cancelAudioGeneration()}><Pause size={16} /> Pause generation</button>}
-                  {(ttsExecutionMode === "server" ? ["failed", "cancelled", "retry_wait"].includes(serverAudioJob?.status || "") : audioJob?.status === "failed" || audioJob?.status === "cancelled") && <button type="button" onClick={() => void generateChapterAudio()}><RotateCcw size={16} /> Retry</button>}
-                </div>
-              )}
-            </>
-          ) : ttsAvailable ? (
-            <div className="reader-audio-actions">
-              <button type="button" className="reader-audio-player__primary" onClick={toggleTts}>{isSpeaking ? "Stop reading" : "Read aloud"}</button>
-              <select aria-label="Text to speech voice" value={voiceName} onChange={(event) => setVoiceName(event.target.value)}><option value="">System voice</option>{voices.map((voice) => <option key={`${voice.name}-${voice.lang}`} value={voice.name}>{voice.name} ({voice.lang})</option>)}</select>
-              <label>Speed <select aria-label="Text to speech speed" value={ttsRate} onChange={(event) => setTtsRate(Number(event.target.value))}>{[0.8, 1, 1.2, 1.4, 1.6].map((rate) => <option key={rate} value={rate}>{rate}×</option>)}</select></label>
-            </div>
-          ) : <small>Browser text-to-speech is unavailable. Choose Self-hosted / API to generate chapter audio.</small>}
-          {audioPlayerError && <p className="reader-audio-error" role="alert">{audioPlayerError}</p>}
-        </section>
-
-        <div
-          ref={contentRef}
-          className="reader-content"
-          style={{ fontSize: `${1.05 * fontScale}rem`, lineHeight, maxWidth: `${contentWidth}px`, ...paging.pagedStyle }}
-          onClick={paging.onContentClick}
-        >
-          <ChapterBody content={chapter.content} authorNotes={authorNotes} />
-        </div>
-
-        {layout === "paged" && <p className="reader-page-indicator" aria-live="polite">page {paging.page + 1} / {paging.pageCount}</p>}
-        <div className="reader-navigation">
-          <button
-            className="prev-button"
-            onClick={() => goToChapter(chapter.chapter_number - 1)}
-            disabled={chapter.chapter_number <= 1}
-          >
-            Previous
-          </button>
-          {novel.next_unread_chapter_number && novel.next_unread_chapter_number !== chapter.chapter_number + 1 && (
-            <button type="button" className="continue-button" onClick={() => goToChapter(novel.next_unread_chapter_number!)}>
-              Next unread · {novel.next_unread_chapter_number}
-            </button>
-          )}
-          <button
-            className="next-button"
-            onClick={() => goToChapter(chapter.chapter_number + 1)}
-            disabled={chapter.chapter_number >= novel.total_chapters}
-          >
-            Next
-          </button>
-        </div>
-      </article>
-      <aside className="reader-inspector" aria-label="Reader settings and notes">
-        <ReaderPrefsControls
-          authorNotes={authorNotes}
-          onAuthorNotes={changeAuthorNotes}
-          layout={layout}
-          onLayout={changeLayout}
-          hasStoryOverride={typographyState.hasStoryOverride}
-          onUseForAll={typographyState.useForAllStories}
-          onResetToGlobal={typographyState.resetToGlobal}
-        />
-        <section className="reader-inspector__section">
-          <header><strong>Reader</strong></header>
-          <label>Theme</label>
-          <div className="reader-theme-controls">
-            {themeOptions.map((option) => <button key={option.value} type="button" className={theme === option.value ? "is-active" : ""} onClick={() => setTheme(option.value)}>{option.label}</button>)}
-          </div>
-          <label>Line height <select value={lineHeight} onChange={(event) => setLineHeight(Number(event.target.value))}><option value={1.5}>Compact</option><option value={1.8}>Comfortable</option><option value={2.1}>Relaxed</option></select></label>
-          <label>Reading width <select value={contentWidth} onChange={(event) => setContentWidth(Number(event.target.value))}><option value={620}>Narrow</option><option value={760}>Balanced</option><option value={920}>Wide</option></select></label>
-          <small>Shortcuts: ←/→ or J/K chapters · B bookmark · [ / ] text size.</small>
-        </section>
-        <section className="reader-inspector__section">
-          <header><strong>TTS settings</strong></header>
-          <label htmlFor="reader-tts-provider">Provider</label>
-          <select id="reader-tts-provider" value={ttsEngine === "native" ? "native" : ttsPreset} onChange={(event) => {
-            if (event.target.value === "native") setTtsEngine("native");
-            else applyTtsPreset(event.target.value as TtsProviderPresetId);
-          }}>
-            <option value="native">Browser voice</option>
-            {TTS_PROVIDER_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
-          </select>
-          {ttsEngine === "openai_compatible" && <small>{TTS_PROVIDER_PRESETS.find((preset) => preset.id === ttsPreset)?.description}</small>}
-          {ttsEngine === "openai_compatible" && !chapterAudioReady && <button type="button" className="reader-tts-generate" onClick={() => void generateChapterAudio()} disabled={audioJob?.status === "generating"}><WandSparkles size={16} /> {audioJob?.status === "generating" ? "Generating chapter…" : "Generate chapter audio"}</button>}
-          <label htmlFor="reader-tts-speed">Playback speed <span>{ttsRate}×</span></label>
-          <input id="reader-tts-speed" type="range" min="0.8" max="1.6" step="0.2" value={ttsRate} onChange={(event) => setTtsRate(Number(event.target.value))} />
-          <details className="reader-tts-provider"><summary>Connection & voice</summary><label>Generation location<select value={ttsExecutionMode} onChange={(event) => { setTtsExecutionMode(event.target.value as "browser" | "server"); setProviderDiagnostic(null); }}><option value="browser">This browser (local-only)</option><option value="server">Nexus server (durable)</option></select></label><small>{ttsExecutionMode === "server" ? "The Nexus server must be able to reach this endpoint. Jobs survive closing the reader; browser-only API keys are intentionally not persisted on the server." : "Use this for localhost or BYO endpoints that only this browser can reach."}</small><label>API base URL<input value={providerConfig.baseUrl} onChange={(event) => { setTtsPreset("custom"); setProviderConfig((current) => ({ ...current, baseUrl: event.target.value })); }} /></label><label>API key<input type="password" value={providerConfig.apiKey} onChange={(event) => setProviderConfig((current) => ({ ...current, apiKey: event.target.value }))} /></label><label>Model<input value={providerConfig.model} onChange={(event) => { setTtsPreset("custom"); setProviderConfig((current) => ({ ...current, model: event.target.value })); }} /></label><label>Voice<input value={providerConfig.voice} onChange={(event) => { setTtsPreset("custom"); setProviderConfig((current) => ({ ...current, voice: event.target.value })); }} /></label><label>Language code<input placeholder="en" value={providerConfig.languageCode || ""} onChange={(event) => { setTtsPreset("custom"); setProviderConfig((current) => ({ ...current, languageCode: event.target.value })); }} /></label>{ttsExecutionMode === "server" && <div className="reader-tts-provider__diagnostics"><button type="button" onClick={() => void diagnoseProvider()}>Check provider</button><button type="button" onClick={() => void diagnoseProvider(true)}>Preview voice</button>{providerDiagnostic && <small role="status">{providerDiagnostic}</small>}</div>}</details>
-        </section>
-        <section className="reader-annotations" aria-label="Bookmarks and notes">
-          <header><strong>Bookmarks & notes</strong><span>{annotations.length}</span></header>
-          {annotations.filter((annotation) => annotation.chapter_number === chapter.chapter_number).slice(0, 8).map((annotation) => (
-            <div className="reader-annotation" key={annotation.id}>
-              <button type="button" onClick={() => { if (contentRef.current) contentRef.current.scrollTop = (annotation.percent / 100) * contentRef.current.scrollHeight; }}>{annotation.annotation_type === "bookmark" ? "🔖" : "📝"} {annotation.note || annotation.quote || `At ${Math.round(annotation.percent)}%`}</button>
-              <button type="button" onClick={() => void removeAnnotation(annotation.id)} aria-label="Delete annotation">×</button>
-            </div>
-          ))}
-        </section>
-        <section className="reader-inspector__section reader-reading-stats">
-          <header><strong>Reading history</strong></header>
-          {readingHistory ? <p>{readingHistory.chapters_touched} chapters touched · {readingHistory.active_days} active days · {readingHistory.current_streak_days}-day streak</p> : <small>History appears after progress is saved.</small>}
-          <button type="button" onClick={() => void loadSpoilerSafeRecap()}>Spoiler-safe recap</button>
-          {recap && <div className="reader-recap"><strong>Up to chapter {recap.spoiler_boundary_chapter}</strong><p>{recap.summary}</p><ul>{recap.chapters.slice(-5).map((item) => <li key={item.number}>{item.number}. {item.title}</li>)}</ul></div>}
-          {hiatus && <div className={`reader-hiatus reader-hiatus--${hiatus.state}`}><strong>{hiatus.state === "likely_hiatus" ? "Likely on hiatus" : hiatus.state === "active" ? "Update cadence looks active" : "Cadence still learning"}</strong><small>{hiatus.reason}</small></div>}
-        </section>
-      </aside>
+      <NoteDialog
+        open={noteQuote !== null}
+        quote={noteQuote ?? ""}
+        onClose={() => setNoteQuote(null)}
+        onSave={(note) => { const quote = noteQuote ?? ""; setNoteQuote(null); void addAnnotation("note", note, quote); }}
+      />
+      <AnnotationsSheet
+        open={annotationsOpen}
+        onClose={() => setAnnotationsOpen(false)}
+        annotations={annotations}
+        chapterNumber={chapter.chapter_number}
+        onJump={jumpToAnnotation}
+        onDelete={(id) => void removeAnnotation(id)}
+      />
+      <RecapSheet open={recapOpen} onClose={() => setRecapOpen(false)} recap={recap} loading={recapLoading} history={readingHistory} hiatus={hiatus} />
+      <ShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} enabled={shortcutsEnabled} onEnabled={changeShortcuts} />
     </div>
   );
 };

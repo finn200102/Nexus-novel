@@ -120,7 +120,7 @@ export function useReaderPaging({ contentRef, paged, layoutKey, onPreviousChapte
   }, [advance]);
 
   // Tap zones (coarse pointers only): left/right thirds move, the middle toggles
-  // the toolbar. Ignored while text is selected so selecting prose still works.
+  // the reader bars. Ignored while text is selected so selecting prose still works.
   const onContentClick = useCallback((event: React.MouseEvent<HTMLElement>) => {
     if (!coarse) return;
     const selection = window.getSelection?.();
@@ -135,8 +135,7 @@ export function useReaderPaging({ contentRef, paged, layoutKey, onPreviousChapte
 
   const pagedStyle: CSSProperties | undefined = paged
     ? {
-        height: "calc(100dvh - 15rem)",
-        minHeight: "20rem",
+        // The container's height comes from the reader layout (between the bars).
         columnCount: 1,
         columnFill: "auto",
         columnGap: `${PAGE_PADDING * 2}px`,
@@ -146,5 +145,5 @@ export function useReaderPaging({ contentRef, paged, layoutKey, onPreviousChapte
       }
     : undefined;
 
-  return { page, pageCount, chromeHidden, onContentClick, advance, goToPage, pagedStyle };
+  return { page, pageCount, chromeHidden, setChromeHidden, onContentClick, advance, goToPage, pagedStyle };
 }

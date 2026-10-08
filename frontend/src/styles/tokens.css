@@ -9,8 +9,7 @@
 :root,
 .nx-theme-light,
 [data-reader-theme="paper"],
-[data-reader-theme="sepia"],
-.reader-shell--paper /* legacy: remove in D6 */ {
+[data-reader-theme="sepia"] {
   --bg: #faf8f4;
   --surface: #ffffff;
   --surface-2: #f1eee8;
@@ -43,9 +42,7 @@
 :root[data-theme="dark"],
 .nx-theme-dark,
 [data-reader-theme="night"],
-[data-reader-theme="black"],
-.reader-shell--night,
-.reader-shell--dusk /* legacy: remove in D6 */ {
+[data-reader-theme="black"] {
   --bg: #121315;
   --surface: #1a1b1e;
   --surface-2: #24262a;
@@ -112,6 +109,12 @@
   /* Typography (§4.2) */
   --font-ui: "Inter Variable", Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-read: Literata, "Source Serif 4", Georgia, "Times New Roman", serif;
+  /* Reader font choices (WP-D6); faces load only on reader routes. */
+  --font-read-literata: Literata, Georgia, "Times New Roman", serif;
+  --font-read-source-serif: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-read-atkinson: "Atkinson Hyperlegible", system-ui, sans-serif;
+  --font-read-opendyslexic: OpenDyslexic, "Atkinson Hyperlegible", system-ui, sans-serif;
+  --font-read-system: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --fs-xs: 0.75rem;
   --fs-sm: 0.875rem;
@@ -192,24 +195,32 @@
   --reader-text: #1d1b18;
   --reader-muted: #5f5a52;
   --reader-link: #5235c8;
+  --reader-bar: #ffffff;
+  --reader-line: #e3ded5; /* decorative */
 }
 [data-reader-theme="sepia"] {
   --reader-bg: #f3ead6;
   --reader-text: #3a2e1f;
   --reader-muted: #6b5a44;
   --reader-link: #5235c8;
+  --reader-bar: #efe4cc;
+  --reader-line: #dccdae; /* decorative */
 }
 [data-reader-theme="night"] {
   --reader-bg: #121315;
   --reader-text: #d8d4cd;
   --reader-muted: #a29e97;
   --reader-link: #b3a4ff;
+  --reader-bar: #1a1b1e;
+  --reader-line: #34363b; /* decorative */
 }
 [data-reader-theme="black"] {
   --reader-bg: #000000;
   --reader-text: #bdb9b2;
   --reader-muted: #8f8b85;
   --reader-link: #b3a4ff;
+  --reader-bar: #0d0d0e;
+  --reader-line: #2a2a2c; /* decorative */
 }
 
 /* Cover fallback hues (white title text ≥ 7:1 on each) */

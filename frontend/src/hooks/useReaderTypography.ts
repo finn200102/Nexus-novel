@@ -13,8 +13,9 @@ type Setter<K extends keyof ReaderTypography> =
   | ((current: ReaderTypography[K]) => ReaderTypography[K]);
 
 /**
- * Typography with a per-story layer. Changing a value while reading creates a
- * story override (a full snapshot, so later global changes don't leak into it).
+ * Reader typography with a per-story layer. By default changes are saved globally;
+ * with "Only for this story" on, they go to a snapshot for this story so later
+ * global changes don't leak into it.
  */
 export function useReaderTypography(novelId: number) {
   const [global, setGlobal] = useState<ReaderTypography>(readGlobalTypography);
@@ -31,13 +32,20 @@ export function useReaderTypography(novelId: number) {
   useEffect(() => { writeStoryOverride(novelId, override); }, [novelId, override]);
 
   const typography = resolveTypography(global, override);
+  const storyOnly = override !== null;
 
-  const setField = useCallback(<K extends keyof ReaderTypography>(key: K, value: Setter<K>) => {
-    setOverride((prev) => {
-      const current = resolveTypography(global, prev);
+  const set = useCallback(<K extends keyof ReaderTypography>(key: K, value: Setter<K>) => {
+    const apply = (current: ReaderTypography): ReaderTypography => {
       const next = typeof value === "function" ? (value as (c: ReaderTypography[K]) => ReaderTypography[K])(current[key]) : value;
       return { ...current, [key]: next };
-    });
+    };
+    if (storyOnly) setOverride((prev) => apply(resolveTypography(global, prev)));
+    else setGlobal((prev) => apply(prev));
+  }, [global, storyOnly]);
+
+  /** Switch "Only for this story": on snapshots the current values, off returns to the global ones. */
+  const setStoryOnly = useCallback((value: boolean) => {
+    setOverride((prev) => (value ? resolveTypography(global, prev) : null));
   }, [global]);
 
   const useForAllStories = useCallback(() => {
@@ -45,16 +53,14 @@ export function useReaderTypography(novelId: number) {
     setOverride(null);
   }, [global, override]);
 
-  const resetToGlobal = useCallback(() => setOverride(null), []);
-
   return {
     typography,
-    setFontScale: useCallback((value: Setter<"fontScale">) => setField("fontScale", value), [setField]),
-    setLineHeight: useCallback((value: Setter<"lineHeight">) => setField("lineHeight", value), [setField]),
-    setContentWidth: useCallback((value: Setter<"contentWidth">) => setField("contentWidth", value), [setField]),
-    setTheme: useCallback((value: Setter<"theme">) => setField("theme", value), [setField]),
-    hasStoryOverride: override !== null,
+    set,
+    storyOnly,
+    setStoryOnly,
     useForAllStories,
-    resetToGlobal,
+    /** Kept for callers of the 1.0 API. */
+    hasStoryOverride: storyOnly,
+    resetToGlobal: useCallback(() => setOverride(null), []),
   };
 }

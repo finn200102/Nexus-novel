@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useId, useState } from "react";
 import type { AuthorNotesMode } from "./readerSettings";
 import { splitAuthorNotes } from "./authorNotes";
 import "./readerExtras.css";
@@ -8,23 +8,26 @@ interface ChapterBodyProps {
   authorNotes: AuthorNotesMode;
 }
 
-const NoteBlock: React.FC<{ paragraphs: string[]; mode: AuthorNotesMode; label: string }> = ({ paragraphs, mode, label }) => {
+/** Labelled, bordered author's note: shown in full, collapsed to two lines with "Show", or hidden. */
+const NoteBlock: React.FC<{ paragraphs: string[]; mode: AuthorNotesMode; position: "start" | "end" }> = ({ paragraphs, mode, position }) => {
   const [open, setOpen] = useState(false);
+  const bodyId = useId();
   if (paragraphs.length === 0 || mode === "hidden") return null;
-  if (mode === "shown") {
-    return (
-      <aside className="reader-author-note" aria-label="Author's note">
-        {paragraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)}
-      </aside>
-    );
-  }
+  const expanded = mode === "shown" || open;
   return (
-    <div className="reader-author-note reader-author-note--collapsed">
-      <button type="button" className="reader-author-note__toggle" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
-        {open ? "Hide" : "Show"} {label}
-      </button>
-      {open && paragraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)}
-    </div>
+    <aside className={`reader-author-note reader-author-note--${position}`} aria-label="Author's note">
+      <div className="reader-author-note__head">
+        <strong>Author’s note</strong>
+        {mode === "collapsed" && (
+          <button type="button" className="reader-author-note__toggle" aria-expanded={open} aria-controls={bodyId} onClick={() => setOpen((value) => !value)}>
+            {open ? "Show less" : "Show"}
+          </button>
+        )}
+      </div>
+      <div id={bodyId} className={expanded ? "reader-author-note__body" : "reader-author-note__body reader-author-note__body--clamped"}>
+        {paragraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)}
+      </div>
+    </aside>
   );
 };
 
@@ -33,11 +36,9 @@ const ChapterBody: React.FC<ChapterBodyProps> = ({ content, authorNotes }) => {
   const { head, body, tail } = splitAuthorNotes(content.split("\n"));
   return (
     <>
-      <NoteBlock paragraphs={head} mode={authorNotes} label="author's note" />
-      {body.map((paragraph, index) => (
-        <p key={index}>{paragraph}</p>
-      ))}
-      <NoteBlock paragraphs={tail} mode={authorNotes} label="author's note" />
+      <NoteBlock paragraphs={head} mode={authorNotes} position="start" />
+      {body.map((paragraph, index) => (paragraph.trim() ? <p key={index}>{paragraph}</p> : null))}
+      <NoteBlock paragraphs={tail} mode={authorNotes} position="end" />
     </>
   );
 };

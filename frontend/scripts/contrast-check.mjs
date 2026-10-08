@@ -64,11 +64,20 @@ for (const [name, vars] of Object.entries(themes)) {
 // Reader themes: text and muted ≥ 4.5, link ≥ 4.5
 for (const m of css.matchAll(/\[data-reader-theme="(\w+)"\]\s*\{([^}]*)\}/g)) {
   const v = Object.fromEntries([...m[2].matchAll(/--([\w-]+):\s*(#[0-9a-fA-F]{6})/g)].map((x) => [x[1], x[2]]));
+  if (!v["reader-bg"]) continue; // the app-theme scope blocks share the selector
   for (const fg of ["reader-text", "reader-muted", "reader-link"]) {
     const r = ratio(v[fg], v["reader-bg"]);
     const ok = r >= TEXT;
     if (!ok) failures++;
     rows.push(`| reader ${m[1]} | \`--${fg}\` | \`--reader-bg\` | ${r.toFixed(2)} | ${TEXT} | ${ok ? "pass" : "**FAIL**"} |`);
+  }
+  // Reader bars (WP-D5) carry reader text and muted text on --reader-bar.
+  for (const fg of ["reader-text", "reader-muted"]) {
+    if (!v["reader-bar"]) continue;
+    const r = ratio(v[fg], v["reader-bar"]);
+    const ok = r >= TEXT;
+    if (!ok) failures++;
+    rows.push(`| reader ${m[1]} | \`--${fg}\` | \`--reader-bar\` | ${r.toFixed(2)} | ${TEXT} | ${ok ? "pass" : "**FAIL**"} |`);
   }
 }
 
