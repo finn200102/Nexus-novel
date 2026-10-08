@@ -141,4 +141,5 @@ NEXUS_E2E_ARTIFACT_DIR="$ARTIFACT_DIR" \
 PLAYWRIGHT_HTML_OUTPUT_DIR="$ARTIFACT_DIR/playwright-report" \
 npx playwright test --config=playwright.docker.config.ts \
   e2e/real-stack-smoke.spec.ts \
+  e2e/real-stack-accounts.spec.ts \
   e2e/real-stack-downloads.spec.ts
