@@ -9,7 +9,23 @@ export interface OfflineChapter {
 interface StoredChapter extends OfflineChapter {
   cache_key: string;
   cached_at: number;
+  /** Saved explicitly by "Make available offline"; never evicted automatically. */
+  pinned?: boolean;
 }
+
+export interface OfflineChapterSummary {
+  novel_id: number;
+  chapter_number: number;
+  title: string;
+  pinned: boolean;
+  cached_at: number;
+  size_bytes: number;
+}
+
+const encoder = new TextEncoder();
+/** Approximate stored size: UTF-8 bytes of the text payload. */
+const chapterSizeBytes = (chapter: Pick<OfflineChapter, "title" | "content">) =>
+  encoder.encode(chapter.title + chapter.content).length;
 
 const DATABASE_NAME = "nexus-reader";
 const STORE_NAME = "chapters";
@@ -52,6 +68,21 @@ const withStore = async <T>(mode: IDBTransactionMode, work: (store: IDBObjectSto
       const request = work(transaction.objectStore(STORE_NAME));
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
+    });
+  } finally {
+    database.close();
+  }
+};
+
+const runStoreTransaction = async (mode: IDBTransactionMode, work: (store: IDBObjectStore) => void): Promise<void> => {
+  const database = await openDatabase();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const transaction = database.transaction(STORE_NAME, mode);
+      work(transaction.objectStore(STORE_NAME));
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
     });
   } finally {
     database.close();
@@ -113,14 +144,81 @@ export interface ChapterAudioJob {
 }
 
 export const offlineReaderStore = {
-  async save(chapter: OfflineChapter): Promise<void> {
+  /**
+   * Store a chapter. A re-save keeps the existing pinned flag unless
+   * `options.pinned` is given, so opening a pinned chapter never unpins it.
+   */
+  async save(chapter: OfflineChapter, options: { pinned?: boolean } = {}): Promise<void> {
     if (!("indexedDB" in window)) return;
-    await withStore("readwrite", (store) => store.put({
-      ...chapter,
-      cache_key: chapterKey(chapter.novel_id, chapter.chapter_number),
-      cached_at: Date.now(),
-    } satisfies StoredChapter));
+    const key = chapterKey(chapter.novel_id, chapter.chapter_number);
+    await runStoreTransaction("readwrite", (store) => {
+      const existing = store.get(key);
+      existing.onsuccess = () => {
+        const previous = existing.result as StoredChapter | undefined;
+        store.put({
+          ...chapter,
+          cache_key: key,
+          cached_at: Date.now(),
+          pinned: options.pinned ?? previous?.pinned ?? false,
+        } satisfies StoredChapter);
+      };
+    });
     await this.evictExcess();
+  },
+
+  /** Every stored chapter of one novel, in chapter order, with its size. */
+  async listForNovel(novelId: number): Promise<OfflineChapterSummary[]> {
+    if (!("indexedDB" in window)) return [];
+    const records = await withStore<StoredChapter[]>("readonly", (store) => store.index("novel_id").getAll(novelId));
+    return records
+      .map((record) => ({
+        novel_id: record.novel_id,
+        chapter_number: record.chapter_number,
+        title: record.title,
+        pinned: Boolean(record.pinned),
+        cached_at: record.cached_at,
+        size_bytes: chapterSizeBytes(record),
+      }))
+      .sort((left, right) => left.chapter_number - right.chapter_number);
+  },
+
+  /** Delete every stored chapter of one novel, pinned or not. Returns the count removed. */
+  async removeForNovel(novelId: number): Promise<number> {
+    if (!("indexedDB" in window)) return 0;
+    let removed = 0;
+    await runStoreTransaction("readwrite", (store) => {
+      const request = store.index("novel_id").openCursor(IDBKeyRange.only(novelId));
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (!cursor) return;
+        cursor.delete();
+        removed += 1;
+        cursor.continue();
+      };
+    });
+    return removed;
+  },
+
+  /** Keep at most `maximum` chapters by evicting the oldest unpinned ones. Pinned chapters are never evicted, so they may exceed the limit. */
+  async evictExcess(maximum = MAX_CACHED_CHAPTERS): Promise<void> {
+    if (!("indexedDB" in window)) return;
+    await runStoreTransaction("readwrite", (store) => {
+      const countRequest = store.count();
+      countRequest.onsuccess = () => {
+        let overflow = Math.max(0, countRequest.result - maximum);
+        if (overflow === 0) return;
+        const cursorRequest = store.index("cached_at").openCursor();
+        cursorRequest.onsuccess = () => {
+          const cursor = cursorRequest.result;
+          if (!cursor || overflow <= 0) return;
+          if (!(cursor.value as StoredChapter).pinned) {
+            cursor.delete();
+            overflow -= 1;
+          }
+          cursor.continue();
+        };
+      };
+    });
   },
 
   async get(novelId: number, chapterNumber: number): Promise<OfflineChapter | null> {
@@ -142,34 +240,6 @@ export const offlineReaderStore = {
         const request = database.transaction(STORE_NAME, "readonly").objectStore(STORE_NAME).index("novel_id").count(novelId);
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
-      });
-    } finally {
-      database.close();
-    }
-  },
-
-  async evictExcess(maximum = MAX_CACHED_CHAPTERS): Promise<void> {
-    if (!("indexedDB" in window)) return;
-    const database = await openDatabase();
-    try {
-      await new Promise<void>((resolve, reject) => {
-        const transaction = database.transaction(STORE_NAME, "readwrite");
-        const store = transaction.objectStore(STORE_NAME);
-        const countRequest = store.count();
-        countRequest.onsuccess = () => {
-          let overflow = Math.max(0, countRequest.result - maximum);
-          if (overflow === 0) return;
-          const cursorRequest = store.index("cached_at").openCursor();
-          cursorRequest.onsuccess = () => {
-            const cursor = cursorRequest.result;
-            if (!cursor || overflow <= 0) return;
-            cursor.delete();
-            overflow -= 1;
-            cursor.continue();
-          };
-        };
-        transaction.oncomplete = () => resolve();
-        transaction.onerror = () => reject(transaction.error);
       });
     } finally {
       database.close();

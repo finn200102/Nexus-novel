@@ -1,5 +1,13 @@
 import apiClient from "./apiClient";
 import axios from "axios";
+import { dropQueuedProgress, enqueueProgress, installProgressSync, QueuedProgress } from "./progressSyncQueue";
+import { isNetworkError } from "./networkErrors";
+
+const sendProgress = (entry: QueuedProgress) => apiClient.put(`/chapter/progress/${entry.novelId}`, {
+  chapter_number: entry.chapter,
+  position: entry.position,
+  percent: entry.percent,
+});
 
 export const chapterService = {
   async getChapters(novelId: number) {
@@ -78,18 +86,25 @@ export const chapterService = {
     const response = await apiClient.get(`/chapter/novel/${novelId}/export.epub`, { responseType: "blob" });
     return response.data;
   },
+  /**
+   * Save progress. When the network is down the save is queued locally and
+   * sent later (see progressSyncQueue); the call then resolves to null.
+   */
   async updateReadingProgress(
     novelId: number,
     chapterNumber: number,
     position: number,
     percent: number
   ) {
-    const response = await apiClient.put(`/chapter/progress/${novelId}`, {
-      chapter_number: chapterNumber,
-      position,
-      percent,
-    });
-    return response.data;
+    const entry: QueuedProgress = { novelId, chapter: chapterNumber, position, percent, ts: Date.now() };
+    try {
+      const response = await sendProgress(entry);
+      dropQueuedProgress(novelId);
+      return response.data;
+    } catch (error) {
+      if (isNetworkError(error) && enqueueProgress(entry)) return null;
+      throw error;
+    }
   },
   async getReadingAnnotations(novelId: number) {
     const response = await apiClient.get(`/chapter/annotations/${novelId}`);
@@ -204,3 +219,6 @@ export const chapterService = {
     }
   },
 };
+
+// Send saves queued while offline, on start and whenever the network returns.
+installProgressSync(sendProgress);

@@ -1,0 +1,96 @@
+import { act, render, screen, waitFor } from "@testing-library/react";
+import { AxiosAdapter, AxiosError, InternalAxiosRequestConfig } from "axios";
+import axios from "axios";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { AuthProvider, useAuth } from "../../src/context/AuthContext";
+import { readSignedInMarker, writeSignedInMarker } from "../../src/services/authService";
+
+type Outcome = "ok" | "network" | "unauthorized";
+let outcome: Outcome = "ok";
+
+const session = {
+  id: 7,
+  username: "reader",
+  message: "ok",
+  access_token: "token",
+  token_type: "bearer",
+  expires_in: 900,
+  is_admin: false,
+};
+
+const refreshAdapter = ((config: InternalAxiosRequestConfig) => {
+  if (outcome === "network") {
+    return Promise.reject(new AxiosError("Network Error", "ERR_NETWORK", config, null));
+  }
+  if (outcome === "unauthorized") {
+    const response = { data: { detail: "Session ended" }, status: 401, statusText: "401", headers: {}, config };
+    return Promise.reject(new AxiosError("HTTP 401", "401", config, null, response));
+  }
+  return Promise.resolve({ data: session, status: 200, statusText: "OK", headers: {}, config });
+}) as AxiosAdapter;
+
+const Probe = () => {
+  const { isAuthenticated, isOffline, isLoading, offlineUser } = useAuth();
+  return (
+    <div>
+      <span data-testid="state">{isLoading ? "loading" : isAuthenticated ? "in" : "out"}</span>
+      <span data-testid="offline">{isOffline ? "offline" : "online"}</span>
+      <span data-testid="who">{offlineUser?.username ?? "none"}</span>
+    </div>
+  );
+};
+
+const renderProbe = () => render(<AuthProvider><Probe /></AuthProvider>);
+
+describe("AuthContext offline state", () => {
+  const originalAdapter = axios.defaults.adapter;
+
+  beforeEach(() => {
+    localStorage.clear();
+    outcome = "ok";
+    axios.defaults.adapter = refreshAdapter;
+  });
+
+  afterEach(() => {
+    axios.defaults.adapter = originalAdapter;
+  });
+
+  it("stays offline-signed-in when the refresh fails with a network error and a marker exists", async () => {
+    writeSignedInMarker({ username: "reader", is_admin: false });
+    outcome = "network";
+    renderProbe();
+    await waitFor(() => expect(screen.getByTestId("state").textContent).toBe("in"));
+    expect(screen.getByTestId("offline").textContent).toBe("offline");
+    expect(screen.getByTestId("who").textContent).toBe("reader");
+    expect(readSignedInMarker()).toEqual({ username: "reader", is_admin: false });
+  });
+
+  it("signs out when the refresh is rejected with 401, even with a marker", async () => {
+    writeSignedInMarker({ username: "reader", is_admin: false });
+    outcome = "unauthorized";
+    renderProbe();
+    await waitFor(() => expect(screen.getByTestId("state").textContent).toBe("out"));
+    expect(screen.getByTestId("offline").textContent).toBe("online");
+    expect(readSignedInMarker()).toBeNull();
+  });
+
+  it("does not enter offline mode on a network error without a marker", async () => {
+    outcome = "network";
+    renderProbe();
+    await waitFor(() => expect(screen.getByTestId("state").textContent).toBe("out"));
+    expect(screen.getByTestId("offline").textContent).toBe("online");
+  });
+
+  it("leaves offline mode when the browser comes back online and the refresh succeeds", async () => {
+    writeSignedInMarker({ username: "reader", is_admin: false });
+    outcome = "network";
+    renderProbe();
+    await waitFor(() => expect(screen.getByTestId("offline").textContent).toBe("offline"));
+    outcome = "ok";
+    await act(async () => {
+      window.dispatchEvent(new Event("online"));
+    });
+    await waitFor(() => expect(screen.getByTestId("offline").textContent).toBe("online"));
+    expect(screen.getByTestId("state").textContent).toBe("in");
+  });
+});
