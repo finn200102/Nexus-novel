@@ -40,7 +40,7 @@ describe("ContinueReading", () => {
     renderRow();
 
     expect(getMock).toHaveBeenCalledWith("/chapter/progress/recent", { params: { limit: 8 } });
-    expect(await screen.findByText("Ashes of Vael")).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Ashes of Vael" })).toBeTruthy();
     expect(screen.getByText("Chapter 42 · 42%")).toBeTruthy();
     expect(screen.getByText("Chapter 7 · 3%")).toBeTruthy();
   });

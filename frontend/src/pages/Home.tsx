@@ -1,38 +1,44 @@
 import React, { useEffect, useMemo, useState } from "react";
-import {
-  ArrowUpRight,
-  BookMarked,
-  Database,
-  Download,
-  Bell,
-  Library,
-  Play,
-  Sparkles,
-} from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { BookMarked, Compass, Library as LibraryIcon } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 import { useLibraryContext } from "../context/useLibraryContext";
-import AccountDataPanel from "../components/account/AccountDataPanel";
 import { novelService } from "../services/novelService";
-import { activityService, OperationsSummary } from "../services/activityService";
 import { Novel } from "../types/novel";
 import type { InboxNovel } from "../types/activity";
+import { activityService } from "../services/activityService";
 import { useUnreadUpdates } from "../hooks/useUnreadUpdates";
+import { usePageTitle } from "../hooks/usePageTitle";
 import { displayTitle } from "../utils/displayTitle";
-import defaultCoverImage from "../assets/cover.png";
 import ContinueReading from "../components/reader/ContinueReading";
+import { Button, Cover, EmptyState, Input, ListRow, PageHeader } from "../components/ui";
 import "../styles/home.css";
 
-const formatCompact = (value: number) =>
-  new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(value);
+const RECENT_LIMIT = 8;
+const UPDATES_LIMIT = 5;
+
+const relative = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+
+/** "2 h ago" style label for an ISO timestamp; empty when the timestamp is unusable. */
+const formatAgo = (iso: string | null | undefined, now = Date.now()): string => {
+  const time = iso ? Date.parse(iso) : NaN;
+  if (Number.isNaN(time)) return "";
+  const seconds = Math.round((time - now) / 1000);
+  const units: [Intl.RelativeTimeFormatUnit, number][] = [["day", 86400], ["hour", 3600], ["minute", 60]];
+  for (const [unit, size] of units) {
+    if (Math.abs(seconds) >= size) return relative.format(Math.round(seconds / size), unit);
+  }
+  return "just now";
+};
 
 const Home: React.FC = () => {
+  usePageTitle("Home");
   const navigate = useNavigate();
-  const { activeLibrary, libraries, isLoading: librariesLoading, selectLibrary } = useLibraryContext();
+  const { activeLibrary, isLoading: librariesLoading } = useLibraryContext();
   const activeLibraryId = activeLibrary?.id;
   const [novels, setNovels] = useState<Novel[]>([]);
-  const unread = useUnreadUpdates(activeLibraryId);
   const [loading, setLoading] = useState(false);
-  const [operations, setOperations] = useState<OperationsSummary | null>(null);
+  const [pastedLink, setPastedLink] = useState("");
+  const unread = useUnreadUpdates(activeLibraryId);
 
   useEffect(() => {
     let cancelled = false;
@@ -43,18 +49,11 @@ const Home: React.FC = () => {
       }
       setLoading(true);
       try {
-        const [data, operationsData] = await Promise.all([
-          novelService.getAllNovels(activeLibraryId, ""),
-          activityService.getOperationsSummary(activeLibraryId),
-        ]);
-        if (!cancelled) {
-          setNovels(Array.isArray(data) ? data : []);
-          setOperations(operationsData);
-        }
+        const data = await novelService.getAllNovels(activeLibraryId, "");
+        if (!cancelled) setNovels(Array.isArray(data) ? data : []);
       } catch (error) {
-        console.error("Failed to load dashboard novels", error);
+        console.error("Failed to load home novels", error);
         if (!cancelled) setNovels([]);
-        if (!cancelled) setOperations(null);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -63,132 +62,141 @@ const Home: React.FC = () => {
     return () => { cancelled = true; };
   }, [activeLibraryId]);
 
-  const recent = useMemo(
-    () => [...novels].sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at)).slice(0, 6),
+  const recentlyAdded = useMemo(
+    () => [...novels].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at)).slice(0, RECENT_LIMIT),
     [novels]
   );
-  const totalWords = useMemo(() => novels.reduce((total, novel) => total + (novel.word_count || 0), 0), [novels]);
-  const totalChapters = useMemo(() => novels.reduce((total, novel) => total + (novel.chapter_count || 0), 0), [novels]);
-  const completed = useMemo(() => novels.filter((novel) => novel.status?.toLowerCase() === "complete").length, [novels]);
-
-  const goToLibrary = () => activeLibrary && navigate(`/library/${activeLibrary.id}`);
-  const addNovel = () => {
-    if (!activeLibrary) {
-      window.dispatchEvent(new CustomEvent("nexus:create-library"));
-      return;
-    }
-    window.dispatchEvent(new CustomEvent("nexus:add-novel", { detail: { libraryId: activeLibrary.id } }));
-    goToLibrary();
-  };
+  const totals = useMemo(
+    () => ({
+      chapters: novels.reduce((total, novel) => total + (novel.chapter_count || 0), 0),
+      words: novels.reduce((total, novel) => total + (novel.word_count || 0), 0),
+    }),
+    [novels]
+  );
+  const novelById = useMemo(() => new Map(novels.map((novel) => [novel.id, novel])), [novels]);
 
   const openUpdate = async (row: InboxNovel) => {
+    const libraryId = activeLibrary?.id;
     try {
       await activityService.markInboxRead(row.novel_id);
       await unread.reload();
     } catch (error) {
       console.error("Failed to mark update read", error);
     }
-    navigate(`/library/${activeLibrary?.id}/novels/${row.novel_id}`);
+    if (libraryId === undefined) return;
+    navigate(
+      row.next_unread_chapter_number != null
+        ? `/library/${libraryId}/novels/${row.novel_id}/${row.next_unread_chapter_number}`
+        : `/library/${libraryId}/novels/${row.novel_id}`
+    );
   };
 
-  const metricCards = [
-    { label: "Total stories", value: formatCompact(novels.length), detail: activeLibrary ? activeLibrary.name : "No library selected", icon: Library, tone: "violet" },
-    { label: "Tracked chapters", value: formatCompact(totalChapters), detail: "Across your collection", icon: BookMarked, tone: "blue" },
-    { label: "Library words", value: formatCompact(totalWords), detail: "Across story metadata", icon: Download, tone: "amber" },
-    { label: "Completed", value: formatCompact(completed), detail: "Stories marked complete", icon: Sparkles, tone: "green" },
-  ];
+  const submitLink = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const link = pastedLink.trim();
+    if (!link) return;
+    navigate("/library?add=1", { state: { storyLink: link } });
+  };
+
+  const hasStories = novels.length > 0;
+  const showEmpty = !loading && !librariesLoading && activeLibrary && !hasStories;
 
   return (
-    <div className="dashboard" aria-live="polite">
-      <ContinueReading />
-      <header className="dashboard__header">
-        <div>
-          <p className="dashboard__eyebrow">Overview</p>
-          <h1>{activeLibrary ? activeLibrary.name : "Your story dashboard"}</h1>
-          <p>{activeLibrary ? "Your library at a glance." : "Select or create a library to begin collecting stories."}</p>
-        </div>
-        <button type="button" className="dashboard__action" onClick={addNovel}>
-          <Download size={16} aria-hidden="true" /> {activeLibrary ? "Import story" : "Create a library"}
-        </button>
-      </header>
+    <div className="home">
+      <PageHeader title="Home" description="Pick up where you left off, and see what is new." />
 
-      <section className="dashboard__metrics" aria-label="Library statistics">
-        {metricCards.map(({ label, value, detail, icon: Icon, tone }) => (
-          <article className={`metric-card metric-card--${tone}`} key={label}>
-            <span className="metric-card__icon"><Icon size={20} aria-hidden="true" /></span>
-            <div>
-              <p>{label}</p>
-              <strong>{value}</strong>
-              <small>{detail}</small>
+      {!activeLibrary && !librariesLoading && (
+        <EmptyState
+          icon={<LibraryIcon size={40} />}
+          title="Create a library to start"
+          description="A library holds the stories you read and follow."
+          action={<Button onClick={() => window.dispatchEvent(new CustomEvent("nexus:create-library"))}>Create a library</Button>}
+        />
+      )}
+
+      {showEmpty && (
+        <EmptyState
+          icon={<BookMarked size={40} />}
+          title="Add your first story"
+          description="Paste a story link from a supported site, or import an EPUB or an AO3 or FanFiction.net download."
+          action={
+            <div className="home-empty__actions">
+              <form className="home-empty__form" onSubmit={submitLink}>
+                <Input
+                  label="Story link"
+                  type="url"
+                  inputMode="url"
+                  placeholder="https://"
+                  value={pastedLink}
+                  onChange={(event) => setPastedLink(event.target.value)}
+                  autoComplete="off"
+                />
+                <Button type="submit" disabled={!pastedLink.trim()}>Add story</Button>
+              </form>
+              <Button variant="secondary" icon={<Compass size={16} aria-hidden="true" />} onClick={() => navigate("/discover")}>
+                Browse Discover
+              </Button>
             </div>
-          </article>
-        ))}
-      </section>
+          }
+        />
+      )}
 
-      <section className="dashboard-grid">
-        <section className="dashboard-panel dashboard-panel--continue">
-          <header className="dashboard-panel__header">
-            <div><p>Continue reading</p><h2>Recently updated</h2></div>
-            {activeLibrary && <button type="button" onClick={goToLibrary}>View library <ArrowUpRight size={14} /></button>}
-          </header>
-          {loading && <p className="dashboard-panel__status">Refreshing library...</p>}
-          {!loading && recent.length === 0 && (
-            <div className="dashboard-empty"><BookMarked size={22} /><p>Your next story will appear here.</p><button type="button" onClick={addNovel}>{activeLibrary ? "Import a story" : "Create a library"}</button></div>
-          )}
-          <div className="continue-grid">
-            {recent.map((novel) => (
-              <button key={novel.id} type="button" className="continue-card" onClick={() => navigate(`/library/${novel.library_id}/novels/${novel.id}`)}>
-                <img src={novel.img_url || novel.cover_image || defaultCoverImage} alt="" referrerPolicy="no-referrer" onError={(event) => { event.currentTarget.src = defaultCoverImage; }} />
-                <span className="continue-card__body">
-                  <span className="continue-card__source">{novel.novel_site || "Source"}</span>
-                  <strong>{displayTitle(novel)}</strong>
-                  <small>{novel.author || "Unknown author"}</small>
-                  <span className="continue-card__progress"><i /><em>{novel.chapter_count || 0} chapters</em></span>
-                </span>
-              </button>
-            ))}
-          </div>
-        </section>
+      {activeLibrary && hasStories && (
+        <>
+          <ContinueReading novels={novels} updates={unread.rows} />
 
-        <section className="dashboard-panel dashboard-panel--activity">
-          <header className="dashboard-panel__header"><div><p>Activity</p><h2>Library pulse</h2></div></header>
-          <div className="activity-list">
-            <div><span className="activity-list__icon"><Database size={16} /></span><p><strong>Metadata server</strong><small>{operations?.metadata_server.detail || "Checking metadata readiness…"}</small></p><b className={`status-${operations?.metadata_server.status || "unknown"}`}>{operations?.metadata_server.status || "Checking"}</b></div>
-            <div><span className="activity-list__icon"><Download size={16} /></span><p><strong>Downloads</strong><small>{operations ? `${operations.downloads.queued} queued · ${operations.downloads.running} running · ${operations.downloads.failed} failed` : "Checking download queue…"}</small></p><button type="button" onClick={() => navigate("/downloads")}>Open</button></div>
-            <div><span className="activity-list__icon"><Play size={16} /></span><p><strong>Followed stories</strong><small>{operations ? `${operations.reading_stories} reading · ${unread.count} unread updates` : "Checking follow state…"}</small></p><button type="button" onClick={goToLibrary} disabled={!activeLibrary}>Open</button></div>
-            <div><span className="activity-list__icon"><Bell size={16} /></span><p><strong>Source health</strong><small>{operations ? `${operations.source_failures} recent source failures · ${operations.refresh_schedules} refresh schedules` : "Checking source health…"}</small></p><b className={operations?.source_failures ? "status-degraded" : "status-online"}>{operations?.source_failures ? "Attention" : "Healthy"}</b></div>
-          </div>
-        </section>
+          <section className="home-section" aria-labelledby="home-updates-heading">
+            <header className="home-section__header">
+              <h2 id="home-updates-heading">New chapters</h2>
+              <Link to="/updates" className="home-section__link">See all updates</Link>
+            </header>
+            {unread.rows.length === 0 ? (
+              <p className="home-section__status">No unread story updates.</p>
+            ) : (
+              <ul className="home-list">
+                {unread.rows.slice(0, UPDATES_LIMIT).map((row) => {
+                  const novel = novelById.get(row.novel_id);
+                  const title = displayTitle({ title: row.title });
+                  const last = row.first_new_chapter_number + row.new_chapter_count - 1;
+                  const range = row.new_chapter_count > 1 ? `Chapters ${row.first_new_chapter_number}–${last}` : `Chapter ${row.first_new_chapter_number}`;
+                  const ago = formatAgo(row.latest_at);
+                  return (
+                    <li key={row.novel_id}>
+                      <ListRow
+                        media={<Cover src={novel?.img_url || novel?.cover_image} title={title} size={48} />}
+                        title={title}
+                        meta={[range, ago].filter(Boolean).join(" · ")}
+                        actions={<Button size="sm" variant="secondary" onClick={() => openUpdate(row)} aria-label={`Read new chapters of ${title}`}>Read</Button>}
+                      />
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
 
-        <section className="dashboard-panel dashboard-panel--activity">
-          <header className="dashboard-panel__header"><div><p>Updates</p><h2>New chapters</h2></div><Bell size={18} aria-hidden="true" /></header>
-          <div className="activity-list">
-            {unread.rows.length === 0 && <p className="dashboard-panel__status">No unread story updates.</p>}
-            {unread.rows.slice(0, 5).map((row) => (
-              <div key={row.novel_id}>
-                <span className="activity-list__icon"><BookMarked size={16} /></span>
-                <p><strong>{displayTitle({ title: row.title })}</strong><small>{row.new_chapter_count} new · first is chapter {row.first_new_chapter_number}</small></p>
-                <button type="button" onClick={() => openUpdate(row)}>Open</button>
-              </div>
-            ))}
-          </div>
-        </section>
-      </section>
+          <section className="home-section" aria-labelledby="home-recent-heading">
+            <header className="home-section__header">
+              <h2 id="home-recent-heading">Recently added</h2>
+              <Link to="/library" className="home-section__link">Open library</Link>
+            </header>
+            <ul className="home-covers">
+              {recentlyAdded.map((novel) => (
+                <li key={novel.id}>
+                  <Link to={`/library/${novel.library_id}/novels/${novel.id}`} className="home-cover">
+                    <Cover src={novel.img_url || novel.cover_image} title={displayTitle(novel)} size="fill" />
+                    <span>{displayTitle(novel)}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
 
-      <section className="dashboard-panel dashboard-panel--libraries">
-        <header className="dashboard-panel__header"><div><p>Collections</p><h2>Libraries</h2></div></header>
-        {librariesLoading && <p className="dashboard-panel__status">Loading libraries...</p>}
-        <div className="library-strip">
-          {libraries.map((library) => (
-            <button key={library.id} type="button" className={activeLibrary?.id === library.id ? "library-strip__item is-active" : "library-strip__item"} onClick={() => selectLibrary(library.id)}>
-              <span>{library.name.slice(0, 1).toUpperCase()}</span><strong>{library.name}</strong><small>{activeLibrary?.id === library.id ? "Active library" : "Select library"}</small>
-            </button>
-          ))}
-          {!librariesLoading && libraries.length === 0 && <p className="dashboard-panel__status">No libraries yet.</p>}
-        </div>
-      </section>
-
-      <AccountDataPanel />
+          <p className="home-stats">
+            {novels.length} {novels.length === 1 ? "story" : "stories"} · {totals.chapters.toLocaleString()} chapters · {totals.words.toLocaleString()} words
+          </p>
+        </>
+      )}
     </div>
   );
 };
