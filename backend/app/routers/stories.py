@@ -11,7 +11,7 @@ from app.auth.dependencies import get_current_user
 from app.models.library import Library
 from app.models.novel import Novel
 from app.models.user import User
-from app.services import metadata_client
+from app.services import content_limit_service, metadata_client
 from app.services.hiatus_view import hiatus_view
 from app.services.support_links import clean_support_links
 from config.database import get_db
@@ -38,6 +38,8 @@ async def get_story(metadata_id: int, db: Session = Depends(get_db), current_use
         catalog = await metadata_client.get_novel_metadata(metadata_id)
     except Exception:
         catalog = None
+    if content_limit_service.is_limited(current_user) and not content_limit_service.item_allowed(current_user, catalog or {}):
+        raise content_limit_service.restricted()
     support_links = clean_support_links((catalog or {}).get("support_links"))
     # Source link: the original story page and site, taken from the first library copy.
     source = None

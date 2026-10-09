@@ -9,6 +9,7 @@ from app.models.novel import Novel
 from app.models.reading_progress import ReadingProgress
 from app.models.user import User
 from app.services import metadata_client
+from app.services.content_limit_service import ensure_story_allowed
 from app.services.blocklist_service import apply_blocklist, merged_exclusions
 from app.services.library_organization_service import personal_for_novels
 from app.services.recommendation_reasons import ReasonSource, build_reasons, terms_of
@@ -143,6 +144,7 @@ async def get_novels(
         label_origin=label_origin,
         import_state=import_state,
         similar_to=similar_to,
+        content_rating=blocked["content_rating"],
         sort_by=sort_by,
         sort_order=sort_order,
         limit=limit,
@@ -158,8 +160,12 @@ async def get_novel_by_id(
     novel_id: int,
     current_user: User = Depends(get_current_user),
 ):
-    """Get a single novel's details from metadata server."""
+    """Get a single novel's details from metadata server.
+
+    403 when the story is outside the user's content limits.
+    """
     data = await metadata_client.get_novel_metadata(novel_id)
+    await ensure_story_allowed(current_user, novel_id)
     return data
 
 
@@ -182,6 +188,7 @@ async def get_similar_novels(
     current_user: User = Depends(get_current_user),
 ):
     """Similar works with a "why this" reason list for each row."""
+    await ensure_story_allowed(current_user, novel_id)
     data = await metadata_client.get_similar_novels(novel_id, limit)
     rows = data.get("data", []) if isinstance(data, dict) else list(data or [])
     if not rows:

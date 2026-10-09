@@ -21,7 +21,7 @@ from app.auth.sessions import (
     token_response,
 )
 from app.models.user import User
-from app.services import account_service
+from app.services import account_service, content_limit_service
 from app.services.account_service import AccountError
 from app.services.user_services import get_user_by_username
 from app.routers import oidc
@@ -202,15 +202,24 @@ def reset_password(payload: PasswordReset, request: Request, db: Session = Depen
     return {"message": "Password changed. Please sign in."}
 
 
+def _me(user: User) -> UserSchema:
+    return UserSchema(
+        id=user.id,
+        username=user.username,
+        is_admin=bool(user.is_admin),
+        content_limits=content_limit_service.describe(user),
+    )
+
+
 @router.get("/me", response_model=UserSchema)
 def me(current_user: User = Depends(get_current_user)):
-    return current_user
+    return _me(current_user)
 
 
 @router.get("/verify-token", response_model=UserSchema)
 def verify_token_endpoint(current_user: User = Depends(get_current_user)):
     """Endpoint to verify if the current token is valid"""
-    return current_user
+    return _me(current_user)
 
 
 router.include_router(oidc.router)

@@ -698,6 +698,10 @@ def get_chapters(
     """
     Get chapters with pagination and optional filtering
     """
+    # Only the owner's library copy: shared shelves never open another user's chapters.
+    novel = db.query(Novel).filter_by(id=novel_id).first()
+    if not novel or novel.library_id not in [lib.id for lib in current_user.libraries]:
+        raise HTTPException(status_code=404, detail="Novel not found")
 
     # Start with base query
     query = chapter_services.get_chapters_by_novel_id(db, novel_id=novel_id)

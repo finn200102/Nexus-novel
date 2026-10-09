@@ -66,6 +66,7 @@ async def recommendations(
                 exclude_genre=blocked["exclude_genre"],
                 exclude_author=blocked["exclude_author"],
                 exclude_text=blocked["exclude_text"],
+                content_rating=blocked["content_rating"],
             )
             for candidate in response.get("data", []):
                 candidate_id = candidate.get("id")

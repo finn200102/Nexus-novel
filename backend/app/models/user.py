@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, DateTime, Index, String, UniqueConstraint, text
+from sqlalchemy import JSON, Boolean, Column, DateTime, Index, String, UniqueConstraint, text, true
 from sqlalchemy.orm import relationship
 from app.models.base import BaseModel
 
@@ -22,6 +22,12 @@ class User(BaseModel):
     # id. Accounts are linked by this pair only, never by e-mail.
     oidc_issuer = Column(String(255), nullable=True)
     oidc_subject = Column(String(255), nullable=True)
+    # Content limits set by an administrator (household profiles). A null
+    # rating means no rating limit; blocked tags apply either way.
+    max_content_rating = Column(String(16), nullable=True)
+    blocked_tags = Column(JSON, nullable=True)
+    # For a rating-limited profile: hide works whose rating is unknown.
+    hide_unrated = Column(Boolean, nullable=False, default=True, server_default=true())
 
     libraries = relationship("Library", back_populates="user")
 

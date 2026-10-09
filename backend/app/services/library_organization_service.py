@@ -84,6 +84,8 @@ def present_shelf(db: Session, shelf: Shelf) -> dict:
         "name": shelf.name,
         "position": shelf.position,
         "novel_ids": shelf_novel_ids(db, shelf),
+        "share_count": len(shelf.shares),
+        "share_notes": bool(shelf.share_notes),
     }
 
 

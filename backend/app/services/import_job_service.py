@@ -26,7 +26,7 @@ from app.models.library import Library
 from app.models.novel import Novel
 from app.models.user import User
 from app.routers.novel import accepted_src, get_site_name_from_url, scrape_novel_background, supported_src
-from app.services import metadata_client
+from app.services import content_limit_service, metadata_client
 from app.services.novel_title import clean_title
 import app.services.novel_services as novel_services
 from app.services import calibre_service
@@ -35,7 +35,7 @@ logger = get_logger(__name__)
 
 URL_SOURCES = ("url_list", "rr_list", "epub", "user_data")
 LIST_SOURCES = {"ao3_bookmarks": ("archive", "bookmarks"), "ffn_favorites": ("fanfiction", "favorites")}
-FINAL_ITEM_STATUSES = ("linked", "duplicate", "unsupported", "failed")
+FINAL_ITEM_STATUSES = ("linked", "duplicate", "unsupported", "failed", "restricted")
 ACTIVE_JOB_STATUSES = ("queued", "expanding", "running")
 MAX_ITEMS_PER_JOB = 2000
 MAX_LIST_PAGES = 100
@@ -271,6 +271,12 @@ async def _process_item(db: Session, job: ImportJob, item: ImportJobItem, sessio
         await asyncio.to_thread(scrape, novel_id, metadata_id, session_factory, loop)
         db.expire(novel)
     if novel.scrape_status == "completed":
+        owner = db.get(User, job.user_id)
+        if owner is not None and not await content_limit_service.story_allowed(owner, novel.metadata_id):
+            # Outside the profile's content limits: the copy is removed again.
+            item.status, item.reason, item.title, item.novel_id = "restricted", content_limit_service.RESTRICTED_MESSAGE, novel.title, None
+            db.delete(novel)
+            return
         item.status, item.reason, item.title = "linked", None, novel.title
     else:
         item.status, item.reason = "failed", novel.scrape_error or "metadata scrape failed"

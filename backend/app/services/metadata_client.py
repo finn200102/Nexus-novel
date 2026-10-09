@@ -532,6 +532,7 @@ async def list_novels_metadata(
     label_origin: Optional[str] = None,
     import_state: Optional[str] = None,
     similar_to: Optional[int] = None,
+    content_rating: Optional[list[str]] = None,
     sort_by: str = "updated",
     sort_order: str = "desc",
     limit: int = 100,
@@ -571,6 +572,7 @@ async def list_novels_metadata(
         "label_origin": label_origin,
         "import_state": import_state,
         "similar_to": similar_to,
+        "content_rating": _clean_list(content_rating),
         "sort_by": sort_by,
         "sort_order": sort_order,
     }.items():

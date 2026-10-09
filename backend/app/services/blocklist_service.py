@@ -3,12 +3,17 @@
 Discovery requests merge these rules into the metadata server's exclude
 parameters, so the server filters first. Results are checked again here so
 that a rule also applies to fields the server matches more loosely.
+
+An administrator's content limits for the user (see content_limit_service)
+ride along: blocked tags join the tag rules, and the rating limit becomes a
+``content_rating`` filter and a final row check.
 """
 
 from sqlalchemy.orm import Session
 
 from app.models.blocklist import BLOCKLIST_KINDS, BlocklistEntry
 from app.models.user import User
+from app.services import content_limit_service
 
 # Blocklist kind -> the exclude_* parameter it feeds on discovery requests.
 EXCLUDE_PARAM_BY_KIND = {
@@ -37,6 +42,7 @@ def blocked_values(db: Session, user: User) -> dict[str, list[str]]:
     grouped: dict[str, list[str]] = {kind: [] for kind in BLOCKLIST_KINDS}
     for entry in list_entries(db, user):
         grouped[entry.kind].append(entry.value)
+    grouped["tag"].extend(content_limit_service.blocked_tags_of(user))
     return grouped
 
 
@@ -75,6 +81,7 @@ def merged_exclusions(
         "exclude_genre": _merge_unique(exclude_genre, blocked["genre"]),
         "exclude_author": _merge_unique(exclude_author, blocked["author"]),
         "exclude_text": _merge_unique(exclude_text, blocked["word"]),
+        "content_rating": content_limit_service.allowed_ratings(user),
     }
 
 
@@ -123,7 +130,11 @@ def wanted_words(blocked: dict[str, list[str]]) -> list[str]:
 
 
 def apply_blocklist(db: Session, user: User, items: list[dict]) -> list[dict]:
-    """Drop items the user has blocked. Works on discovery, similar and live-search rows."""
+    """Drop items the user has blocked or that exceed their content limits.
+
+    Works on discovery, similar, recommendation and live-search rows.
+    """
+    items = content_limit_service.filter_items(user, items)
     blocked = blocked_values(db, user)
     if not any(blocked.values()):
         return list(items)

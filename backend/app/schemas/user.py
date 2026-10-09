@@ -1,6 +1,18 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+ContentRating = Literal["general", "teen", "mature", "explicit"]
+
+
+class ContentLimits(BaseModel):
+    """A household profile's limits, set by an administrator."""
+
+    max_content_rating: ContentRating | None = None
+    hide_unrated: bool = True
+    blocked_tags: list[str] = Field(default_factory=list, max_length=50)
+    limited: bool = False
 
 
 def _password_fits_bcrypt(value: str) -> str:
@@ -40,6 +52,7 @@ class UserLogin(UserBase):
 class User(UserBase):
     id: int
     is_admin: bool = False
+    content_limits: ContentLimits | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -95,6 +108,7 @@ class AdminUser(BaseModel):
     created_at: datetime | None
     last_seen_at: datetime | None = None
     active_sessions: int = 0
+    content_limits: ContentLimits | None = None
 
 
 class AdminUserUpdate(BaseModel):

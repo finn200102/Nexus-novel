@@ -31,7 +31,7 @@ from app.services.chapter_services import (
 from app.services.library_services import get_library_by_id
 from app.services.reading_order import attach_next_unread
 from app.auth.dependencies import get_current_user
-from app.services import metadata_client
+from app.services import content_limit_service, metadata_client
 from app.services.download_job_service import queue_missing_chapters
 from app.logging_config import get_logger
 from app.services.novel_title import clean_title
@@ -1057,6 +1057,7 @@ async def get_novel_by_id(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Novel with ID {novel_id} not found",
         )
+    await content_limit_service.ensure_story_allowed(current_user, novel.metadata_id)
 
     if novel.metadata_id:
         try:

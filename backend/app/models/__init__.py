@@ -26,7 +26,7 @@ from .reading_history import ReadingHistory
 from .reading_progress import ReadingProgress
 from .reading_session import ReadingSessionDaily
 from .saved_search import SavedSearch
-from .shelf import Shelf, ShelfNovel
+from .shelf import Shelf, ShelfNovel, ShelfShare
 from .tag import Tag
 from .personal_feed import UserFeedToken
 from .update_event import NovelUpdateEvent
@@ -68,6 +68,7 @@ __all__ = [
     "SavedSearch",
     "Shelf",
     "ShelfNovel",
+    "ShelfShare",
     "Tag",
     "User",
     "UserNovelFollow",

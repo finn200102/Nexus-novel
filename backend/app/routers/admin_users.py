@@ -11,6 +11,7 @@ from app.models.account import InviteCode, UserSession
 from app.models.user import User
 from app.schemas.user import (
     AdminUser,
+    ContentLimits,
     AdminUserUpdate,
     InstanceSettings,
     Invite,
@@ -18,7 +19,7 @@ from app.schemas.user import (
     PasswordResetLink,
     PasswordResetLinkRequest,
 )
-from app.services import account_service
+from app.services import account_service, content_limit_service
 from app.services.account_service import AccountError
 from config.database import get_db
 
@@ -45,6 +46,7 @@ def _admin_user(user: User, last_seen_at=None, active_sessions: int = 0) -> Admi
         created_at=user.created_at,
         last_seen_at=last_seen_at,
         active_sessions=active_sessions,
+        content_limits=content_limit_service.describe(user),
     )
 
 
@@ -104,6 +106,28 @@ def update_user(
         AuditAction.USER_UPDATED,
         user_id=admin.id,
         details={"target_user_id": user.id, **payload.model_dump(exclude_none=True)},
+    )
+    return _admin_user(user)
+
+
+@router.put("/users/{user_id}/content-limits", response_model=AdminUser)
+def set_content_limits(
+    user_id: int,
+    payload: ContentLimits,
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Set a household profile's maximum content rating, blocked tags and unrated handling."""
+    user = _get_user(db, user_id)
+    user.max_content_rating = payload.max_content_rating
+    user.hide_unrated = payload.hide_unrated
+    user.blocked_tags = content_limit_service.clean_blocked_tags(payload.blocked_tags) or None
+    db.commit()
+    db.refresh(user)
+    audit.log(
+        AuditAction.USER_UPDATED,
+        user_id=admin.id,
+        details={"target_user_id": user.id, "content_limits": content_limit_service.describe(user)},
     )
     return _admin_user(user)
 
