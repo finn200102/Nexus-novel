@@ -157,6 +157,17 @@ class Settings(BaseSettings):
     )
     NEXUS_PASSWORD_LOGIN: str = Field(default="enabled", description="Password sign-in: enabled or disabled")
 
+    # Native Kobo sync (experimental, docs/kobo-sync.md).
+    NEXUS_KOBO_STORE_PROXY: bool = Field(
+        default=False,
+        description="Forward Kobo requests Nexus does not handle to the Kobo store (keeps store purchases working)",
+    )
+    NEXUS_KOBO_BASE_URL: str = Field(
+        default="",
+        description="External API URL the Kobo reaches, e.g. http://192.168.1.5:8180/api; empty = derived from requests",
+    )
+    NEXUS_KEPUBIFY_PATH: str = Field(default="", description="kepubify binary; empty = look it up on PATH")
+
     @property
     def oidc_enabled(self) -> bool:
         return bool(self.NEXUS_OIDC_ISSUER.strip() and self.NEXUS_OIDC_CLIENT_ID.strip())

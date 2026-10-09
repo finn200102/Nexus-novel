@@ -8,6 +8,25 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential curl libpq-dev pkg-config libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# kepubify (MIT, github.com/pgaskin/kepubify) converts the generated EPUBs to
+# KEPUB for Kobo sync, which gives the device precise reading positions.
+# Pinned release binaries, checked by SHA-256; other architectures fall back
+# to plain EPUB.
+ARG KEPUBIFY_VERSION=4.0.4
+ARG TARGETARCH
+RUN case "${TARGETARCH:-amd64}" in \
+        amd64) file=kepubify-linux-64bit; sum=37d7628d26c5c906f607f24b36f781f306075e7073a6fe7820a751bb60431fc5 ;; \
+        arm64) file=kepubify-linux-arm64; sum=5a15b8f6f6a96216c69330601bca29638cfee50f7bf48712795cff88ae2d03a3 ;; \
+        *) file= ;; \
+    esac \
+    && if [ -n "$file" ]; then \
+        curl -fsSL -o /usr/local/bin/kepubify "https://github.com/pgaskin/kepubify/releases/download/v${KEPUBIFY_VERSION}/${file}" \
+        && echo "${sum}  /usr/local/bin/kepubify" | sha256sum -c - \
+        && chmod 0755 /usr/local/bin/kepubify \
+        && mkdir -p /usr/share/licenses/kepubify \
+        && curl -fsSL -o /usr/share/licenses/kepubify/LICENSE "https://raw.githubusercontent.com/pgaskin/kepubify/v${KEPUBIFY_VERSION}/LICENSE"; \
+    fi
+
 COPY backend/pyproject.toml backend/uv.lock backend/README.md ./backend/
 
 WORKDIR /app/backend
