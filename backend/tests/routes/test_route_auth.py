@@ -26,6 +26,8 @@ PUBLIC = {
     # Authenticated by the shared webhook secret instead of a user session.
     ("POST", "/novel/internal/metadata-events"),
     ("GET", "/opds/opensearch.xml"),
+    # Authenticated by the random feed token in the path (no session).
+    ("GET", "/feeds/{token_file}"),
 }
 
 

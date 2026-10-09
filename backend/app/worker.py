@@ -17,6 +17,7 @@ from app.routers.chapter import run_queued_download
 from app.services.audio_job_service import process_audio_job
 from app.services.import_job_service import next_job_id, run_import_job
 from app.services.notification_delivery import deliver_due_notifications
+from app.services.webhook_delivery import deliver_due_webhooks
 
 
 def release_due_notifications(db) -> int:
@@ -104,6 +105,22 @@ def process_notifications() -> int:
         db.close()
 
 
+def process_webhooks() -> int:
+    """POST released update events to the users' outgoing webhooks.
+
+    Separate from push and Apprise so a webhook problem never affects them.
+    """
+    db = SessionLocal()
+    try:
+        return deliver_due_webhooks(db)
+    except Exception:
+        logging.getLogger(__name__).exception("Webhook delivery failed")
+        db.rollback()
+        return 0
+    finally:
+        db.close()
+
+
 def process_audio_jobs() -> int:
     db = SessionLocal()
     try:
@@ -172,6 +189,7 @@ async def run() -> None:
         finally:
             db.close()
         await asyncio.to_thread(process_notifications)
+        await asyncio.to_thread(process_webhooks)
         try:
             await asyncio.wait_for(stop.wait(), timeout=5)
         except asyncio.TimeoutError:

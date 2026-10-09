@@ -25,7 +25,9 @@ from .reading_progress import ReadingProgress
 from .saved_search import SavedSearch
 from .shelf import Shelf, ShelfNovel
 from .tag import Tag
+from .personal_feed import UserFeedToken
 from .update_event import NovelUpdateEvent
+from .webhook import Webhook, WebhookDelivery
 from .user import User
 
 __all__ = [
