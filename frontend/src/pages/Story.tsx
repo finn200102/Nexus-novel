@@ -34,6 +34,7 @@ import { useLibraryContext } from "../context/useLibraryContext";
 import { useToast } from "../context/useToast";
 import { usePageTitle } from "../hooks/usePageTitle";
 import type { Novel, NovelFollowSettings } from "../types/novel";
+import { highlightsExportService } from "../services/highlightsExportService";
 import type { BlocklistKind } from "../types/organization";
 import "../styles/organization.css";
 import "../styles/story.css";
@@ -336,6 +337,7 @@ export const StoryPage: React.FC<StoryPageProps> = ({ fallbackCopy }) => {
     ...(inLibrary
       ? [
           { label: "Download EPUB", onSelect: () => void exportEpub() },
+          ...(copy ? [{ label: "Export notes", onSelect: () => void highlightsExportService.downloadStoryNotes(copy.novelId, view.title).catch(() => addToast("Could not export notes.", "error")) }] : []),
           { label: "Update story info", onSelect: () => void refresh() },
           { label: "Manage downloads and offline…", onSelect: () => setTab("chapters") },
         ]
