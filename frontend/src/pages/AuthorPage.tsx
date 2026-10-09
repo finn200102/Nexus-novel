@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { ExternalLink, UserX } from "lucide-react";
 import { Badge, EmptyState, ListRow, PageHeader, Skeleton, SkeletonGroup } from "../components/ui";
+import SupportLinks from "../components/story/SupportLinks";
 import FollowToggle from "../components/follow/FollowToggle";
 import { siteLabel } from "../components/story/storyModel";
 import { followService, type AuthorPageData, type AuthorProfile, type AuthorWork } from "../services/followService";
@@ -101,6 +102,7 @@ const AuthorPage: React.FC = () => {
         title={data.name}
         description={`${total} ${total === 1 ? "work" : "works"} on ${data.profiles.length} ${data.profiles.length === 1 ? "site" : "sites"}`}
       />
+      <SupportLinks links={data.support_links} />
       {data.profiles.map((profile) => (
         <ProfileSection
           key={profile.id}

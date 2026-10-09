@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { discoveryService } from "../../services/discoveryService";
 import { novelService } from "../../services/novelService";
 import { storyService, type LibraryEntry } from "../../services/storyService";
+import type { SupportLink } from "../../lib/supportLinks";
 import type { DiscoveredNovel } from "../../types/discovery";
 import type { Novel, NovelFollowSettings } from "../../types/novel";
 
@@ -16,6 +17,8 @@ export interface StoryData {
   notFound: boolean;
   catalog: DiscoveredNovel | null;
   entries: LibraryEntry[];
+  /** Author support links from the catalog story (validated by the API). */
+  supportLinks: SupportLink[];
   /** The library copy shown on the page, if any. */
   copy: LibraryCopyRef | null;
   novel: Novel | null;
@@ -34,6 +37,7 @@ export function useStoryData(metadataId: number | null, preferredCopy: number | 
   const [loading, setLoading] = useState(true);
   const [catalog, setCatalog] = useState<DiscoveredNovel | null>(null);
   const [entries, setEntries] = useState<LibraryEntry[]>([]);
+  const [supportLinks, setSupportLinks] = useState<SupportLink[]>([]);
   const [novel, setNovel] = useState<Novel | null>(null);
   const [followSettings, setFollowSettings] = useState<NovelFollowSettings | null>(null);
   const [copy, setCopy] = useState<LibraryCopyRef | null>(null);
@@ -44,13 +48,17 @@ export function useStoryData(metadataId: number | null, preferredCopy: number | 
     setLoading(true);
     let nextCatalog: DiscoveredNovel | null = null;
     let nextEntries: LibraryEntry[] = [];
+    let nextSupport: SupportLink[] = [];
     if (metadataId) {
       const [catalogResult, membershipResult] = await Promise.allSettled([
         discoveryService.getNovelById(metadataId),
         storyService.membership(metadataId),
       ]);
       if (catalogResult.status === "fulfilled" && catalogResult.value && "id" in catalogResult.value) nextCatalog = catalogResult.value;
-      if (membershipResult.status === "fulfilled") nextEntries = membershipResult.value.library_entries;
+      if (membershipResult.status === "fulfilled") {
+        nextEntries = membershipResult.value.library_entries;
+        nextSupport = membershipResult.value.support_links;
+      }
     }
     const chosen = nextEntries.find((entry) => entry.novel_id === preferredCopy) ?? nextEntries[0];
     const nextCopy = chosen
@@ -72,6 +80,7 @@ export function useStoryData(metadataId: number | null, preferredCopy: number | 
     if (!isActive()) return;
     setCatalog(nextCatalog);
     setEntries(nextEntries);
+    setSupportLinks(nextSupport);
     setCopy(nextNovel ? nextCopy : null);
     setNovel(nextNovel);
     setFollowSettings(nextSettings);
@@ -91,6 +100,7 @@ export function useStoryData(metadataId: number | null, preferredCopy: number | 
     notFound: !loading && !catalog && !novel,
     catalog,
     entries,
+    supportLinks,
     copy,
     novel,
     followSettings,

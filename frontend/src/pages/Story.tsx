@@ -11,6 +11,7 @@ import CompletionToggle from "../components/story/CompletionToggle";
 import HiatusBadge from "../components/story/HiatusBadge";
 import FollowAuthorButton from "../components/follow/FollowAuthorButton";
 import SourceLinks from "../components/story/SourceLinks";
+import SupportLinks from "../components/story/SupportLinks";
 import { PersonalPanel } from "../components/organization/PersonalPanel";
 import { useOfflineCopies } from "../components/novel/useOfflineCopies";
 import { useStoryData, type LibraryCopyRef } from "../components/story/useStoryData";
@@ -492,6 +493,7 @@ export const StoryPage: React.FC<StoryPageProps> = ({ fallbackCopy }) => {
             )}
             {entries.length === 1 && <p className="story-hero__in">In {entries[0].library_name}</p>}
             <SourceLinks site={view.site} url={view.sourceUrl} storyId={view.siteStoryId} />
+            <SupportLinks links={data.supportLinks} />
           </div>
           <div className={`story-actions${inLibrary ? " story-actions--library" : ""}`}>
           {primaryAction}

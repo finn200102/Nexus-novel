@@ -1,3 +1,4 @@
+import type { SupportLink } from "../lib/supportLinks";
 import apiClient from "./apiClient";
 
 export type FollowKind = "author" | "series";
@@ -59,6 +60,7 @@ export interface AuthorProfile {
 }
 
 export interface AuthorPageData {
+  support_links?: SupportLink[];
   id: number;
   name: string;
   site: string;
