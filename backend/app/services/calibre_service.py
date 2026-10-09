@@ -31,6 +31,8 @@ from app.services import epub_service, user_data_service
 
 SQLITE_MAGIC = b"SQLite format 3\x00"
 MAX_CALIBRE_BYTES = 20 * 1024 * 1024
+SQLITE_PROGRESS_INTERVAL = 10_000  # VM steps between budget checks
+MAX_SQLITE_PROGRESS_CALLS = 20_000  # 200M steps: far beyond any real library
 REQUIRED_TABLES = ("books", "identifiers", "tags", "books_tags_link")
 # Calibre identifier types that name a story on a supported site.
 IDENTIFIER_URLS = {
@@ -84,6 +86,8 @@ def _custom_columns(conn: sqlite3.Connection) -> list[tuple[int, str, str]]:
 
 def _column_values(conn: sqlite3.Connection, column_id: int) -> dict[int, object]:
     table = f"custom_column_{int(column_id)}"  # ids are integers from custom_columns, never user text
+    if not _has(conn, table):
+        return {}
     return {int(book): value for book, value in conn.execute(f"SELECT book, value FROM {table}")}
 
 
@@ -100,6 +104,17 @@ def read_calibre_library(data: bytes) -> list[CalibreBook]:
         conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
         try:
             conn.execute("PRAGMA query_only = ON")
+            # The file is untrusted: bound the work and the size of any value
+            # (a crafted view or generated column could otherwise spin or
+            # allocate without end).
+            steps = {"left": MAX_SQLITE_PROGRESS_CALLS}
+
+            def budget() -> int:
+                steps["left"] -= 1
+                return 1 if steps["left"] < 0 else 0
+
+            conn.set_progress_handler(budget, SQLITE_PROGRESS_INTERVAL)
+            conn.setlimit(sqlite3.SQLITE_LIMIT_LENGTH, MAX_CALIBRE_BYTES)
             _check_tables(conn)
             return _collect(conn)
         finally:

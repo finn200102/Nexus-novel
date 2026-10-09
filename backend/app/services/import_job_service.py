@@ -71,6 +71,17 @@ def extract_urls(text: str, *, royalroad_paths: bool = False) -> list[str]:
     return urls
 
 
+EPUB_MEMBER_MAX_BYTES = 2 * 1024 * 1024
+
+
+def _read_member(archive: zipfile.ZipFile, name: str) -> bytes:
+    """One EPUB member, refused when it would inflate past the limit (zip bombs)."""
+    if archive.getinfo(name).file_size > EPUB_MEMBER_MAX_BYTES:
+        raise KeyError(name)
+    with archive.open(name) as member:
+        return member.read(EPUB_MEMBER_MAX_BYTES)
+
+
 def epub_source_url(data: bytes) -> str | None:
     """The original story URL recorded in an EPUB.
 
@@ -86,23 +97,27 @@ def epub_source_url(data: bytes) -> str | None:
         candidates: list[str] = []
         opf_path = None
         try:
-            container = ElementTree.fromstring(archive.read("META-INF/container.xml"))
+            container = ElementTree.fromstring(_read_member(archive, "META-INF/container.xml"))
             rootfile = container.find(".//{*}rootfile")
             opf_path = rootfile.get("full-path") if rootfile is not None else None
         except (KeyError, ElementTree.ParseError):
             opf_path = next((name for name in names if name.endswith(".opf")), None)
         if opf_path and opf_path in names:
             try:
-                opf = ElementTree.fromstring(archive.read(opf_path))
+                opf = ElementTree.fromstring(_read_member(archive, opf_path))
                 for tag in ("source", "identifier", "relation"):
                     for element in opf.iter(f"{{http://purl.org/dc/elements/1.1/}}{tag}"):
                         candidates.extend(extract_urls((element.text or "").removeprefix("url:")))
-            except ElementTree.ParseError:
+            except (KeyError, ElementTree.ParseError):
                 pass
         if not any(supported_src(url) for url in candidates):
             pages = [name for name in names if name.lower().endswith((".xhtml", ".html", ".htm"))]
             for name in sorted(pages, key=lambda value: ("title" not in value.lower(), value))[:6]:
-                candidates.extend(extract_urls(archive.read(name).decode("utf-8", "ignore")))
+                try:
+                    page = _read_member(archive, name)
+                except KeyError:
+                    continue
+                candidates.extend(extract_urls(page.decode("utf-8", "ignore")))
                 if any(supported_src(url) for url in candidates):
                     break
     supported = [url for url in candidates if supported_src(url)]

@@ -114,3 +114,37 @@ def test_calibre_export_endpoint_streams_zip(client, auth_headers):
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/zip"
     assert zipfile.ZipFile(io.BytesIO(response.content)).namelist() == []
+
+
+def test_crafted_calibre_file_cannot_spin_the_server(tmp_path, monkeypatch):
+    path = tmp_path / "metadata.db"
+    _metadata_db(path)
+    conn = sqlite3.connect(path)
+    # A "custom column" that is an endless recursive view is skipped, not run.
+    conn.executescript("""
+        DROP TABLE custom_column_2;
+        CREATE VIEW custom_column_2 AS WITH RECURSIVE n(book, value) AS
+            (SELECT 1, 'x' UNION ALL SELECT book + 1, value FROM n) SELECT book, value FROM n;
+    """)
+    conn.close()
+    data = path.read_bytes()
+    assert len(calibre_service.read_calibre_library(data)) == 4
+    # Any other runaway query is cut off by the work budget.
+    monkeypatch.setattr(calibre_service, "SQLITE_PROGRESS_INTERVAL", 1)
+    monkeypatch.setattr(calibre_service, "MAX_SQLITE_PROGRESS_CALLS", 0)
+    try:
+        calibre_service.read_calibre_library(data)
+    except calibre_service.CalibreFormatError:
+        pass
+    else:
+        raise AssertionError("the work budget did not stop the read")
+
+
+def test_epub_members_that_inflate_too_far_are_not_read():
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("META-INF/container.xml", b"<a>" + b" " * (imports.EPUB_MEMBER_MAX_BYTES + 1) + b"</a>")
+        archive.writestr("title.xhtml", b"https://www.royalroad.com/fiction/1/x " + b" " * (imports.EPUB_MEMBER_MAX_BYTES + 1))
+        archive.writestr("content.opf", b"<package/>")
+    assert len(buffer.getvalue()) < 100_000
+    assert imports.epub_source_url(buffer.getvalue()) is None
