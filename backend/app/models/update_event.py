@@ -10,7 +10,8 @@ class NovelUpdateEvent(BaseModel):
     __tablename__ = "novel_update_events"
 
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    novel_id = Column(Integer, ForeignKey("novels.id", ondelete="CASCADE"), nullable=False)
+    # Null for author/series new-work events: the work is not in a library yet.
+    novel_id = Column(Integer, ForeignKey("novels.id", ondelete="CASCADE"), nullable=True)
     event_type = Column(String(40), nullable=False)
     chapter_count = Column(Integer, nullable=False, default=0, server_default="0")
     first_chapter_number = Column(Integer, nullable=True)

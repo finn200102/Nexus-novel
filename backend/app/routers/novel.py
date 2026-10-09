@@ -20,6 +20,7 @@ from app.models.follow import UserNovelFollow
 from app.models.update_event import NovelUpdateEvent
 from app.models.download_job import ChapterDownloadJob
 from app.models.metadata_webhook_delivery import MetadataWebhookDelivery
+from app.services.creator_follow_service import NEW_WORK_EVENTS, handle_new_work_event
 from app.services.auto_download_service import queue_auto_downloads
 import app.services.novel_services as novel_services
 import app.services.library_organization_service as organization
@@ -193,6 +194,9 @@ class MetadataRefreshEvent(BaseModel):
     chapters: list[MetadataChapterEvent] = Field(default_factory=list)
     message: str | None = None
     hiatus: dict | None = None
+    # author_new_work / series_new_work: the followed target and the new work.
+    target: dict | None = None
+    work: dict | None = None
 
 
 def claim_metadata_webhook_delivery(db: Session, event: MetadataRefreshEvent) -> bool:
@@ -232,6 +236,10 @@ def receive_metadata_event(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid webhook secret")
     if not claim_metadata_webhook_delivery(db, event):
         return {"accepted": True, "created_events": 0, "queued_downloads": 0}
+    if event.event in NEW_WORK_EVENTS:
+        created_events = handle_new_work_event(db, event.event, event.model_dump())
+        db.commit()
+        return {"accepted": True, "created_events": created_events, "queued_downloads": 0}
     if event.event == "source_refresh_failed":
         created_events = 0
         for novel in db.query(Novel).filter(Novel.metadata_id == event.metadata_novel_id).all():

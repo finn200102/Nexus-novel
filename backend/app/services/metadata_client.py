@@ -472,6 +472,32 @@ async def get_author_metadata(author_id: int, include_novels: bool = False) -> d
     return data
 
 
+async def put_follow_target(kind: str, site: str, key: str, name: str | None, follower_count: int) -> dict:
+    """Tell the metadata server how many readers follow an author page or series."""
+    response = await _request(
+        "PUT", "/follow-targets", timeout=INTERACTIVE_TIMEOUT,
+        json={"kind": kind, "site": site, "key": key, "name": name, "follower_count": follower_count},
+    )
+    return response.json()
+
+
+async def get_follow_target(target_id: int) -> dict:
+    response = await _request("GET", f"/follow-targets/{target_id}", timeout=INTERACTIVE_TIMEOUT)
+    return response.json()
+
+
+async def get_author_works(author_id: int) -> dict:
+    """An author with their catalog works and same-name profiles on other sites."""
+    cache_key = f"author-works:{author_id}"
+    cached = cache.get(cache_key)
+    if cached:
+        return cached
+    response = await _request("GET", f"/follow-targets/authors/{author_id}", timeout=INTERACTIVE_TIMEOUT)
+    data = response.json()
+    cache.set(cache_key, data, ttl=60)
+    return data
+
+
 def _clean_list(values: Optional[list[str]]) -> Optional[list[str]]:
     cleaned = [value.strip() for value in values or [] if value and value.strip()]
     return cleaned or None

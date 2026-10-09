@@ -124,6 +124,17 @@ def _story_message(novel: Novel, events: list[NovelUpdateEvent]) -> Message:
     )
 
 
+def _new_work_message(event: NovelUpdateEvent) -> Message:
+    details = event.details or {}
+    metadata_id = details.get("metadata_id")
+    return Message(
+        title=details.get("title") or "New work",
+        body=event.message or "New work",
+        url=f"/story/{metadata_id}" if metadata_id else "/updates",
+        tag=f"new-work-{event.id}",
+    )
+
+
 def _digest_message(stories: list[tuple[str, int]]) -> Message:
     count = len(stories)
     lines = [f"{title}: {chapters} new" for title, chapters in stories[:10]]
@@ -153,7 +164,13 @@ def build_messages(db: Session, events: list[NovelUpdateEvent]) -> dict[int, lis
 
     by_story: dict[tuple[int, int], list[NovelUpdateEvent]] = {}
     digest_by_user: dict[int, dict[int, list[NovelUpdateEvent]]] = {}
+    messages: dict[int, list[Message]] = {}
     for event in events:
+        if event.novel_id is None:
+            # A new work by a followed author or in a followed series.
+            if event.event_type in ("author_new_work", "series_new_work"):
+                messages.setdefault(event.user_id, []).append(_new_work_message(event))
+            continue
         follow = follows.get((event.user_id, event.novel_id))
         novel = novels.get(event.novel_id)
         if novel is None:
@@ -163,7 +180,6 @@ def build_messages(db: Session, events: list[NovelUpdateEvent]) -> dict[int, lis
         else:
             by_story.setdefault((event.user_id, event.novel_id), []).append(event)
 
-    messages: dict[int, list[Message]] = {}
     for (user_id, novel_id), story_events in by_story.items():
         messages.setdefault(user_id, []).append(_story_message(novels[novel_id], story_events))
     for user_id, stories in digest_by_user.items():

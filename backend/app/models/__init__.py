@@ -9,6 +9,7 @@ from .audio_job import ChapterAudioJob, ChapterAudioPart
 from .author import Author
 from .blocklist import BlocklistEntry
 from .chapter import Chapter
+from .creator_follow import CreatorFollow
 from .download_job import ChapterDownloadJob
 from .ereader import AppPassword, EpubBuild, KosyncProgress
 from .follow import UserNovelFollow
@@ -41,6 +42,7 @@ __all__ = [
     "UserSession",
     "Author",
     "Chapter",
+    "CreatorFollow",
     "ChapterAudioJob",
     "ChapterAudioPart",
     "ChapterDownloadJob",
