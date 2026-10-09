@@ -99,3 +99,27 @@ def test_story_hiatus_degrades_when_metadata_is_down(client, db):
 
     assert response.status_code == 200
     assert response.json()["hiatus"] == {"state": "active", "last_update_at": None, "label": "Update timing unknown"}
+
+
+def test_story_exposes_source_url_and_site(client, db):
+    me = _user(db, "reader")
+    copy = _copy(db, me, "Main", 42)
+    copy.source_url = "https://archiveofourown.org/works/123"
+    copy.novel_site = "ao3"
+    db.commit()
+
+    response = client.get("/stories/42", headers=bearer_headers(me.id))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["source"] == {"url": "https://archiveofourown.org/works/123", "site": "ao3"}
+    assert body["library_entries"][0]["source_url"] == "https://archiveofourown.org/works/123"
+    assert body["library_entries"][0]["site"] == "ao3"
+
+
+def test_story_without_library_copy_has_no_source(client, db):
+    me = _user(db, "reader")
+
+    response = client.get("/stories/99", headers=bearer_headers(me.id))
+
+    assert response.json()["source"] is None

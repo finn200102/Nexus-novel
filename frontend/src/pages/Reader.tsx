@@ -12,6 +12,7 @@ import { entryLabel } from "../components/reader/chapterLabels";
 import ReaderTopBar from "../components/reader/ReaderTopBar";
 import ReaderBottomBar from "../components/reader/ReaderBottomBar";
 import ReaderEndOfChapter from "../components/reader/ReaderEndOfChapter";
+import ChapterSourceLink from "../components/reader/ChapterSourceLink";
 import ReaderSettingsControl from "../components/reader/ReaderSettingsSheet";
 import ListenPlayer from "../components/reader/ListenPlayer";
 import { AnnotationsSheet, NoteDialog, ReadingAnnotation, RecapData, RecapSheet, ShortcutsDialog } from "../components/reader/ReaderPanels";
@@ -48,12 +49,14 @@ interface ChapterContent {
   chapter_number: number;
   title: string;
   content: string;
+  source_url?: string | null;
 }
 
 interface Novel {
   id: number;
   title: string;
   author: string;
+  novel_site?: string | null;
   library_id: number;
   total_chapters: number;
   next_unread_chapter_id?: number | null;
@@ -524,6 +527,7 @@ const Reader: React.FC = () => {
             chapterHref={chapterHref}
             storyHref={storyHref}
           />
+          <ChapterSourceLink site={novel?.novel_site ?? null} href={chapter.source_url ?? null} />
         </article>
       </div>
 

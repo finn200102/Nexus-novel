@@ -170,6 +170,7 @@ def test_get_downloaded_chapter_content(client, db):
     chapter = get_chapter_by_id(db, response.json()["id"])
     chapter.content = "First paragraph.\n\nSecond paragraph."
     chapter.content_status = "PRESENT"
+    chapter.source_url = "https://www.royalroad.com/fiction/1/x/chapter/2"
     db.commit()
 
     response = client.get(
@@ -178,6 +179,7 @@ def test_get_downloaded_chapter_content(client, db):
 
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["content"] == "First paragraph.\n\nSecond paragraph."
+    assert response.json()["source_url"] == "https://www.royalroad.com/fiction/1/x/chapter/2"
 
 
 def test_queued_download_delegates_to_metadata_server(client, db, monkeypatch):

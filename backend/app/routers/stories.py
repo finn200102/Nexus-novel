@@ -32,9 +32,18 @@ async def get_story(metadata_id: int, db: Session = Depends(get_db), current_use
         raw_hiatus = await metadata_client.get_hiatus_status(metadata_id)
     except RuntimeError:
         raw_hiatus = None
+    # Source link: the original story page and site, taken from the first library copy.
+    source = None
+    if rows:
+        first = rows[0][0]
+        source = {
+            "url": first.source_url or first.url,
+            "site": first.novel_site,
+        }
     return {
         "metadata_id": metadata_id,
         "hiatus": hiatus_view(raw_hiatus),
+        "source": source,
         "library_entries": [
             {
                 "novel_id": novel.id,
@@ -43,6 +52,8 @@ async def get_story(metadata_id: int, db: Session = Depends(get_db), current_use
                 "title": novel.title,
                 "follow_state": novel.follow_state,
                 "scrape_status": novel.scrape_status,
+                "source_url": novel.source_url or novel.url,
+                "site": novel.novel_site,
             }
             for novel, library in rows
         ],

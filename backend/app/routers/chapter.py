@@ -799,6 +799,7 @@ def get_chapter_content(
         chapter_number=chapter.chapter_number,
         title=chapter.title,
         content=chapter.content,
+        source_url=chapter.source_url,
     )
 
 

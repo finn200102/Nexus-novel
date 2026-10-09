@@ -52,6 +52,7 @@ class ChapterContent(BaseModel):
     chapter_number: int
     title: str
     content: str
+    source_url: Optional[str] = None
 
 
 class ChapterUpdate(BaseModel):
