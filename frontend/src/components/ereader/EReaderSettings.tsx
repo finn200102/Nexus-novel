@@ -8,6 +8,7 @@ import "../../styles/integrations.css";
 const SCOPE_LABELS: Record<AppPasswordScope, string> = {
   opds: "Books (OPDS catalog)",
   kosync: "Reading progress (KOReader sync)",
+  extension: "Browser extension (Send to Nexus)",
 };
 
 const apiUrl = (path: string) => `${window.location.origin}/api${path}`;
@@ -102,6 +103,9 @@ const EReaderSettings: React.FC = () => {
           <li>In KOReader, open Tools, Progress sync, and set the custom sync server to the URL above with the same username. Enter the app password with the progress scope as the password.</li>
           <li>After new chapters are downloaded, download the book again from the catalog to get them.</li>
         </ol>
+        <p>
+          Browser extension: create an app password with the browser extension scope. In Chrome, open chrome://extensions, enable Developer mode, and choose Load unpacked on the browser-extension folder. In Firefox, open about:debugging, choose This Firefox, and Load Temporary Add-on on its manifest.json. Then enter the Nexus URL, your username and the app password in the extension options.
+        </p>
       </div>
 
       {created && (
@@ -129,6 +133,7 @@ const EReaderSettings: React.FC = () => {
           <select value={scope} onChange={(event) => setScope(event.target.value as AppPasswordScope)}>
             <option value="opds">{SCOPE_LABELS.opds}</option>
             <option value="kosync">{SCOPE_LABELS.kosync}</option>
+            <option value="extension">{SCOPE_LABELS.extension}</option>
           </select>
         </label>
         <button className="operations-action" disabled={busy}>

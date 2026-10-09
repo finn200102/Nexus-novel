@@ -1,6 +1,6 @@
 import apiClient from "./apiClient";
 
-export type AppPasswordScope = "opds" | "kosync";
+export type AppPasswordScope = "opds" | "kosync" | "extension";
 
 export type AppPassword = {
   id: number;
