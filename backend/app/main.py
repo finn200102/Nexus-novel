@@ -42,7 +42,7 @@ async def lifespan(_: FastAPI):
         await metadata_client.close()
 
 
-app = FastAPI(title="Nexus Novel API", description="Nexus reader and library API", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="Nexus Novel API", description="Nexus reader and library API", version="1.2.0", lifespan=lifespan)
 
 origins = [
     "http://localhost",
