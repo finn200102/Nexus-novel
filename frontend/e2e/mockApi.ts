@@ -86,6 +86,14 @@ const storyFixture = (path: string): unknown => {
   if (pathname === "/novel/11/follow") {
     return { novel_id: 11, follow_state: "reading", download_policy: "none", download_count: 1, notification_policy: "immediate", notification_count: 1 };
   }
+  if (pathname === "/discovery/novels/") {
+    const extra = LIBRARY_TITLES.slice(2).map(([title, author, site, , , chapters], index) => ({
+      ...STORY_CATALOG[4], id: 40 + index, title, author, novel_site: site, chapter_count: chapters, word_count: 50000 * (index + 1), status: index % 2 ? "Complete" : "Ongoing",
+      source_url: `https://example.test/story/${index}`,
+    }));
+    return { data: [STORY_CATALOG[4], STORY_CATALOG[5], ...extra], has_more: true, next_cursor: 99 };
+  }
+  if (pathname === "/following" || pathname === "/following/new-works") return [];
   if (pathname === "/novel/") return LIBRARY_NOVELS;
   if (pathname === "/admin/integrations/merge-reviews") return { data: [] };
   if (pathname === "/admin/integrations/webhooks") return [];

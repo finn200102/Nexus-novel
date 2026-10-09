@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { BookOpen, MoreHorizontal, Plus, RefreshCw, Search, SlidersHorizontal, X } from "lucide-react";
+import { Plus } from "lucide-react";
 import { discoveryService } from "../services/discoveryService";
+import { organizationService } from "../services/organizationService";
 import { useLibraryContext } from "../context/useLibraryContext";
 import { useToast } from "../context/useToast";
 import { DiscoveredNovel, DiscoveryFilters, FandomInfo } from "../types/discovery";
@@ -13,47 +14,26 @@ import {
   removeDiscoveryFilterChip,
   DiscoveryFilterChip,
 } from "../services/discoveryFilters";
-import { IconButton, Menu, PageHeader, Sheet } from "../components/ui";
+import { Banner, Button, EmptyState, InputChip, PageHeader, Tabs } from "../components/ui";
 import { usePageTitle } from "../hooks/usePageTitle";
-import { ChipInput } from "../components/common/ChipInput";
-import { Novel } from "../types/novel";
-import NovelCard from "../components/novel/NovelCard";
-import { HideButton } from "../components/organization/HideButton";
-import { NovelCardSkeleton } from "../components/common/Skeleton";
 import { cancelPendingRequests, getUserFacingError, isRequestCancelled } from "../services/apiClient";
 import { RequestCoordinator, useAdaptivePolling } from "../services/requestResilience";
 import { SavedSearch, savedSearchService } from "../services/savedSearchService";
 import { openAddStory } from "../components/add/addStoryEvents";
 import { LiveSearchPanel } from "../components/discovery/LiveSearchPanel";
+import { DiscoverSearchBar } from "../components/discovery/DiscoverSearchBar";
+import { SiteChips } from "../components/discovery/SiteChips";
+import { FilterBar } from "../components/discovery/FilterBar";
+import { MoreFiltersSheet } from "../components/discovery/MoreFiltersSheet";
+import { ResultsGrid } from "../components/discovery/ResultsGrid";
+import { discoverSiteLabel } from "../components/discovery/sites";
 import { LiveResult } from "../services/liveSearchService";
-import defaultCoverImage from "../assets/cover.png";
-import "../styles/library.css";
-import "../styles/novel-list.css";
 import "../styles/live-search.css";
 import "../styles/discover.css";
-
-const SITE_OPTIONS = [
-  { value: "all", label: "All Sites" },
-  { value: "royalroad", label: "Royal Road" },
-  { value: "spacebattles", label: "SpaceBattles" },
-  { value: "fanfiction", label: "FanFiction" },
-  { value: "archive", label: "AO3" },
-  { value: "webnovel", label: "WebNovel" },
-  { value: "sufficientvelocity", label: "Sufficient Velocity" },
-  { value: "questionablequesting", label: "Questionable Questing" },
-  { value: "scribblehub", label: "ScribbleHub (experimental)" },
-];
 
 const ITEMS_PER_PAGE = 20;
 
 const EMPTY_FILTERS = EMPTY_DISCOVERY_FILTERS;
-
-const LANGUAGE_SUGGESTIONS = ["English", "French", "German", "Spanish", "Italian", "Portuguese", "Russian", "Chinese", "Japanese", "Korean"];
-
-const MATCH_MODE_OPTIONS = [
-  { value: "all", label: "All of these" },
-  { value: "any", label: "Any of these" },
-];
 
 const parseDiscoverUrl = (locationSearch: string) => {
   const queryParams = new URLSearchParams(locationSearch);
@@ -99,7 +79,7 @@ const Discover: React.FC = () => {
   useEffect(() => {
     if (!filtersOpen) return;
     const timer = window.setTimeout(() => {
-      void discoveryService.getFandoms(currentSite, fandomDraft).then(setFandomOptions).catch(() => setFandomOptions([]));
+      void discoveryService.getFandoms(currentSite, fandomDraft).then((rows) => setFandomOptions(Array.isArray(rows) ? rows : [])).catch(() => setFandomOptions([]));
     }, 180);
     return () => window.clearTimeout(timer);
   }, [currentSite, fandomDraft, filtersOpen]);
@@ -135,8 +115,6 @@ const Discover: React.FC = () => {
           similarTo,
         ));
 
-      console.log("Fetched novels:", response.data.slice(0, 3).map(n => ({ id: n.id, title: n.title?.slice(0, 30), img_url: n.img_url })));
-
       if (page === 1) {
         setNovels(response.data);
         hasSnapshotRef.current = true;
@@ -149,7 +127,7 @@ const Discover: React.FC = () => {
     } catch (err) {
       if (isRequestCancelled(err)) return;
       console.error("Failed to fetch novels:", err);
-      setError(getUserFacingError(err, "Failed to load novels. Please try again."));
+      setError(getUserFacingError(err, "We couldn't load stories. Try again."));
       setCatalogStatus("offline");
     } finally {
       setLoading(false);
@@ -204,11 +182,6 @@ const Discover: React.FC = () => {
     hiddenMs: 30000,
   });
 
-  const submitSearch = (event: React.FormEvent) => {
-    event.preventDefault();
-    navigate(`/discover/${currentSite}${search.trim() ? `?q=${encodeURIComponent(search.trim())}` : ""}`);
-  };
-
   const applyFilters = (next: DiscoveryFilters = filters) => {
     setAppliedFilters(next);
     setNextCursor(null);
@@ -217,13 +190,6 @@ const Discover: React.FC = () => {
     if (searchFromUrl) params.set("q", searchFromUrl);
     params.set("filters", JSON.stringify(next));
     navigate(`/discover/${currentSite}?${params.toString()}`);
-  };
-
-  /** Quick controls apply immediately, using the draft state from the sheet. */
-  const setQuickFilter = (key: keyof DiscoveryFilters, value: string) => {
-    const next = { ...filters, [key]: value };
-    setFilters(next);
-    applyFilters(next);
   };
 
   const removeChip = (chip: DiscoveryFilterChip) => {
@@ -246,18 +212,10 @@ const Discover: React.FC = () => {
     try {
       await savedSearchService.create(name.trim(), appliedFilters, window.confirm("Notify when future imports match this search?"));
       setSavedSearches(await savedSearchService.list());
-      addToast(`Saved search “${name.trim()}”`, "success");
+      addToast(`Saved search “${name.trim()}”.`, "success");
     } catch (err) {
-      addToast(getUserFacingError(err, "Could not save this search"), "error");
+      addToast(getUserFacingError(err, "Could not save this search."), "error");
     }
-  };
-
-  const updateFilter = (key: keyof DiscoveryFilters, value: string) => {
-    setFilters((current) => ({ ...current, [key]: value }));
-  };
-
-  const updateListFilter = (key: keyof DiscoveryFilters, values: string[]) => {
-    setFilters((current) => ({ ...current, [key]: values }));
   };
 
   const hasActiveFilters = isDiscoveryFilterActive(appliedFilters);
@@ -266,13 +224,13 @@ const Discover: React.FC = () => {
 
   const handleAddToLibrary = async (novel: DiscoveredNovel) => {
     if (!activeLibraryId) {
-      addToast("Please select a library first", "warning");
+      addToast("Create a library first.", "warning");
       return;
     }
 
     try {
       await discoveryService.addToLibrary(activeLibraryId, novel.source_url);
-      addToast(`"${novel.title}" added to your library!`, "success");
+      addToast(`Added “${novel.title}” to your library.`, "success");
     } catch (err) {
       console.error("Failed to add novel:", err);
       addToast(getUserFacingError(err, "Could not add the story to your library."), "error");
@@ -281,412 +239,169 @@ const Discover: React.FC = () => {
 
   const handleAddLiveResult = async (result: LiveResult) => {
     if (!activeLibraryId) {
-      addToast("Please select a library first", "warning");
+      addToast("Create a library first.", "warning");
       return;
     }
     try {
       await discoveryService.addToLibrary(activeLibraryId, result.source_url);
-      addToast(`"${result.title}" added to your library!`, "success");
+      addToast(`Added “${result.title}” to your library.`, "success");
     } catch (err) {
       addToast(getUserFacingError(err, "Could not add the story to your library."), "error");
     }
   };
 
-  const handleNovelClick = (novel: DiscoveredNovel) => {
-    navigate(`/story/${novel.id}`);
+  const hideAuthor = async (novel: DiscoveredNovel) => {
+    if (!novel.author) return;
+    const author = novel.author;
+    try {
+      const entry = await organizationService.addBlocklistEntry("author", author);
+      setNovels((current) => current.filter((item) => item.author !== author));
+      addToast(`Hidden author “${author}”.`, "success", undefined, {
+        action: {
+          label: "Undo",
+          onClick: () => void organizationService.removeBlocklistEntry(entry.id).then(handleRefresh).catch(() => addToast("Could not undo. Check Settings › Hidden.", "error")),
+        },
+      });
+    } catch (err) {
+      addToast(getUserFacingError(err, "Could not hide this author."), "error");
+    }
   };
 
-  const getSiteDisplayName = (siteValue: string) => {
-    const option = SITE_OPTIONS.find((s) => s.value === siteValue);
-    return option?.label || siteValue;
+  const patchFilters = (patch: Partial<DiscoveryFilters>) => {
+    const next = { ...appliedFilters, ...patch };
+    setFilters(next);
+    applyFilters(next);
   };
 
-  const convertToNovel = (discovered: DiscoveredNovel): Novel => {
-    return {
-      id: discovered.id,
-      title: discovered.title,
-      url: discovered.source_url,
-      description: discovered.description,
-      cover_image: discovered.img_url || defaultCoverImage,
-      library_id: 0,
-      metadata_id: discovered.id,
-      author: discovered.author,
-      author_site_id: discovered.author_id,
-      author_id: discovered.author_id,
-      source_url: discovered.source_url,
-      story_id: null,
-      novel_site: discovered.novel_site,
-      img_url: discovered.img_url || defaultCoverImage,
-      word_count: discovered.word_count,
-      reviews: discovered.reviews,
-      favorites: discovered.favorites,
-      follows: discovered.follows,
-      status: discovered.status,
-      views: discovered.views,
-      rating: discovered.rating,
-      publish_date: null,
-      updated_date: discovered.updated_at,
-      chapter_count: discovered.chapter_count,
-      analyzed_at: null,
-      analysis_type: null,
-      analyzed_chapter_count: null,
-      parsed_at: null,
-      created_at: discovered.created_at,
-      updated_at: discovered.updated_at,
-      scrape_status: "completed",
-      scrape_error: null,
-      follow_state: "plan_to_read",
-      followed_at: null,
-    };
-  };
+  const countText = loading || error
+    ? null
+    : novels.length === 0
+      ? null
+      : `${novels.length}${hasMore ? "+" : ""} ${novels.length === 1 ? "story" : "stories"}${currentSite === "all" ? "" : ` from ${discoverSiteLabel(currentSite).replace(" (experimental)", "")}`}`;
 
-  const renderPagination = () => {
-    if (!hasMore || loadingMore) return null;
-
-    return (
-      <div className="discover-pagination">
-        <button
-          type="button"
-          className="discover-load-more"
-          onClick={handleLoadMore}
-          disabled={loadingMore}
-        >
-          {loadingMore ? "Loading..." : "Load More"}
-        </button>
-      </div>
-    );
-  };
+  const emptyState = searchFromUrl || hasActiveFilters ? (
+    <EmptyState
+      title="No matching stories"
+      description="Try a broader search or clear your filters."
+      action={<Button onClick={clearFilters}>Clear filters</Button>}
+    />
+  ) : (
+    <EmptyState
+      title="No stories here yet"
+      description="The catalog has no stories for this site yet. Add a story by link, or check again later."
+      action={
+        <>
+          <Button variant="primary" icon={<Plus aria-hidden="true" />} onClick={() => openAddStory()}>Add story</Button>
+          <Button onClick={handleRefresh} loading={isRefreshing}>Check again</Button>
+        </>
+      }
+    />
+  );
 
   return (
-    <div className="library-workspace">
-      <PageHeader
-        title="Discover"
-        description="Search and browse stories on supported sites."
-        actions={(
-          <>
-            <button type="button" className="discover-secondary-btn" onClick={handleRefresh} disabled={loading || isRefreshing}>
-              <RefreshCw size={16} className={isRefreshing ? "is-spinning" : ""} aria-hidden="true" />
-              {isRefreshing ? "Refreshing" : "Refresh catalog"}
-            </button>
-          </>
-        )}
+    <div className="discover-page">
+      <PageHeader title="Discover" description="Search and browse stories on supported sites." />
+
+      <Tabs<"catalog" | "live">
+        label="Where to search"
+        value={mode}
+        onChange={setMode}
+        items={[
+          { value: "catalog", label: "Catalog" },
+          { value: "live", label: "Search the sites" },
+        ]}
       />
-
-      {catalogStatus === "offline" && (
-        <div className="discover-catalog-status discover-catalog-status--offline" role="status">
-          <span className="discover-catalog-status__dot" aria-hidden="true" />
-          <span>The story catalog is offline</span>
-        </div>
-      )}
-
-      <div className="discover-segmented discover-mode" role="tablist" aria-label="Discover mode">
-        <button type="button" role="tab" aria-selected={mode === "catalog"} className={mode === "catalog" ? "is-active" : ""} onClick={() => setMode("catalog")}>Catalog</button>
-        <button type="button" role="tab" aria-selected={mode === "live"} className={mode === "live" ? "is-active" : ""} onClick={() => setMode("live")}>Search the sites</button>
-      </div>
 
       {mode === "live" && <LiveSearchPanel onAdd={handleAddLiveResult} />}
 
-      {mode === "catalog" && (<>
-      <div className="discover-toolbar">
-        <form className="discover-toolbar__search" onSubmit={submitSearch}>
-          <Search size={19} aria-hidden="true" />
-          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by title" />
-        </form>
-        <div className="discover-quick-filters" role="group" aria-label="Quick filters">
-          <label>
-            Sort by
-            <select value={filters.sortBy} onChange={(event) => setQuickFilter("sortBy", event.target.value)}>
-              <option value="updated">Last updated</option>
-              <option value="favorites">Favorites</option>
-              <option value="follows">Follows</option>
-              <option value="views">Views</option>
-              <option value="reviews">Reviews</option>
-              <option value="word_count">Word count</option>
-              <option value="chapter_count">Chapters</option>
-              <option value="title">Title</option>
-            </select>
-          </label>
-          <label>
-            Direction
-            <select value={filters.sortOrder} onChange={(event) => setQuickFilter("sortOrder", event.target.value)}>
-              <option value="desc">Highest first</option>
-              <option value="asc">Lowest first</option>
-            </select>
-          </label>
-          <label>
-            Status
-            <select value={filters.status} onChange={(event) => setQuickFilter("status", event.target.value)}>
-              <option value="">Any status</option>
-              <option value="Complete">Complete</option>
-              <option value="In-Progress">In progress</option>
-              <option value="Ongoing">Ongoing</option>
-            </select>
-          </label>
-          <label>
-            Updated within
-            <select value={filters.updatedSinceDays} onChange={(event) => setQuickFilter("updatedSinceDays", event.target.value)}>
-              <option value="">Any time</option><option value="7">7 days</option><option value="30">30 days</option><option value="90">90 days</option><option value="365">1 year</option>
-            </select>
-          </label>
-        </div>
-        <div className="discover-filter-actions">
-          <button
-            type="button"
-            className={`discover-filter-toggle ${filtersOpen ? "is-active" : ""}`}
-            onClick={() => setFiltersOpen((open) => !open)}
-            aria-haspopup="dialog"
-            aria-expanded={filtersOpen}
-            aria-controls="discover-filters"
-          >
-            <SlidersHorizontal size={16} aria-hidden="true" />
-            More filters{activeChips.length > 0 ? ` (${activeChips.length})` : ""}
-          </button>
-          {hasActiveFilters && (
-            <button
-              type="button"
-              className="discover-clear-filters"
-              onClick={clearFilters}
-              title="Clear filters"
-            >
-              <X size={16} aria-hidden="true" />
-            </button>
-          )}
-          {(hasActiveFilters || searchFromUrl) && (
-            <button type="button" className="discover-filter-toggle" onClick={saveSearch} title="Save current search">
-              Save search
-            </button>
-          )}
-        </div>
-        {activeChips.length > 0 && (
-          <ul className="discover-active-filters" aria-label="Active filters">
-            {activeChips.map((chip) => (
-              <li key={`${chip.key}-${chip.value ?? ""}`}>
-                <button type="button" className="discover-active-chip" onClick={() => removeChip(chip)} aria-label={`Remove filter ${chip.label}`}>
-                  {chip.label}
-                  <X size={14} aria-hidden="true" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        <Sheet open={filtersOpen} onClose={() => setFiltersOpen(false)} title="More filters" variant="auto">
-          <div id="discover-filters" className="discover-filters">
-            <ChipInput
-              label="Fandom / series"
-              values={filters.fandom}
-              onChange={(values) => updateListFilter("fandom", values)}
-              onDraftChange={setFandomDraft}
-              suggestions={fandomSuggestions}
-              placeholder="Type a fandom, then Enter"
-            />
-            <ChipInput
-              label="Tag"
-              values={filters.tag}
-              onChange={(values) => updateListFilter("tag", values)}
-              placeholder="e.g. time loop, then Enter"
-            />
-            <ChipInput
-              label="Genre"
-              values={filters.genre}
-              onChange={(values) => updateListFilter("genre", values)}
-              placeholder="e.g. fantasy, then Enter"
-            />
-            <div className="discover-filters__field">
-              <span id="discover-match-mode-label">Match tags, genres and fandoms</span>
-              <div className="discover-segmented" role="radiogroup" aria-labelledby="discover-match-mode-label">
-                {MATCH_MODE_OPTIONS.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    role="radio"
-                    aria-checked={filters.tagMode === option.value}
-                    className={filters.tagMode === option.value ? "is-active" : ""}
-                    onClick={() => updateFilter("tagMode", option.value)}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <label>
-              Min words
-              <input type="number" min="0" value={filters.minWordCount} onChange={(event) => updateFilter("minWordCount", event.target.value)} placeholder="0" />
-            </label>
-            <label>
-              Max words
-              <input type="number" min="0" value={filters.maxWordCount} onChange={(event) => updateFilter("maxWordCount", event.target.value)} placeholder="No maximum" />
-            </label>
-            <label>
-              Min favorites
-              <input type="number" min="0" value={filters.minFavorites} onChange={(event) => updateFilter("minFavorites", event.target.value)} placeholder="0" />
-            </label>
-            <label>
-              Min follows
-              <input type="number" min="0" value={filters.minFollows} onChange={(event) => updateFilter("minFollows", event.target.value)} placeholder="0" />
-            </label>
-            <label>
-              Min reviews
-              <input type="number" min="0" value={filters.minReviews} onChange={(event) => updateFilter("minReviews", event.target.value)} placeholder="0" />
-            </label>
-            <label>
-              Min chapters
-              <input type="number" min="0" value={filters.minChapterCount} onChange={(event) => updateFilter("minChapterCount", event.target.value)} placeholder="0" />
-            </label>
-            <ChipInput
-              label="Language"
-              values={filters.language}
-              onChange={(values) => updateListFilter("language", values)}
-              suggestions={LANGUAGE_SUGGESTIONS}
-              placeholder="e.g. English, then Enter"
-            />
-            <label className="discover-filters__check">
-              <input
-                type="checkbox"
-                checked={filters.completeOnly === "true"}
-                onChange={(event) => updateFilter("completeOnly", event.target.checked ? "true" : "")}
-              />
-              Complete stories only
-            </label>
-            <label>
-              Crossover
-              <select value={filters.crossover} onChange={(event) => updateFilter("crossover", event.target.value)}>
-                <option value="">Any</option>
-                <option value="true">Crossovers only</option>
-                <option value="false">Single fandom only</option>
-              </select>
-            </label>
-            <section className="discover-filters__exclude" aria-label="Exclude">
-              <div>
-                <h3>Exclude</h3>
-                <p>Hide any story that matches. Tags, genres, fandoms and authors must match exactly; words match title or summary.</p>
-              </div>
-              <div className="discover-filters__exclude-grid">
-                <ChipInput tone="exclude" label="Tags" values={filters.excludeTag} onChange={(values) => updateListFilter("excludeTag", values)} placeholder="e.g. character death" />
-                <ChipInput tone="exclude" label="Fandoms" values={filters.excludeFandom} onChange={(values) => updateListFilter("excludeFandom", values)} suggestions={fandomSuggestions} placeholder="Fandom name" />
-                <ChipInput tone="exclude" label="Genres" values={filters.excludeGenre} onChange={(values) => updateListFilter("excludeGenre", values)} placeholder="e.g. horror" />
-                <ChipInput tone="exclude" label="Authors" values={filters.excludeAuthor} onChange={(values) => updateListFilter("excludeAuthor", values)} placeholder="Author name" />
-                <ChipInput tone="exclude" label="Words in title or summary" values={filters.excludeText} onChange={(values) => updateListFilter("excludeText", values)} placeholder="e.g. gore" />
-              </div>
-            </section>
-            <label>
-              Label
-              <input value={filters.label} onChange={(event) => updateFilter("label", event.target.value)} placeholder="e.g. cozy" />
-            </label>
-            <div className="discover-filters__commands">
-              <button type="button" className="discover-filter-reset" onClick={() => setFilters(EMPTY_FILTERS)}>Reset</button>
-              <button type="button" className="discover-filter-apply" onClick={() => applyFilters()}>Apply filters</button>
-            </div>
-          </div>
-        </Sheet>
-        <div className="discover-source-tabs" role="tablist" aria-label="Novel source">
-          {SITE_OPTIONS.map((option) => (
-            <button key={option.value} type="button" role="tab" aria-selected={option.value === currentSite}
-              className={option.value === currentSite ? "is-active" : ""} onClick={() => handleSiteChange(option.value)}>
-              {option.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {savedSearches.length > 0 && (
-        <section className="discover-saved-searches" aria-label="Saved searches">
-          <div><strong>Saved searches</strong><small>Auto-updating filters you can reopen at any time.</small></div>
-          <div>{savedSearches.map((saved) => <span key={saved.id}><button type="button" onClick={() => {
-            const params = new URLSearchParams({ filters: JSON.stringify(saved.filters) });
-            navigate(`/discover/all?${params.toString()}`);
-          }}>{saved.name}{saved.notify_on_match ? " · alerts" : ""}</button><button type="button" aria-label={`Delete saved search ${saved.name}`} onClick={() => void savedSearchService.remove(saved.id).then(() => setSavedSearches((items) => items.filter((item) => item.id !== saved.id))).catch((err) => addToast(getUserFacingError(err, "Could not remove saved search"), "error"))}>×</button></span>)}</div>
-        </section>
-      )}
-
-      <h2 className="discover-results-heading">Results</h2>
-      {!loading && !error && <p className="discover-result-count">{novels.length}{hasMore ? "+" : ""} results from {getSiteDisplayName(currentSite)}</p>}
-
-      {error && (
-        <div className="discover-error">
-          <p>{error}</p>
-          <button onClick={() => fetchNovels(currentSite, 1)}>Retry</button>
-        </div>
-      )}
-
-      {loading && (
-        <div className="novel-list novel-list--grid">
-          <div className="novel-list__grid">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <NovelCardSkeleton key={`skeleton-${i}`} />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {!loading && novels.length === 0 && !error && (
-        <div className="discover-empty">
-          <BookOpen size={32} aria-hidden="true" />
-          {searchFromUrl || hasActiveFilters ? (
-            <>
-              <h2>No matching stories</h2>
-              <p>Try a broader search or clear your filters to see more of the Nexus catalog.</p>
-              <button type="button" onClick={clearFilters}>Clear filters</button>
-            </>
-          ) : (
-            <>
-              <h2>Your catalog is ready for its first story</h2>
-              <p>
-                The catalog has no stories yet. Add a story by link, or ask the person who runs this server to load a catalog.
-              </p>
-              <div className="discover-empty__actions">
-                <button type="button" onClick={() => openAddStory()}>
-                  <Plus size={16} aria-hidden="true" /> Add a story by link
-                </button>
-                <button type="button" className="is-secondary" onClick={handleRefresh} disabled={isRefreshing}>
-                  <RefreshCw size={16} className={isRefreshing ? "is-spinning" : ""} aria-hidden="true" /> Check again
-                </button>
-              </div>
-              {!activeLibraryId && <small>Select or create a library before importing.</small>}
-            </>
-          )}
-        </div>
-      )}
-
-      {!loading && novels.length > 0 && (
+      {mode === "catalog" && (
         <>
-          <div className="novel-list novel-list--grid">
-            <div className="novel-list__grid">
-              {novels.map((novel) => (
-                <div key={novel.id} className="novel-card-wrapper">
-                  <div className="discover-card-actions">
-                    <button
-                      type="button"
-                      className="discover-add-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleAddToLibrary(novel);
-                      }}
-                      aria-label={`Add ${novel.title} to library`}
-                    >
-                      Add
-                    </button>
-                    <Menu
-                      align="end"
-                      trigger={(p) => <IconButton {...p} label={`More actions for ${novel.title}`} icon={<MoreHorizontal size={16} aria-hidden="true" />} />}
-                      items={[
-                        { label: "Open on site", onSelect: () => window.open(novel.source_url, "_blank", "noopener,noreferrer") },
-                      ]}
-                    />
-                  </div>
-                  <NovelCard
-                    novel={convertToNovel(novel)}
-                    onClick={() => handleNovelClick(novel)}
-                    footer={novel.author ? <HideButton kind="author" value={novel.author} /> : undefined}
-                  />
-                </div>
-              ))}
-            </div>
+          {catalogStatus === "offline" && <Banner tone="warning">Can't reach the story catalog. Retrying.</Banner>}
+          <div className="discover-controls">
+            <DiscoverSearchBar
+              value={search}
+              onChange={setSearch}
+              onSubmit={() => navigate(`/discover/${currentSite}${search.trim() ? `?q=${encodeURIComponent(search.trim())}` : ""}`)}
+              onClear={() => {
+                setSearch("");
+                if (searchFromUrl) navigate(`/discover/${currentSite}`);
+              }}
+            />
+            <SiteChips value={currentSite} onChange={handleSiteChange} />
+            <FilterBar
+              filters={appliedFilters}
+              onChange={patchFilters}
+              onMoreFilters={() => {
+                setFilters(appliedFilters);
+                setFiltersOpen(true);
+              }}
+              moreOpen={filtersOpen}
+              chips={activeChips}
+              onRemoveChip={removeChip}
+              onClearAll={clearFilters}
+              onSaveSearch={hasActiveFilters || searchFromUrl ? () => void saveSearch() : undefined}
+            />
           </div>
-          {renderPagination()}
+
+          <MoreFiltersSheet
+            open={filtersOpen}
+            onClose={() => setFiltersOpen(false)}
+            filters={filters}
+            onChange={setFilters}
+            onApply={() => {
+              applyFilters();
+              setFiltersOpen(false);
+            }}
+            onReset={() => setFilters(EMPTY_FILTERS)}
+            fandomSuggestions={fandomSuggestions}
+            onFandomDraftChange={setFandomDraft}
+          />
+
+          {savedSearches.length > 0 && (
+            <section className="discover-saved" aria-labelledby="discover-saved-heading">
+              <h2 id="discover-saved-heading" className="discover-saved__heading">Saved searches</h2>
+              <ul className="discover-saved__list">
+                {savedSearches.map((saved) => (
+                  <li key={saved.id}>
+                    <InputChip
+                      onRemove={() =>
+                        void savedSearchService
+                          .remove(saved.id)
+                          .then(() => setSavedSearches((items) => items.filter((item) => item.id !== saved.id)))
+                          .catch((err) => addToast(getUserFacingError(err, "Could not remove the saved search."), "error"))
+                      }
+                      removeLabel={`Delete saved search ${saved.name}`}
+                    >
+                      {saved.name + (saved.notify_on_match ? " · alerts" : "")}
+                    </InputChip>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => navigate(`/discover/all?${new URLSearchParams({ filters: JSON.stringify(saved.filters) }).toString()}`)}
+                    >
+                      Open<span className="visually-hidden"> {saved.name}</span>
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          <ResultsGrid
+            novels={novels}
+            loading={loading}
+            loadingMore={loadingMore}
+            hasMore={hasMore && nextCursor !== null}
+            error={error}
+            countText={countText}
+            onRetry={() => void fetchNovels(currentSite, 1)}
+            onLoadMore={handleLoadMore}
+            onAdd={(novel) => void handleAddToLibrary(novel)}
+            onHideAuthor={(novel) => void hideAuthor(novel)}
+            empty={emptyState}
+          />
         </>
       )}
-      </>)}
-
     </div>
   );
 };

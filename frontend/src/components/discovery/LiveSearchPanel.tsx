@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { Plus, Search } from "lucide-react";
+import { Plus } from "lucide-react";
+import { Button, Cover, FilterChip, Input, Select } from "../ui";
 import { getUserFacingError } from "../../services/apiClient";
 import { LiveResult, LiveResponse, SiteError, liveSearchService } from "../../services/liveSearchService";
 
@@ -59,7 +60,7 @@ export const LiveSearchPanel: React.FC<Props> = ({ onAdd }) => {
       setResponse(data);
       setPage(nextPage);
     } catch (err) {
-      setError(getUserFacingError(err, "Live search failed"));
+      setError(getUserFacingError(err, "The site search failed. Try again."));
     } finally {
       setLoading(false);
     }
@@ -86,28 +87,38 @@ export const LiveSearchPanel: React.FC<Props> = ({ onAdd }) => {
 
   return (
     <section className="live-search" aria-label="Search the sites">
-      <form className="discover-toolbar__search" onSubmit={submit}>
-        <Search size={16} aria-hidden="true" />
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search the source sites" aria-label="Search the source sites" />
-        <button type="submit" disabled={loading || !query.trim() || sites.length === 0}>Search</button>
+      <form className="live-search__form" role="search" onSubmit={submit}>
+        <Input
+          type="search"
+          search
+          label="Search the source sites"
+          hideLabel
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          onClear={() => setQuery("")}
+          placeholder="Search Royal Road, AO3 and more"
+        />
+        <Button type="submit" variant="primary" disabled={loading || !query.trim() || sites.length === 0}>Search</Button>
       </form>
-      <div className="discover-source-tabs" role="group" aria-label="Sites to search">
+      <div className="discover-sites" role="group" aria-label="Sites to search">
         {SEARCH_SITES.map((option) => (
-          <button key={option.value} type="button" aria-pressed={sites.includes(option.value)}
-            className={sites.includes(option.value) ? "is-active" : ""} onClick={() => toggleSite(option.value)}>
+          <FilterChip key={option.value} selected={sites.includes(option.value)} onChange={() => toggleSite(option.value)}>
             {option.label}
-          </button>
+          </FilterChip>
         ))}
       </div>
-      <label className="live-search__feed">
-        <span>Or browse a feed</span>
-        <select value={feed} onChange={(event) => { setFeed(event.target.value); if (event.target.value) void run(1, event.target.value); }}>
-          <option value="">Choose a feed…</option>
-          {FEEDS.map((option) => <option key={`${option.site}|${option.feed}`} value={`${option.site}|${option.feed}`}>{option.label}</option>)}
-        </select>
-      </label>
+      <Select
+        label="Or browse a feed"
+        fieldClassName="live-search__feed"
+        value={feed}
+        onChange={(event) => {
+          setFeed(event.target.value);
+          if (event.target.value) void run(1, event.target.value);
+        }}
+        options={[{ value: "", label: "Choose a feed…" }, ...FEEDS.map((option) => ({ value: `${option.site}|${option.feed}`, label: option.label }))]}
+      />
 
-      {error && <div className="discover-error"><p>{error}</p></div>}
+      {error && <p className="live-search__error" role="alert">{error}</p>}
       {response && response.errors.length > 0 && (
         <ul className="live-search__errors" aria-label="Sites that did not answer">
           {response.errors.map((item: SiteError) => (
@@ -115,32 +126,36 @@ export const LiveSearchPanel: React.FC<Props> = ({ onAdd }) => {
           ))}
         </ul>
       )}
-      {loading && <p className="discover-result-count">Asking the sites… each site is queried once and paced.</p>}
+      <p className="live-search__status" role="status">
+        {loading ? "Asking the sites… each site is asked once, at a polite pace." : response ? `${response.results.length} results · page ${page}` : ""}
+      </p>
       {!loading && response && (
         <>
-          <p className="discover-result-count">{response.results.length} results · page {page}</p>
           <ul className="live-search__results">
             {response.results.map((result) => (
               <li key={result.source_url}>
-                {result.img_url ? <img src={result.img_url} alt="" loading="lazy" /> : <span className="live-search__cover" aria-hidden="true" />}
-                <div>
-                  <a href={result.source_url} target="_blank" rel="noreferrer noopener"><strong>{result.title}</strong></a>
+                <Cover src={result.img_url} title={result.title} size={48} />
+                <div className="live-search__text">
+                  <a href={result.source_url} target="_blank" rel="noreferrer noopener">
+                    <strong>{result.title}</strong>
+                    <span className="visually-hidden"> (opens in a new tab)</span>
+                  </a>
                   <small>
-                    {[siteLabel(result.site || result.novel_site || ""), result.author, result.chapter_count ? `${result.chapter_count} ch` : null,
+                    {[siteLabel(result.site || result.novel_site || ""), result.author, result.chapter_count ? `${result.chapter_count} chapters` : null,
                       result.word_count ? `${result.word_count.toLocaleString()} words` : null, result.sources.includes("local") ? "in catalog" : null]
                       .filter(Boolean).join(" · ")}
                   </small>
                   {result.description && <p>{result.description}</p>}
                 </div>
-                <button type="button" className="discover-secondary-btn" onClick={() => void add(result)} disabled={adding === result.source_url}>
-                  <Plus size={14} aria-hidden="true" /> Add
-                </button>
+                <Button size="sm" icon={<Plus aria-hidden="true" />} onClick={() => void add(result)} loading={adding === result.source_url} aria-label={`Add ${result.title}`}>
+                  Add
+                </Button>
               </li>
             ))}
           </ul>
-          <div className="discover-pagination">
-            {page > 1 && <button type="button" className="discover-load-more" onClick={() => void run(page - 1)}>Previous page</button>}
-            {response.results.length > 0 && <button type="button" className="discover-load-more" onClick={() => void run(page + 1)}>Next page</button>}
+          <div className="live-search__pages">
+            {page > 1 && <Button onClick={() => void run(page - 1)}>Previous page</Button>}
+            {response.results.length > 0 && <Button onClick={() => void run(page + 1)}>Next page</Button>}
           </div>
         </>
       )}

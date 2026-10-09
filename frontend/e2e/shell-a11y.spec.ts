@@ -241,3 +241,49 @@ for (const theme of ["light", "dark"] as const) {
     });
   }
 }
+
+// WP-D8 gate: Discover with results, site chips, inline filters and the More filters sheet open.
+for (const theme of ["light", "dark"] as const) {
+  for (const [size, viewport] of Object.entries(SIZES)) {
+    test(`discover is axe-clean with filters open (${theme}, ${size})`, async ({ signedInPage: page }) => {
+      await page.setViewportSize(viewport);
+      await page.evaluate((value) => localStorage.setItem("nexus-theme", value), theme);
+      const check = async (label: string) => {
+        await page.waitForTimeout(300);
+        const result = await new AxeBuilder({ page }).withTags(TAGS).analyze();
+        const blocking = result.violations
+          .filter((v) => v.impact === "serious" || v.impact === "critical")
+          .map((v) => `${label} ${v.id}: ${v.nodes.map((n) => n.target.join(" ")).slice(0, 3).join(", ")}`);
+        expect(blocking, blocking.join("\n")).toEqual([]);
+      };
+      const suffix = `${size === "phone" ? "mobile" : "desktop"}-${theme}`;
+
+      await page.goto("/discover");
+      await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+      await expect(page.getByRole("heading", { level: 2, name: "Results" })).toBeVisible();
+      await expect(page.getByRole("heading", { level: 3, name: "The Quiet Ledger" })).toBeVisible();
+      await expect(page.getByRole("group", { name: "Sites" }).getByRole("button", { name: "All sites" })).toHaveAttribute("aria-pressed", "true");
+      await check("discover");
+      await page.screenshot({ path: `${AFTER_DIR}/discover-${suffix}.png` });
+
+      await page.getByLabel("Length").selectOption("long");
+      await expect(page).toHaveURL(/filters=/);
+      await expect(page.getByRole("button", { name: /Remove filter Min words/ })).toBeVisible();
+
+      const more = page.getByRole("button", { name: /^More filters/ });
+      await more.click();
+      const sheet = page.getByRole("dialog", { name: "More filters" });
+      await expect(sheet).toBeVisible();
+      await check("more filters");
+      await page.screenshot({ path: `${AFTER_DIR}/discover-filters-${suffix}.png` });
+      await page.keyboard.press("Escape");
+      await expect(sheet).toHaveCount(0);
+      await expect(more).toBeFocused();
+
+      await page.getByRole("button", { name: "More actions for The Quiet Ledger" }).click();
+      await expect(page.getByRole("menuitem", { name: /Hide author/ })).toBeVisible();
+      await check("card menu");
+      await page.keyboard.press("Escape");
+    });
+  }
+}
