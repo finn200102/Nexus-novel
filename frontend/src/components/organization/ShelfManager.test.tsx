@@ -1,6 +1,6 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ShelfBar } from "./ShelfBar";
+import { ShelfManager } from "./ShelfManager";
 import { organizationService } from "../../services/organizationService";
 import { renderWithToasts } from "./testUtils";
 
@@ -17,28 +17,23 @@ const shelves = [
   { id: 2, name: "To read", position: 2, novel_ids: [] },
 ];
 
-describe("ShelfBar", () => {
+const renderManager = (overrides: Partial<React.ComponentProps<typeof ShelfManager>> = {}) =>
+  renderWithToasts(
+    <ShelfManager open onClose={vi.fn()} shelves={shelves} activeShelfId={null} onSelect={vi.fn()} onChanged={vi.fn()} {...overrides} />,
+  );
+
+describe("ShelfManager", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-  });
-
-  it("filters by shelf and returns to all shelves", () => {
-    const onSelect = vi.fn();
-    renderWithToasts(<ShelfBar shelves={shelves} activeShelfId={null} onSelect={onSelect} onChanged={vi.fn()} />);
-
-    fireEvent.click(screen.getByRole("button", { name: /^Favourites/ }));
-    expect(onSelect).toHaveBeenLastCalledWith(1);
-    fireEvent.click(screen.getByRole("button", { name: "All shelves" }));
-    expect(onSelect).toHaveBeenLastCalledWith(null);
   });
 
   it("creates a shelf and selects it", async () => {
     const onSelect = vi.fn();
     const onChanged = vi.fn();
     vi.mocked(organizationService.createShelf).mockResolvedValue({ id: 3, name: "Rereads", position: 3, novel_ids: [] });
-    renderWithToasts(<ShelfBar shelves={shelves} activeShelfId={null} onSelect={onSelect} onChanged={onChanged} />);
+    renderManager({ onSelect, onChanged });
 
-    fireEvent.change(screen.getByLabelText("New shelf name"), { target: { value: "Rereads" } });
+    fireEvent.change(screen.getByLabelText("New shelf"), { target: { value: "Rereads" } });
     fireEvent.click(screen.getByRole("button", { name: "Create shelf" }));
 
     await waitFor(() => expect(organizationService.createShelf).toHaveBeenCalledWith("Rereads"));
@@ -46,10 +41,10 @@ describe("ShelfBar", () => {
     expect(onChanged).toHaveBeenCalledWith([...shelves, expect.objectContaining({ name: "Rereads" })]);
   });
 
-  it("renames a shelf inline", async () => {
+  it("renames a shelf", async () => {
     const onChanged = vi.fn();
     vi.mocked(organizationService.renameShelf).mockResolvedValue({ ...shelves[1], name: "Later" });
-    renderWithToasts(<ShelfBar shelves={shelves} activeShelfId={null} onSelect={vi.fn()} onChanged={onChanged} />);
+    renderManager({ onChanged });
 
     fireEvent.click(screen.getByRole("button", { name: "Rename To read" }));
     fireEvent.change(screen.getByLabelText("New name for To read"), { target: { value: "Later" } });
@@ -59,16 +54,18 @@ describe("ShelfBar", () => {
     await waitFor(() => expect(onChanged).toHaveBeenCalledWith([shelves[0], expect.objectContaining({ name: "Later" })]));
   });
 
-  it("deletes only after confirmation", async () => {
-    vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
+  it("deletes only after confirming", async () => {
     vi.mocked(organizationService.deleteShelf).mockResolvedValue(undefined);
     const onChanged = vi.fn();
-    renderWithToasts(<ShelfBar shelves={shelves} activeShelfId={null} onSelect={vi.fn()} onChanged={onChanged} />);
+    renderManager({ onChanged });
 
     fireEvent.click(screen.getByRole("button", { name: "Delete To read" }));
     expect(organizationService.deleteShelf).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Keep" }));
+    expect(organizationService.deleteShelf).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Delete To read" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     await waitFor(() => expect(organizationService.deleteShelf).toHaveBeenCalledWith(2));
     expect(onChanged).toHaveBeenCalledWith([shelves[0]]);
   });

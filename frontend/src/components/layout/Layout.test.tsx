@@ -14,6 +14,10 @@ vi.mock("../../context/useLibraryContext", () => ({
 }));
 vi.mock("../common/SourceStatusBanner", () => ({ default: () => null }));
 vi.mock("../library/CreateLibraryModal", () => ({ default: () => null }));
+vi.mock("../add/AddStorySheet", () => ({
+  AddStorySheet: ({ open, request }: { open: boolean; request: { libraryId?: number } }) =>
+    open ? <div role="dialog" aria-label="Add story">library {request.libraryId}</div> : null,
+}));
 vi.mock("../../services/activityService", () => ({
   activityService: { getInbox: vi.fn().mockResolvedValue([{ novel_id: 1 }, { novel_id: 2 }]) },
 }));
@@ -97,5 +101,12 @@ describe("app shell", () => {
     expect(within(panel).getByRole("radiogroup", { name: "Theme" })).toBeInTheDocument();
     await user.click(within(panel).getByRole("button", { name: "Sign out" }));
     expect(auth.logout).toHaveBeenCalled();
+  });
+
+  it("opens the one Add story sheet for the active library from the top bar", async () => {
+    const user = userEvent.setup();
+    renderShell();
+    await user.click(screen.getAllByRole("button", { name: "Add story" })[0]);
+    expect(screen.getByRole("dialog", { name: "Add story" })).toHaveTextContent("library 1");
   });
 });

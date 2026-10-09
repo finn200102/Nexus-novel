@@ -1,3 +1,4 @@
+import { openAddStory } from "../components/add/addStoryEvents";
 import React, { useEffect, useMemo, useState } from "react";
 import { BookMarked, Compass, Library as LibraryIcon } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
@@ -95,7 +96,7 @@ const Home: React.FC = () => {
     event.preventDefault();
     const link = pastedLink.trim();
     if (!link) return;
-    navigate("/library?add=1", { state: { storyLink: link } });
+    openAddStory({ url: link });
   };
 
   const hasStories = novels.length > 0;

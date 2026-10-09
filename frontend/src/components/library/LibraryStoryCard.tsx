@@ -1,11 +1,12 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { Badge, Banner, Card, Cover } from "../ui";
+import { Badge, Card, Cover } from "../ui";
 import { Novel } from "../../types/novel";
 import { displayTitle } from "../../utils/displayTitle";
 import type { Shelf } from "../../types/organization";
 import { ShelfPicker } from "../organization/ShelfPicker";
 import { FOLLOW_STATE_LABELS, storyHref } from "./followStates";
+import { siteLabel } from "../story/storyModel";
 
 interface LibraryStoryCardProps {
   novel: Novel;
@@ -83,28 +84,30 @@ const LibraryStoryCard: React.FC<LibraryStoryCardProps> = ({
       <div className="library-card__body">
         <div className="library-card__badges">
           {followLabel && <Badge tone={novel.follow_state === "reading" ? "accent" : "neutral"}>{followLabel}</Badge>}
-          {novel.novel_site && <Badge>{novel.novel_site.toUpperCase()}</Badge>}
+          {novel.novel_site && <Badge>{siteLabel(novel.novel_site)}</Badge>}
+          {failed && <Badge tone="warning">Couldn't update</Badge>}
         </div>
         <h3 className="library-card__heading">{titleNode}</h3>
         <p className="library-card__author">{novel.author || "Unknown author"}</p>
-        <p className="library-card__meta">
-          {novel.chapter_count != null ? `${novel.chapter_count} chapters` : "Chapters unknown"}
-          {novel.rating != null && ` · ${novel.rating.toFixed(1)} rating`}
-        </p>
-        {failed && (
-          <Banner tone="warning" action={<Link to={href}>Open story</Link>}>
-            We couldn't update this story. Details may be out of date.
-          </Banner>
-        )}
-        {pending && <p className="library-card__pending">Update in progress</p>}
-        {hasNext && !selectionMode && (
+        {hasNext && !selectionMode ? (
           <Link
             to={`/library/${libraryId}/novels/${novel.id}/${novel.next_unread_chapter_number}`}
-            className="ui-button ui-button--secondary ui-button--sm library-card__continue"
+            className="library-card__next"
+            aria-label={`Continue ${title} at chapter ${novel.next_unread_chapter_number}`}
           >
-            Continue at chapter {novel.next_unread_chapter_number}
+            Next: Chapter {novel.next_unread_chapter_number}
+            {novel.chapter_count != null && <span className="library-card__of"> of {novel.chapter_count}</span>}
           </Link>
+        ) : (
+          <p className="library-card__meta">
+            {novel.follow_state === "completed"
+              ? "Finished"
+              : novel.chapter_count != null
+                ? `${novel.chapter_count} chapters`
+                : "Chapters not loaded yet"}
+          </p>
         )}
+        {pending && <p className="library-card__pending">Update in progress</p>}
       </div>
     </Card>
   );

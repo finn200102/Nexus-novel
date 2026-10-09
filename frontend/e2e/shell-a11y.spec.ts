@@ -181,3 +181,63 @@ test("old settings URLs redirect to their section", async ({ signedInPage: page 
     await expect(page).toHaveURL(to);
   }
 });
+
+// Library polish + WP-D14 gate: heading switcher menu, Organize menu, Shelves sheet and the
+// Add story sheet (opened from the top bar, prefilled with the current library) are axe-clean.
+const AFTER_DIR = "../../docs/ui-review/screens-after";
+for (const theme of ["light", "dark"] as const) {
+  for (const [size, viewport] of Object.entries(SIZES)) {
+    test(`library and Add story are axe-clean (${theme}, ${size})`, async ({ signedInPage: page }) => {
+      await page.setViewportSize(viewport);
+      await page.evaluate((value) => localStorage.setItem("nexus-theme", value), theme);
+      const check = async (label: string) => {
+        await page.waitForTimeout(300);
+        const result = await new AxeBuilder({ page }).withTags(TAGS).analyze();
+        const blocking = result.violations
+          .filter((v) => v.impact === "serious" || v.impact === "critical")
+          .map((v) => `${label} ${v.id}: ${v.nodes.map((n) => n.target.join(" ")).slice(0, 3).join(", ")}`);
+        expect(blocking, blocking.join("\n")).toEqual([]);
+      };
+      const shot = (name: string) =>
+        page.screenshot({ path: `${AFTER_DIR}/${name}-${size === "phone" ? "mobile" : "desktop"}-${theme}.png` });
+
+      await page.goto("/library");
+      await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+      const switcher = page.locator("#main h1").getByRole("button");
+      await expect(switcher).toBeVisible();
+      await expect(page.getByRole("button", { name: "Add novel" })).toHaveCount(0);
+      await check("library");
+      await shot("library");
+
+      if (size === "phone") {
+        await expect(page.getByLabel("My tag")).toBeHidden();
+        await page.getByRole("button", { name: /^Filters/ }).click();
+        await expect(page.getByLabel("My tag")).toBeVisible();
+        await check("library filters");
+      }
+
+      await switcher.click();
+      await expect(page.getByRole("menuitem", { name: "Rename library…" })).toBeVisible();
+      await check("library menu");
+      await page.keyboard.press("Escape");
+      await expect(switcher).toBeFocused();
+
+      await page.getByRole("button", { name: "Organize" }).click();
+      await page.getByRole("menuitem", { name: "Shelves…" }).click();
+      await expect(page.getByRole("dialog", { name: "Shelves" })).toBeVisible();
+      await check("shelves sheet");
+      await page.keyboard.press("Escape");
+
+      await page.getByRole("button", { name: "Add story" }).first().click();
+      const sheet = page.getByRole("dialog", { name: "Add story" });
+      await expect(sheet).toBeVisible();
+      await expect(sheet.getByLabel("Story link")).toBeFocused();
+      await check("add story");
+      await shot("add-story");
+      await sheet.getByRole("tab", { name: "Import" }).click();
+      await check("add story import");
+      await page.keyboard.press("Escape");
+      await expect(sheet).toHaveCount(0);
+    });
+  }
+}

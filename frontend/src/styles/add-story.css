@@ -1,0 +1,26 @@
+/* Add story sheet (WP-D14). Tokens only. */
+.add-story { display: grid; gap: var(--sp-4); }
+.add-story__form { display: grid; gap: var(--sp-4); padding-top: var(--sp-4); }
+
+.add-import { display: grid; gap: var(--sp-5); }
+.add-import__form { display: grid; gap: var(--sp-4); }
+.add-import__file { font: inherit; color: var(--text); }
+.add-import__heading { margin: 0 0 var(--sp-2); font-size: var(--fs-md); }
+.add-import__jobs ul { display: grid; gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
+.add-import__job {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+  padding: var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+.add-import__job-text { display: grid; gap: var(--sp-1); flex: 1 1 12rem; min-width: 0; }
+.add-import__job-actions { display: flex; gap: var(--sp-2); }
+.add-import__error { color: var(--danger); }
+.add-import__table { overflow-x: auto; }
+.add-import__table table { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
+.add-import__table th,
+.add-import__table td { padding: var(--sp-1) var(--sp-2); border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }

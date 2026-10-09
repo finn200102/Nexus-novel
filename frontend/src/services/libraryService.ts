@@ -29,6 +29,11 @@ export const libraryService = {
     }
   },
 
+  async renameLibrary(library_id: number, name: string) {
+    const response = await apiClient.post("/library/update/", { id: library_id, name });
+    return response.data;
+  },
+
   async deletelibrary(library_id: number) {
     try {
       const data = {

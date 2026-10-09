@@ -86,6 +86,8 @@ const storyFixture = (path: string): unknown => {
   if (pathname === "/novel/11/follow") {
     return { novel_id: 11, follow_state: "reading", download_policy: "none", download_count: 1, notification_policy: "immediate", notification_count: 1 };
   }
+  if (pathname === "/novel/") return LIBRARY_NOVELS;
+  if (pathname.startsWith("/personal/library/")) return { novels: { 13: { rating: 5, user_tags: ["cozy"] } } };
   if (pathname === "/chapter/11") return STORY_CHAPTERS;
   if (pathname === "/chapter/progress/11") return { chapter_number: 1 };
   if (pathname === "/personal/novels/11") {
@@ -93,6 +95,26 @@ const storyFixture = (path: string): unknown => {
   }
   return undefined;
 };
+
+const LIBRARY_TITLES = [
+  ["The Quiet Ledger", "Mara Thorne", "royalroad", "reading", 2, 30],
+  ["The Cartographer's Apprentice", "Ilse Varga", "ao3", "plan_to_read", null, 12],
+  ["Salt and Signal", "Teo Brandt", "spacebattles", "reading", 41, 58],
+  ["A Very Long Title About Lighthouses, Ledgers and the Quiet Weight of Small Harbour Towns", "June Okafor", "fanfiction", "on_hold", 7, 19],
+  ["Ashfall Academy", "R. K. Lin", "royalroad", "completed", null, 112],
+  ["Ninefold", "Sable Wren", "scribblehub", "reading", null, null],
+  ["Paper Moons", "Ada Quill", "sufficientvelocity", "dropped", 3, 44],
+  ["Tidewright", "Noor Haddad", "royalroad", "reading", 88, 120],
+] as const;
+const LIBRARY_NOVELS = LIBRARY_TITLES.map(([title, author, site, state, next, chapters], index) => ({
+  id: 11 + index, title, url: `https://example.test/${index}`, description: null, cover_image: null, library_id: 1,
+  metadata_id: index === 0 ? 4 : null, author, author_site_id: null, author_id: null, source_url: null, story_id: null,
+  novel_site: site, img_url: null, word_count: null, reviews: null, favorites: null, follows: null, status: null, views: null,
+  rating: null, publish_date: null, updated_date: null, chapter_count: chapters, analyzed_at: null, analysis_type: null,
+  analyzed_chapter_count: null, parsed_at: null, created_at: "2026-07-01T12:00:00Z", updated_at: "2026-07-26T12:00:00Z",
+  scrape_status: index === 5 ? "failed" : "completed", scrape_error: null, follow_state: state, followed_at: null,
+  next_unread_chapter_number: next, next_unread_chapter_id: null,
+}));
 
 // Pass the browser context instead of a page when a service worker is active:
 // requests the worker makes are only visible to context routes.

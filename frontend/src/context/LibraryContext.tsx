@@ -113,6 +113,20 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }, []);
 
+  const renameLibrary = useCallback(async (libraryId: number, name: string) => {
+    await libraryService.renameLibrary(libraryId, name);
+    setLibraries((prev) => prev.map((library) => (library.id === libraryId ? { ...library, name } : library)));
+  }, []);
+
+  const deleteLibrary = useCallback(async (libraryId: number) => {
+    await libraryService.deletelibrary(libraryId);
+    setLibraries((prev) => {
+      const next = prev.filter((library) => library.id !== libraryId);
+      setActiveLibraryId((current) => (current === libraryId ? next[0]?.id ?? null : current));
+      return next;
+    });
+  }, []);
+
   const activeLibrary = useMemo(() => {
     if (activeLibraryId === null) return null;
     return libraries.find((library) => library.id === activeLibraryId) || null;
@@ -128,6 +142,8 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({
       refreshLibraries,
       selectLibrary,
       createLibrary,
+      renameLibrary,
+      deleteLibrary,
     }),
     [
       libraries,
@@ -138,6 +154,8 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({
       refreshLibraries,
       selectLibrary,
       createLibrary,
+      renameLibrary,
+      deleteLibrary,
     ]
   );
 

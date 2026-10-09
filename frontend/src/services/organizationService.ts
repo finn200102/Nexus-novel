@@ -53,6 +53,6 @@ export const organizationService = {
   },
   async libraryPersonal(libraryId: number): Promise<Record<string, LibraryPersonalEntry>> {
     const response = await apiClient.get<{ novels: Record<string, LibraryPersonalEntry> }>(`/personal/library/${libraryId}`);
-    return response.data.novels;
+    return response.data?.novels ?? {};
   },
 };

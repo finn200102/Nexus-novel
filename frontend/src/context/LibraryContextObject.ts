@@ -10,6 +10,8 @@ export interface LibraryContextValue {
   refreshLibraries: () => Promise<void>;
   selectLibrary: (libraryId: number) => void;
   createLibrary: (name: string) => Promise<Library | null>;
+  renameLibrary: (libraryId: number, name: string) => Promise<void>;
+  deleteLibrary: (libraryId: number) => Promise<void>;
 }
 
 export const LibraryContext = createContext<LibraryContextValue | undefined>(undefined);

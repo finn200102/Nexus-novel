@@ -1,22 +1,30 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { organizationService } from "../../services/organizationService";
 import { getUserFacingError } from "../../services/apiClient";
 import { useToast } from "../../context/useToast";
+import { Button, Input, Sheet } from "../ui";
 import type { Shelf } from "../../types/organization";
 
-interface ShelfBarProps {
+interface ShelfManagerProps {
+  open: boolean;
+  onClose: () => void;
   shelves: Shelf[];
   activeShelfId: number | null;
   onSelect: (shelfId: number | null) => void;
   onChanged: (shelves: Shelf[]) => void;
 }
 
-/** Shelf filter chips for the Library page, with create, rename and delete. */
-export const ShelfBar: React.FC<ShelfBarProps> = ({ shelves, activeShelfId, onSelect, onChanged }) => {
+/**
+ * "Shelves" sheet behind the Library page's Organize menu: create, rename and delete shelves.
+ * Filtering by shelf stays in the Library filter row.
+ */
+export const ShelfManager: React.FC<ShelfManagerProps> = ({ open, onClose, shelves, activeShelfId, onSelect, onChanged }) => {
   const { addToast } = useToast();
   const [draft, setDraft] = useState("");
   const [renaming, setRenaming] = useState<number | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [confirming, setConfirming] = useState<number | null>(null);
+  const newRef = useRef<HTMLInputElement | null>(null);
 
   const create = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -44,7 +52,7 @@ export const ShelfBar: React.FC<ShelfBarProps> = ({ shelves, activeShelfId, onSe
   };
 
   const remove = async (shelf: Shelf) => {
-    if (!window.confirm(`Delete the shelf "${shelf.name}"? Novels stay in your libraries.`)) return;
+    setConfirming(null);
     try {
       await organizationService.deleteShelf(shelf.id);
       onChanged(shelves.filter((item) => item.id !== shelf.id));
@@ -55,60 +63,57 @@ export const ShelfBar: React.FC<ShelfBarProps> = ({ shelves, activeShelfId, onSe
   };
 
   return (
-    <div className="shelf-bar" aria-label="Shelves">
-      <div className="shelf-bar__chips">
-        <button type="button" className={activeShelfId === null ? "is-active" : ""} onClick={() => onSelect(null)}>
-          All shelves
-        </button>
-        {shelves.map((shelf) =>
-          renaming === shelf.id ? (
-            <form key={shelf.id} className="shelf-bar__rename" onSubmit={(event) => { event.preventDefault(); void rename(shelf); }}>
-              <input
-                aria-label={`New name for ${shelf.name}`}
-                value={renameValue}
-                maxLength={120}
-                onChange={(event) => setRenameValue(event.target.value)}
-                autoFocus
-              />
-              <button type="submit">Save</button>
-            </form>
-          ) : (
-            <span key={shelf.id} className="shelf-bar__shelf">
-              <button
-                type="button"
-                className={activeShelfId === shelf.id ? "is-active" : ""}
-                aria-pressed={activeShelfId === shelf.id}
-                onClick={() => onSelect(shelf.id)}
-              >
-                {shelf.name} <small>{shelf.novel_ids.length}</small>
-              </button>
-              <button
-                type="button"
-                aria-label={`Rename ${shelf.name}`}
-                onClick={() => {
-                  setRenaming(shelf.id);
-                  setRenameValue(shelf.name);
-                }}
-              >
-                Rename
-              </button>
-              <button type="button" aria-label={`Delete ${shelf.name}`} onClick={() => void remove(shelf)}>
-                Delete
-              </button>
-            </span>
-          ),
+    <Sheet open={open} onClose={onClose} title="Shelves" initialFocus={newRef}>
+      <div className="shelf-manager">
+        <p className="text-secondary">Shelves group stories across your libraries. A story can be on several shelves.</p>
+        <form className="shelf-manager__create" onSubmit={create}>
+          <Input ref={newRef} label="New shelf" value={draft} maxLength={120} placeholder="For example: Rereads" onChange={(event) => setDraft(event.target.value)} />
+          <Button type="submit" variant="primary" disabled={!draft.trim()}>Create shelf</Button>
+        </form>
+        {shelves.length === 0 ? (
+          <p className="text-secondary">No shelves yet.</p>
+        ) : (
+          <ul className="shelf-manager__list" aria-label="Your shelves">
+            {shelves.map((shelf) => (
+              <li key={shelf.id} className="shelf-manager__row">
+                {renaming === shelf.id ? (
+                  <form className="shelf-manager__rename" onSubmit={(event) => { event.preventDefault(); void rename(shelf); }}>
+                    <Input
+                      label={`New name for ${shelf.name}`}
+                      hideLabel
+                      value={renameValue}
+                      maxLength={120}
+                      onChange={(event) => setRenameValue(event.target.value)}
+                      autoFocus
+                    />
+                    <Button type="submit" size="sm" variant="primary">Save</Button>
+                    <Button size="sm" variant="ghost" onClick={() => setRenaming(null)}>Cancel</Button>
+                  </form>
+                ) : confirming === shelf.id ? (
+                  <div className="shelf-manager__confirm" role="group" aria-label={`Delete ${shelf.name}?`}>
+                    <span>Delete “{shelf.name}”? The stories stay in your libraries.</span>
+                    <Button size="sm" variant="danger" onClick={() => void remove(shelf)}>Delete</Button>
+                    <Button size="sm" variant="ghost" onClick={() => setConfirming(null)}>Keep</Button>
+                  </div>
+                ) : (
+                  <>
+                    <span className="shelf-manager__name">
+                      {shelf.name}
+                      <span className="text-secondary text-sm"> · {shelf.novel_ids.length} {shelf.novel_ids.length === 1 ? "story" : "stories"}</span>
+                    </span>
+                    <Button size="sm" variant="ghost" aria-label={`Rename ${shelf.name}`} onClick={() => { setRenaming(shelf.id); setRenameValue(shelf.name); }}>
+                      Rename
+                    </Button>
+                    <Button size="sm" variant="ghost" aria-label={`Delete ${shelf.name}`} onClick={() => setConfirming(shelf.id)}>
+                      Delete
+                    </Button>
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
         )}
       </div>
-      <form className="shelf-bar__create" onSubmit={create}>
-        <input
-          aria-label="New shelf name"
-          value={draft}
-          maxLength={120}
-          placeholder="New shelf"
-          onChange={(event) => setDraft(event.target.value)}
-        />
-        <button type="submit" disabled={!draft.trim()}>Create shelf</button>
-      </form>
-    </div>
+    </Sheet>
   );
 };

@@ -97,46 +97,24 @@
   border-bottom: 1px solid var(--border);
 }
 
-.shelf-bar {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin: 0.75rem 0;
-}
-
-.shelf-bar__chips {
+.shelf-manager { display: grid; gap: var(--sp-4); }
+.shelf-manager__create { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--sp-2); }
+.shelf-manager__create > .ui-field { flex: 1 1 12rem; }
+.shelf-manager__list { display: grid; gap: var(--sp-1); margin: 0; padding: 0; list-style: none; }
+.shelf-manager__row {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem;
   align-items: center;
+  gap: var(--sp-2);
+  min-height: var(--touch-min);
+  padding: var(--sp-1) 0;
+  border-bottom: 1px solid var(--border);
 }
-
-.shelf-bar__chips button,
-.shelf-bar__shelf button {
-  font-size: 0.85rem;
-}
-
-.shelf-bar__chips > button.is-active,
-.shelf-bar__shelf button.is-active {
-  font-weight: 600;
-  text-decoration: underline;
-}
-
-.shelf-bar__shelf {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.2rem;
-  padding: 0.15rem 0.35rem;
-  border: 1px solid var(--border-strong);
-  border-radius: 999px;
-}
-
-.shelf-bar__create,
-.shelf-bar__rename {
-  display: flex;
-  gap: 0.4rem;
-  max-width: 28rem;
-}
+.shelf-manager__name { flex: 1 1 10rem; min-width: 0; overflow-wrap: anywhere; }
+.shelf-manager__rename,
+.shelf-manager__confirm { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); flex: 1 1 100%; }
+.shelf-manager__rename > .ui-field { flex: 1 1 10rem; }
+.shelf-manager__confirm > span { flex: 1 1 12rem; }
 
 .shelf-picker {
   margin-top: 0.4rem;

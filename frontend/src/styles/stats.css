@@ -1,0 +1,14 @@
+.stats-page { display: grid; gap: 24px; }
+.stats-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 0; }
+.stats-tile { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+.stats-tile dt { color: var(--text-muted); font-size: 0.875rem; }
+.stats-tile dd { margin: 4px 0 0; font-size: 1.5rem; font-weight: 600; color: var(--text); }
+.stats-section h2 { font-size: 1.05rem; margin: 0 0 10px; color: var(--text); }
+.stats-section__note { color: var(--text-muted); font-size: 0.875rem; margin: 6px 0 0; }
+.stats-chart { margin: 0; }
+.stats-chart__svg { width: 100%; height: 160px; display: block; }
+.stats-chart__bar { fill: var(--accent); }
+.stats-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.stats-list li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border-subtle); color: var(--text); }
+.stats-list__value { color: var(--text-muted); white-space: nowrap; }
+@media (max-width: 600px) { .stats-page { gap: 18px; } }

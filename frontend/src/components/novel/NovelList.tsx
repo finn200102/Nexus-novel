@@ -72,12 +72,12 @@ const NovelList: React.FC<NovelListProps> = ({
           setNovels(data);
           setError(null);
         } else {
-          setError("Unexpected data format");
+          setError("We couldn't load your stories. Reload the page to try again.");
         }
       } catch (err) {
         if (!isCancelled) {
           console.error("Failed to fetch novels:", err);
-          setError("Failed to load novels");
+          setError("We couldn't load your stories. Check your connection and reload the page.");
         }
       } finally {
         if (!isCancelled) {
@@ -196,7 +196,7 @@ const NovelList: React.FC<NovelListProps> = ({
       )}
       {error && (
         <p className="library-list__error" role="alert">
-          {error}. Check your connection and reload the page.
+          {error}
         </p>
       )}
       {!loading && processedNovels.length === 0 && !error && (

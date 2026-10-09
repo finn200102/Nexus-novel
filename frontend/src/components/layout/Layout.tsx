@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 import CreateLibraryModal from "../library/CreateLibraryModal";
+import { AddStorySheet } from "../add/AddStorySheet";
+import { OPEN_ADD_STORY, openAddStory, type OpenAddStoryDetail } from "../add/addStoryEvents";
 import SourceStatusBanner from "../common/SourceStatusBanner";
 import { useLibraryContext } from "../../context/useLibraryContext";
 import { useUnreadUpdates } from "../../hooks/useUnreadUpdates";
@@ -22,11 +24,11 @@ export const WIDE_QUERY = "(min-width: 768px)";
  */
 export default function Layout({ children }: { children?: ReactNode }) {
   const wide = useMediaQuery(WIDE_QUERY);
-  const navigate = useNavigate();
   const { pathname } = useLocation();
-  const { activeLibrary } = useLibraryContext();
+  const { activeLibrary, libraries, isLoading: librariesLoading } = useLibraryContext();
   const [meta, setPageMeta] = useState<PageMeta>({ title: null });
   const [showLibraryModal, setShowLibraryModal] = useState(false);
+  const [addRequest, setAddRequest] = useState<OpenAddStoryDetail | null>(null);
   const shell = useMemo(() => ({ setPageMeta }), []);
 
   // One unread source for the nav badge; refreshed on navigation so marking read elsewhere shows.
@@ -45,15 +47,21 @@ export default function Layout({ children }: { children?: ReactNode }) {
     return () => window.removeEventListener("nexus:create-library", handler);
   }, []);
 
-  // Until the Add story sheet (D14): open the library's add form, or create a first library.
-  const addStory = () => {
-    if (!activeLibrary) {
-      setShowLibraryModal(true);
-      return;
-    }
-    window.dispatchEvent(new CustomEvent("nexus:add-novel", { detail: { libraryId: activeLibrary.id } }));
-    navigate("/library");
-  };
+  // One Add story sheet for the whole app; without a library, create one first.
+  const hasLibrary = libraries.length > 0 || librariesLoading;
+  useEffect(() => {
+    const handler = (event: Event) => {
+      if (!hasLibrary) {
+        setShowLibraryModal(true);
+        return;
+      }
+      setAddRequest((event as CustomEvent<OpenAddStoryDetail>).detail ?? {});
+    };
+    window.addEventListener(OPEN_ADD_STORY, handler);
+    return () => window.removeEventListener(OPEN_ADD_STORY, handler);
+  }, [hasLibrary]);
+
+  const addStory = () => openAddStory({ libraryId: activeLibrary?.id });
 
   return (
     <ShellContext.Provider value={shell}>
@@ -70,6 +78,7 @@ export default function Layout({ children }: { children?: ReactNode }) {
         {!wide && <TabBar unreadCount={unread.count} />}
         <RouteAnnouncer />
         <CreateLibraryModal isOpen={showLibraryModal} onClose={() => setShowLibraryModal(false)} />
+        <AddStorySheet open={addRequest !== null} onClose={() => setAddRequest(null)} request={addRequest ?? {}} />
       </div>
     </ShellContext.Provider>
   );

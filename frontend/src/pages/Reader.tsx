@@ -32,6 +32,7 @@ import { typographyStyle } from "../components/reader/typographyStyle";
 import { scrollPercent } from "../components/reader/pagedMath";
 import { Banner, type MenuItem } from "../components/ui";
 import { useReaderPaging } from "../hooks/useReaderPaging";
+import { useReadingHeartbeat } from "../hooks/useReadingHeartbeat";
 import { useReaderTypography } from "../hooks/useReaderTypography";
 import { useReaderShortcuts } from "../hooks/useReaderShortcuts";
 import { useMediaQuery } from "../hooks/useMediaQuery";
@@ -299,6 +300,7 @@ const Reader: React.FC = () => {
   }, [chapter, novel_id, restoredPosition, layout, setChromeHidden]);
 
   useEffect(() => { setChromeHidden(false); setPercent(0); }, [chapter?.id, layout, setChromeHidden]);
+  useReadingHeartbeat(novel_id, chapter?.id);
 
   const changeAuthorNotes = (mode: AuthorNotesMode) => { setAuthorNotes(mode); writeAuthorNotesMode(mode); };
   const changeLayout = (next: ReaderLayout) => { setLayout(next); writeLayout(next); };

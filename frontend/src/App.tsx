@@ -13,6 +13,7 @@ import Reader from "./pages/Reader";
 import Discover from "./pages/Discover";
 import Story, { LibraryStoryRedirect } from "./pages/Story";
 import Updates from "./pages/Updates";
+import Stats from "./pages/Stats";
 import Operations from "./pages/Operations";
 import ScrapeJobs from "./pages/ScrapeJobs";
 import Integrations from "./pages/Integrations";
@@ -76,6 +77,7 @@ export function AppRoutes() {
           <Route path="downloads" element={<Updates tab="downloads" />} />
           <Route path="problems" element={<Updates tab="problems" />} />
         </Route>
+        <Route path="stats" element={<Stats />} />
         <Route path="activity" element={<Navigate replace to="/updates" />} />
         <Route path="downloads" element={<Navigate replace to="/updates/downloads" />} />
 

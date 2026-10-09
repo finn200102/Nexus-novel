@@ -23,9 +23,8 @@ import { NovelCardSkeleton } from "../components/common/Skeleton";
 import { cancelPendingRequests, getUserFacingError, isRequestCancelled } from "../services/apiClient";
 import { RequestCoordinator, useAdaptivePolling } from "../services/requestResilience";
 import { SavedSearch, savedSearchService } from "../services/savedSearchService";
-import CreateNovelForm from "../components/novel/CreateNovelForm";
+import { openAddStory } from "../components/add/addStoryEvents";
 import { LiveSearchPanel } from "../components/discovery/LiveSearchPanel";
-import { ImportJobsPanel } from "../components/discovery/ImportJobsPanel";
 import { LiveResult } from "../services/liveSearchService";
 import defaultCoverImage from "../assets/cover.png";
 import "../styles/library.css";
@@ -86,8 +85,7 @@ const Discover: React.FC = () => {
   const [fandomOptions, setFandomOptions] = useState<FandomInfo[]>([]);
   const [fandomDraft, setFandomDraft] = useState("");
   const [appliedFilters, setAppliedFilters] = useState<DiscoveryFilters>(EMPTY_FILTERS);
-  const [isImportOpen, setIsImportOpen] = useState(false);
-  const [mode, setMode] = useState<"catalog" | "live" | "import">("catalog");
+  const [mode, setMode] = useState<"catalog" | "live">("catalog");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
   const [catalogStatus, setCatalogStatus] = useState<"unknown" | "online" | "offline">("unknown");
@@ -168,10 +166,6 @@ const Discover: React.FC = () => {
     });
   };
 
-  const handleImportSuccess = () => {
-    setIsImportOpen(false);
-    handleRefresh();
-  };
 
   const handleSiteChange = (newSite: string) => {
     navigate(`/discover/${newSite}`);
@@ -374,15 +368,6 @@ const Discover: React.FC = () => {
               <RefreshCw size={16} className={isRefreshing ? "is-spinning" : ""} aria-hidden="true" />
               {isRefreshing ? "Refreshing" : "Refresh catalog"}
             </button>
-            <button
-              type="button"
-              className="discover-primary-btn"
-              onClick={() => setIsImportOpen(true)}
-              disabled={!activeLibraryId}
-              title={activeLibraryId ? "Import a novel by URL" : "Select a library before importing"}
-            >
-              <Plus size={17} aria-hidden="true" /> Import novel
-            </button>
           </>
         )}
       />
@@ -397,11 +382,9 @@ const Discover: React.FC = () => {
       <div className="discover-segmented discover-mode" role="tablist" aria-label="Discover mode">
         <button type="button" role="tab" aria-selected={mode === "catalog"} className={mode === "catalog" ? "is-active" : ""} onClick={() => setMode("catalog")}>Catalog</button>
         <button type="button" role="tab" aria-selected={mode === "live"} className={mode === "live" ? "is-active" : ""} onClick={() => setMode("live")}>Search the sites</button>
-        <button type="button" role="tab" aria-selected={mode === "import"} className={mode === "import" ? "is-active" : ""} onClick={() => setMode("import")}>Bulk import</button>
       </div>
 
       {mode === "live" && <LiveSearchPanel onAdd={handleAddLiveResult} />}
-      {mode === "import" && <ImportJobsPanel libraryId={activeLibraryId ?? null} onError={(message) => addToast(message, "error")} />}
 
       {mode === "catalog" && (<>
       <div className="discover-toolbar">
@@ -651,8 +634,8 @@ const Discover: React.FC = () => {
                 The metadata server is connected, but it has no imported novels yet. Import a story URL or load a catalog export to start discovering.
               </p>
               <div className="discover-empty__actions">
-                <button type="button" onClick={() => setIsImportOpen(true)} disabled={!activeLibraryId}>
-                  <Plus size={16} aria-hidden="true" /> Import novel by URL
+                <button type="button" onClick={() => openAddStory()}>
+                  <Plus size={16} aria-hidden="true" /> Add a story by link
                 </button>
                 <button type="button" className="is-secondary" onClick={handleRefresh} disabled={isRefreshing}>
                   <RefreshCw size={16} className={isRefreshing ? "is-spinning" : ""} aria-hidden="true" /> Check again
@@ -704,14 +687,6 @@ const Discover: React.FC = () => {
       )}
       </>)}
 
-      {activeLibraryId && (
-        <CreateNovelForm
-          library_id={activeLibraryId}
-          isOpen={isImportOpen}
-          onClose={() => setIsImportOpen(false)}
-          onSuccess={handleImportSuccess}
-        />
-      )}
     </div>
   );
 };
