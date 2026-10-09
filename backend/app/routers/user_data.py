@@ -1,13 +1,14 @@
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from config.database import get_db
 from app.auth.dependencies import get_current_user
 from app.models.user import User
 from app.schemas.user_data import UserDataDocument
+from app.services import calibre_service
 from app.services.user_data_service import export_user_data, import_user_data
 
 router = APIRouter(
@@ -23,6 +24,23 @@ def export_my_data(db: Session = Depends(get_db), current_user: User = Depends(g
     document = export_user_data(db, current_user)
     filename = f"nexus-export-{datetime.now(UTC):%Y%m%d}.json"
     return JSONResponse(document, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+@router.get("/export/calibre")
+def export_calibre(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Zip of the EPUBs of your downloaded novels, with OPF metadata Calibre reads on import."""
+    archive = calibre_service.export_calibre_zip(db, current_user)
+
+    def chunks():
+        try:
+            while block := archive.read(64 * 1024):
+                yield block
+        finally:
+            archive.close()
+
+    filename = f"nexus-calibre-{datetime.now(UTC):%Y%m%d}.zip"
+    return StreamingResponse(chunks(), media_type="application/zip",
+                             headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
 @router.post("/import")

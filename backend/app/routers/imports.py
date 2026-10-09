@@ -10,6 +10,7 @@ from app.auth.dependencies import get_current_user
 from app.models.import_job import ImportJob
 from app.models.user import User
 from app.routers.novel import check_library
+from app.services import calibre_service
 from app.services import import_job_service as imports
 
 router = APIRouter(
@@ -21,6 +22,7 @@ router = APIRouter(
 MAX_TEXT_CHARS = 1_000_000
 MAX_EPUB_FILES = 100
 MAX_EPUB_BYTES = 30 * 1024 * 1024
+MAX_CALIBRE_BYTES = calibre_service.MAX_CALIBRE_BYTES
 
 
 class UrlImportRequest(BaseModel):
@@ -37,6 +39,11 @@ class EpubFile(BaseModel):
 class EpubImportRequest(BaseModel):
     library_id: int
     files: list[EpubFile] = Field(..., min_length=1, max_length=MAX_EPUB_FILES)
+
+
+class CalibreImportRequest(BaseModel):
+    library_id: int
+    data_base64: str = Field(..., max_length=MAX_CALIBRE_BYTES * 4 // 3 + 4, description="Base64 of a Calibre metadata.db")
 
 
 class ListImportRequest(BaseModel):
@@ -80,6 +87,25 @@ def import_epubs(request: EpubImportRequest, db: Session = Depends(get_db), curr
         else:
             entries.append({"label": upload.name, "status": "unsupported", "reason": "no source URL in the EPUB"})
     job = imports.create_job(db, current_user, library, "epub", entries=entries)
+    return _created(db, job)
+
+
+@router.post("/calibre", status_code=status.HTTP_202_ACCEPTED)
+def import_calibre(request: CalibreImportRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Queue the stories of a Calibre library (metadata.db) with their tags, rating and read state."""
+    library = check_library(db, request.library_id, current_user)
+    try:
+        data = base64.b64decode(request.data_base64, validate=True)
+    except (binascii.Error, ValueError):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="metadata.db is not valid base64")
+    try:
+        books = calibre_service.read_calibre_library(data)
+    except calibre_service.CalibreFormatError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+    if not books:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="The Calibre library has no books")
+    entries, personal = calibre_service.calibre_entries(books)
+    job = imports.create_job(db, current_user, library, "calibre", entries=entries, params={"calibre": personal})
     return _created(db, job)
 
 
