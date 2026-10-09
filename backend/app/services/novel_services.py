@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 from app.models.novel import Novel
 from app.models.tag import Tag
+from app.services.completion_service import create_completion_events
 
 def create_novel(db: Session, novel_data: dict):
     # extract data if present
@@ -86,10 +87,13 @@ def update_novel(db: Session, novel_id, novel_data):
     # Extract tags data if present
     tags_data = novel_data.pop("tags", None)
 
+    old_status = novel.status
+
     # Update novel attributes
     for key, value in novel_data.items():
         if hasattr(novel, key):
             setattr(novel, key, value)
+    create_completion_events(db, novel, old_status, novel.status)
 
     # Handle tags if provided
     if tags_data is not None:

@@ -24,6 +24,7 @@ class PersonalWrite(BaseModel):
     followed_categories: list[str] | None = Field(default=None, max_length=20)
     auto_download: bool | None = None
     keep_ahead: int | None = Field(default=None, ge=1, le=200)
+    notify_when_complete: bool | None = None
 
 
 @router.get("/novels/{novel_id}")

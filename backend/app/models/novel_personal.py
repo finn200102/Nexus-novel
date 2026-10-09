@@ -21,6 +21,8 @@ class NovelPersonalData(BaseModel):
     # after the user's position whenever new chapters arrive.
     auto_download = Column(Boolean, nullable=False, default=False, server_default=false())
     keep_ahead = Column(Integer, nullable=False, default=10, server_default="10")
+    # Emit a "completed" update event when the source marks the novel complete.
+    notify_when_complete = Column(Boolean, nullable=False, default=False, server_default=false())
 
 
 class NovelUserTag(BaseModel):

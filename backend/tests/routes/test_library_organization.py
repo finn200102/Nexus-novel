@@ -318,6 +318,7 @@ def test_personal_data_round_trip_and_validation(client, db, test_user):
         "followed_categories": ["story"],
         "auto_download": False,
         "keep_ahead": 10,
+        "notify_when_complete": False,
     }
 
 

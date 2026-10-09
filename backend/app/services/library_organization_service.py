@@ -184,6 +184,7 @@ def get_personal(db: Session, user: User, novel_id: int) -> dict:
         "followed_categories": followed_categories_of(row),
         "auto_download": bool(row.auto_download) if row else False,
         "keep_ahead": row.keep_ahead if row and row.keep_ahead else DEFAULT_KEEP_AHEAD,
+        "notify_when_complete": bool(row.notify_when_complete) if row else False,
     }
 
 
@@ -252,6 +253,8 @@ def set_personal(db: Session, user: User, novel_id: int, fields: Mapping[str, An
         row.auto_download = fields["auto_download"]
     if keep_ahead is not None:
         row.keep_ahead = keep_ahead
+    if fields.get("notify_when_complete") is not None:
+        row.notify_when_complete = bool(fields["notify_when_complete"])
     if cleaned_tags is not None:
         db.query(NovelUserTag).filter(NovelUserTag.user_id == user.id, NovelUserTag.novel_id == novel_id).delete(synchronize_session=False)
         for tag in cleaned_tags:
