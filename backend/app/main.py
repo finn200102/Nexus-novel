@@ -11,7 +11,7 @@ from config.database import engine
 from config.settings import settings
 from app.routers import auth, novel, library, chapter, discovery, follow, download, activity, operations, catalog_scrape, audio, saved_search, recommendations, admin_integrations, admin_users, notifications
 from app.routers import user_data, imports
-from app.routers import app_passwords, kosync, opds, personal_feed, source_status, stories, webhooks
+from app.routers import app_passwords, kosync, opds, personal_feed, reading_stats, source_status, stories, webhooks
 from app.routers import blocklist, personal, shelves
 from app.db_migrations import upgrade_database
 from app.services import metadata_client
@@ -87,6 +87,7 @@ app.include_router(source_status.router)
 app.include_router(stories.router)
 app.include_router(webhooks.router)
 app.include_router(personal_feed.router)
+app.include_router(reading_stats.router)
 
 
 @app.middleware("http")

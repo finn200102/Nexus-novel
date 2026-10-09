@@ -22,6 +22,7 @@ from .novel_personal import NovelPersonalData, NovelUserTag
 from .reading_annotation import ReadingAnnotation
 from .reading_history import ReadingHistory
 from .reading_progress import ReadingProgress
+from .reading_session import ReadingSessionDaily
 from .saved_search import SavedSearch
 from .shelf import Shelf, ShelfNovel
 from .tag import Tag
@@ -59,6 +60,7 @@ __all__ = [
     "NovelUpdateEvent",
     "ReadingAnnotation",
     "ReadingHistory",
+    "ReadingSessionDaily",
     "ReadingProgress",
     "SavedSearch",
     "Shelf",

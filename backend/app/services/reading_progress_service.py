@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.models.chapter import Chapter
 from app.models.reading_history import ReadingHistory
 from app.models.reading_progress import ReadingProgress
+from app.services.reading_stats_service import record_progress_crossing
 
 
 def save_reading_progress(db: Session, *, user_id: int, chapter: Chapter, position: int, percent: float) -> ReadingProgress:
@@ -19,10 +20,15 @@ def save_reading_progress(db: Session, *, user_id: int, chapter: Chapter, positi
     if not progress:
         progress = ReadingProgress(user_id=user_id, novel_id=chapter.novel_id)
         db.add(progress)
+    previous_chapter, previous_percent = progress.chapter_number, progress.percent or 0
     progress.chapter_id = chapter.id
     progress.chapter_number = chapter.chapter_number
     progress.position = max(position, 0)
     progress.percent = min(max(percent, 0), 100)
+    record_progress_crossing(
+        db, user_id=user_id, novel_id=chapter.novel_id, chapter_number=chapter.chapter_number,
+        previous_chapter=previous_chapter, previous_percent=previous_percent, percent=progress.percent,
+    )
     # Persist a compact history point once per chapter/day. It powers streaks
     # and velocity without recording raw scrolling or text selection data.
     today = date.today()
