@@ -221,3 +221,21 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* "Your reading this week" tile → /stats */
+.home-week {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+}
+.home-week:hover { background: var(--surface-2); }
+.home-week__icon { flex: none; width: 1.25rem; height: 1.25rem; color: var(--accent); }
+.home-week__text { display: grid; flex: 1; min-width: 0; color: var(--text-2); font-size: var(--fs-sm); }
+.home-week__text strong { color: var(--text); font-size: var(--fs-md); }
+.home-week__chevron { flex: none; width: 1rem; height: 1rem; color: var(--text-muted); }

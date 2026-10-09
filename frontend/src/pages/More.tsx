@@ -1,4 +1,4 @@
-import { ChevronRight, Download, LogOut, Settings, ShieldCheck } from "lucide-react";
+import { BarChart3, ChevronRight, Download, LogOut, Settings, ShieldCheck } from "lucide-react";
 import { Link } from "react-router-dom";
 import { PageHeader } from "../components/ui";
 import { ThemeSwitcher } from "../theme/ThemeSwitcher";
@@ -12,6 +12,7 @@ export default function More() {
   const links = [
     { label: "Settings", to: "/settings/account", icon: Settings },
     { label: "Downloads", to: "/updates/downloads", icon: Download },
+    { label: "Reading stats", to: "/stats", icon: BarChart3 },
     ...(user?.is_admin ? [{ label: "Admin", to: "/admin", icon: ShieldCheck }] : []),
   ];
 

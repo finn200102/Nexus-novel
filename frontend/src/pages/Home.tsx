@@ -1,6 +1,6 @@
 import { openAddStory } from "../components/add/addStoryEvents";
 import React, { useEffect, useMemo, useState } from "react";
-import { BookMarked, Compass, Library as LibraryIcon } from "lucide-react";
+import { BarChart3, BookMarked, ChevronRight, Compass, Library as LibraryIcon } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useLibraryContext } from "../context/useLibraryContext";
 import { novelService } from "../services/novelService";
@@ -11,6 +11,8 @@ import { useUnreadUpdates } from "../hooks/useUnreadUpdates";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { displayTitle } from "../utils/displayTitle";
 import ContinueReading from "../components/reader/ContinueReading";
+import { readingStatsService, type StatsSummary } from "../services/readingStatsService";
+import { formatDuration } from "../components/stats/statsFormat";
 import { Button, Cover, EmptyState, Input, ListRow, PageHeader } from "../components/ui";
 import "../styles/home.css";
 
@@ -33,6 +35,14 @@ const formatAgo = (iso: string | null | undefined, now = Date.now()): string => 
 
 const Home: React.FC = () => {
   usePageTitle("Home");
+  const [week, setWeek] = useState<StatsSummary | null>(null);
+  useEffect(() => {
+    let active = true;
+    readingStatsService.getSummary("week").then((summary) => active && setWeek(summary?.totals ? summary : null)).catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
   const navigate = useNavigate();
   const { activeLibrary, isLoading: librariesLoading } = useLibraryContext();
   const activeLibraryId = activeLibrary?.id;
@@ -192,6 +202,19 @@ const Home: React.FC = () => {
               ))}
             </ul>
           </section>
+
+          <Link to="/stats" className="home-week">
+            <BarChart3 aria-hidden="true" className="home-week__icon" />
+            <span className="home-week__text">
+              <strong>Your reading this week</strong>
+              <span>
+                {week && week.totals.seconds > 0
+                  ? `${formatDuration(week.totals.seconds)} · ${week.totals.chapters_finished} ${week.totals.chapters_finished === 1 ? "chapter" : "chapters"}`
+                  : "See your reading time, streaks and favourite stories."}
+              </span>
+            </span>
+            <ChevronRight aria-hidden="true" className="home-week__chevron" />
+          </Link>
 
           <p className="home-stats">
             {novels.length} {novels.length === 1 ? "story" : "stories"} · {totals.chapters.toLocaleString()} chapters · {totals.words.toLocaleString()} words

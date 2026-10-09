@@ -3,7 +3,7 @@ import { test, expect } from "./fixtures";
 
 // WP-D4 gate: the app shell has no serious/critical axe violations on the four main
 // destinations, in both themes, at desktop and phone width (mocked API).
-const PAGES = ["/", "/discover", "/library", "/updates", "/updates/downloads", "/updates/problems", "/more"];
+const PAGES = ["/", "/discover", "/library", "/updates", "/updates/downloads", "/updates/problems", "/more", "/stats"];
 const SIZES = { desktop: { width: 1440, height: 900 }, phone: { width: 390, height: 844 } };
 const TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"];
 

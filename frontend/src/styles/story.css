@@ -423,3 +423,7 @@
   .story-facts-list__row { grid-template-columns: minmax(0, 1fr); gap: 2px; }
   .auto-download { padding: var(--sp-3); }
 }
+
+/* Links to the original site (open, comments, kudos). */
+.story-hero__info .source-links { display: flex; flex-wrap: wrap; gap: var(--sp-1); margin-left: calc(-1 * var(--sp-3)); }
+.story-hero__info .source-links .ui-button { min-height: var(--control-sm, 32px); }

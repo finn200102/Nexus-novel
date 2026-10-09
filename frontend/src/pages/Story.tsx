@@ -9,6 +9,8 @@ import StoryDetails from "../components/story/StoryDetails";
 import StoryShelves from "../components/story/StoryShelves";
 import CompletionToggle from "../components/story/CompletionToggle";
 import HiatusBadge from "../components/story/HiatusBadge";
+import FollowAuthorButton from "../components/follow/FollowAuthorButton";
+import SourceLinks from "../components/story/SourceLinks";
 import { PersonalPanel } from "../components/organization/PersonalPanel";
 import { useOfflineCopies } from "../components/novel/useOfflineCopies";
 import { useStoryData, type LibraryCopyRef } from "../components/story/useStoryData";
@@ -458,7 +460,12 @@ export const StoryPage: React.FC<StoryPageProps> = ({ fallbackCopy }) => {
           </div>
           <div className="story-hero__info">
             <h1 className="story-hero__title" tabIndex={-1}>{view.title}</h1>
-            {view.author && <p className="story-hero__author">by {view.author}</p>}
+            {view.author && (
+              <p className="story-hero__author">
+                by {catalog?.author_fk ? <Link to={`/authors/${catalog.author_fk}`}>{view.author}</Link> : view.author}
+                {catalog?.author_fk ? <> <FollowAuthorButton authorId={catalog.author_fk} /></> : null}
+              </p>
+            )}
             <div className="story-hero__badges">
               {site && <Badge>{site}</Badge>}
               {isExperimentalSite(view.site) && <Badge tone="warning">Experimental</Badge>}
@@ -482,6 +489,7 @@ export const StoryPage: React.FC<StoryPageProps> = ({ fallbackCopy }) => {
               />
             )}
             {entries.length === 1 && <p className="story-hero__in">In {entries[0].library_name}</p>}
+            <SourceLinks site={view.site} url={view.sourceUrl} storyId={view.siteStoryId} />
           </div>
           <div className={`story-actions${inLibrary ? " story-actions--library" : ""}`}>
           {primaryAction}

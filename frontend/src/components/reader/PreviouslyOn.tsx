@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { chapterService } from "../../services/chapterService";
 import type { RecapData } from "./ReaderPanels";
 import { lastReadParagraphs, markRecapShown, shouldShowRecap, readRecapDays, writeRecapDays, daysSince } from "./previouslyOnRule";

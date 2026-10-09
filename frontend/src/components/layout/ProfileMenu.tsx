@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { LogOut, Settings, ShieldCheck } from "lucide-react";
+import { BarChart3, LogOut, Settings, ShieldCheck } from "lucide-react";
 import { Popover } from "../ui";
 import { ThemeSwitcher } from "../../theme/ThemeSwitcher";
 import { useAuth } from "../../context/AuthContext";
@@ -35,6 +35,12 @@ export function ProfileMenu() {
             <Link className="ui-menu__item" to="/settings/account" onClick={() => setOpen(false)}>
               <Settings aria-hidden="true" />
               <span className="ui-menu__label">Settings</span>
+            </Link>
+          </li>
+          <li>
+            <Link className="ui-menu__item" to="/stats" onClick={() => setOpen(false)}>
+              <BarChart3 aria-hidden="true" />
+              <span className="ui-menu__label">Reading stats</span>
             </Link>
           </li>
           {user?.is_admin && (
