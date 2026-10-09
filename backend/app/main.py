@@ -12,7 +12,7 @@ from config.settings import settings
 from app.routers import auth, novel, library, chapter, discovery, follow, download, activity, operations, catalog_scrape, audio, saved_search, recommendations, admin_integrations, admin_users, notifications
 from app.routers import user_data, imports
 from app.routers import app_passwords, kosync, opds, personal_feed, reading_stats, source_status, stories, webhooks
-from app.routers import blocklist, creator_follows, personal, shelves
+from app.routers import blocklist, creator_follows, highlights_export, personal, shelves
 from app.db_migrations import upgrade_database
 from app.services import metadata_client
 from app.logging_config import (
@@ -89,6 +89,7 @@ app.include_router(webhooks.router)
 app.include_router(personal_feed.router)
 app.include_router(reading_stats.router)
 app.include_router(creator_follows.router)
+app.include_router(highlights_export.router)
 
 
 @app.middleware("http")

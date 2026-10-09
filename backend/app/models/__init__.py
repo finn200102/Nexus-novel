@@ -21,6 +21,7 @@ from .notification import NotificationChannel, PushSubscription
 from .novel import Novel, novel_tag
 from .novel_personal import NovelPersonalData, NovelUserTag
 from .reading_annotation import ReadingAnnotation
+from .readwise import ReadwiseConnection
 from .reading_history import ReadingHistory
 from .reading_progress import ReadingProgress
 from .reading_session import ReadingSessionDaily
