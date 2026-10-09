@@ -8,8 +8,6 @@ import { Novel } from "../../types/novel";
 import type { DownloadJob } from "../../types/activity";
 import { downloadService } from "../../services/downloadService";
 import defaultCoverImage from "../../assets/cover.png";
-import "../../styles/library.css";
-import "../../styles/novel-list.css";
 import "../../styles/download-manager.css";
 import { displayTitle } from "../../utils/displayTitle";
 import { EmptyState } from "../ui";

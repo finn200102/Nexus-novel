@@ -1,5 +1,6 @@
 import React, { useId, useState } from "react";
 import { X } from "lucide-react";
+import "../../styles/chip-input.css";
 
 type ChipInputProps = {
   label: string;

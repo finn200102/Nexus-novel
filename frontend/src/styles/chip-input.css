@@ -1,0 +1,53 @@
+/* ChipInput (Discover filters, story notes). Tokens only. */
+.discover-chip-field { display: grid; gap: var(--sp-1); min-width: 0; }
+.discover-chip-field__label { color: var(--text); font-size: var(--fs-sm); font-weight: 600; }
+.discover-chip-field__box {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1);
+  min-height: var(--control-md);
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+}
+.discover-chip-field__box:focus-within { outline: 2px solid var(--focus); outline-offset: 1px; }
+.discover-chip-field__box input {
+  flex: 1 1 6rem;
+  min-width: 6rem;
+  min-height: 28px;
+  padding: 0 var(--sp-1);
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+}
+.discover-chip-field__box input:focus-visible { outline: none; }
+.discover-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  max-width: 100%;
+  min-height: 28px;
+  padding: 0 var(--sp-1) 0 var(--sp-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: var(--fs-sm);
+}
+.discover-chip button {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+.discover-chip button:hover { background: var(--surface); }
+.discover-chip-field--exclude .discover-chip { border-color: var(--danger); color: var(--danger); }

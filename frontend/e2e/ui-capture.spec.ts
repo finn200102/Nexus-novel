@@ -7,22 +7,25 @@ import path from "node:path";
 //   cd nexus-novel/frontend && UI_CAPTURE=1 NEXUS_E2E_VIDEO=off \
 //     npx playwright test e2e/ui-capture.spec.ts --config playwright.docker.config.ts
 // Writes screenshots, the axe report and the page inventory under <repo>/docs/ui-review.
+// UI_CAPTURE_AFTER=1 (WP-D15) walks the redesigned routes, writes screens-after/ and
+// axe-report-after.md, and runs axe for every page in light and dark at 1440 and 390 px.
 // Never submits forms, starts live searches, imports, deletes or changes settings.
 
 const enabled = process.env.UI_CAPTURE === "1";
+const after = process.env.UI_CAPTURE_AFTER === "1";
 // Run from nexus-novel/frontend (the npx command above); the docs folder is two levels up.
 const docsDir = path.resolve(process.cwd(), "../../docs/ui-review");
-const screensDir = path.join(docsDir, "screens");
+const screensDir = path.join(docsDir, after ? "screens-after" : "screens");
 
 const VIEWPORTS = {
   desktop: { viewport: { width: 1440, height: 900 } },
   mobile: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true },
 } as const;
-const SCHEMES = ["default", "dark", "light"] as const;
+const SCHEMES = (after ? ["light", "dark"] : ["default", "dark", "light"]) as readonly ("default" | "dark" | "light")[];
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"];
 
 type Viewport = keyof typeof VIEWPORTS;
-type Scheme = (typeof SCHEMES)[number];
+type Scheme = "default" | "dark" | "light";
 
 interface Entry {
   name: string;
@@ -59,6 +62,8 @@ interface Inventory {
 const shots: string[] = [];
 const failures: string[] = [];
 const axeByPage = new Map<string, AxeViolation[] | string>();
+/** After mode: serious/critical violations for every page × width × theme. */
+const blockingByCapture = new Map<string, string[]>();
 const keyboardByPage = new Map<string, { focusVisible: number; order: string[] }>();
 const inventory: Inventory[] = [];
 
@@ -117,8 +122,81 @@ function collectChapterNumbers(value: unknown, out: { number: number; downloaded
   }
 }
 
+const firstHref = async (page: Page, selector: string) =>
+  (await page.locator(selector).first().getAttribute("href", { timeout: 10_000 }).catch(() => null)) ?? undefined;
+
+/** Redesigned routes (D4–D14): ids come from links on Library and Discover. */
+async function buildAfterEntries(page: Page): Promise<Entry[]> {
+  const missing = (what: string) => failures.push(`discovery: ${what} not reachable, route skipped`);
+  const clickByName = (name: RegExp) => async (p: Page) => {
+    await p.getByRole("button", { name }).first().click();
+  };
+
+  await page.goto("/library", { waitUntil: "load" });
+  await settle(page);
+  const storyLibrary = await firstHref(page, "a.library-card__title");
+  const reader = await firstHref(page, "a.library-card__next");
+  if (!storyLibrary) missing("library story");
+  if (!reader) missing("chapter to continue");
+
+  await page.goto("/discover", { waitUntil: "load" });
+  await settle(page);
+  const storyCatalog = await firstHref(page, ".discover-card a.ui-stretched-link");
+  if (!storyCatalog) missing("discover story");
+
+  return [
+    { name: "login", path: "/login", anon: true },
+    { name: "signup", path: "/signup", anon: true },
+    { name: "home", path: "/" },
+    { name: "add-story", path: "/", prep: async (p) => p.getByRole("button", { name: "Add story" }).first().click() },
+    { name: "discover", path: "/discover" },
+    { name: "discover-search", path: "/discover", prep: async (p) => p.getByRole("tab", { name: "Search the sites" }).click() },
+    { name: "discover-filters", path: "/discover", prep: clickByName(/^More filters/) },
+    ...(storyCatalog ? [{ name: "story-catalog", path: storyCatalog }] : []),
+    { name: "library", path: "/library" },
+    { name: "library-shelves", path: "/library", prep: async (p: Page) => {
+      await p.getByRole("button", { name: "Organize" }).click();
+      await p.getByRole("menuitem", { name: "Shelves…" }).click();
+    } },
+    ...(storyLibrary ? [
+      { name: "story-library", path: storyLibrary },
+      { name: "story-chapters", path: `${storyLibrary}${storyLibrary.includes("?") ? "&" : "?"}tab=chapters` },
+    ] : []),
+    ...(reader ? [
+      { name: "reader-scroll", path: reader },
+      {
+        name: "reader-paged",
+        path: reader,
+        prep: async (p: Page) => {
+          await p.evaluate(() => localStorage.setItem("nexus-reader-layout", "paged"));
+          await p.reload({ waitUntil: "load" });
+          await settle(p);
+        },
+        post: async (p: Page) => p.evaluate(() => localStorage.setItem("nexus-reader-layout", "scroll")),
+      },
+      { name: "reader-settings", path: reader, prep: clickByName(/^Text settings$/) },
+      { name: "reader-chapter-drawer", path: reader, prep: clickByName(/^Chapters$/) },
+    ] : []),
+    { name: "updates", path: "/updates" },
+    { name: "updates-downloads", path: "/updates/downloads" },
+    { name: "stats", path: "/stats" },
+    { name: "more", path: "/more" },
+    { name: "settings-account", path: "/settings/account" },
+    { name: "settings-appearance", path: "/settings/appearance" },
+    { name: "settings-notifications", path: "/settings/notifications" },
+    { name: "settings-ereaders", path: "/settings/ereaders" },
+    { name: "settings-hidden", path: "/settings/hidden" },
+    { name: "settings-data", path: "/settings/data" },
+    { name: "admin-status", path: "/admin/status" },
+    { name: "admin-jobs", path: "/admin/jobs" },
+    { name: "admin-users", path: "/admin/users" },
+    { name: "admin-duplicates", path: "/admin/duplicates" },
+  ];
+}
+
 // Finds real ids by clicking through the stack's own UI (its list rows are buttons, not links).
 async function buildEntries(page: Page): Promise<Entry[]> {
+  if (after) return buildAfterEntries(page);
   const missing = (what: string) => failures.push(`discovery: ${what} not reachable, route skipped`);
 
   await settle(page);
@@ -224,7 +302,7 @@ async function buildEntries(page: Page): Promise<Entry[]> {
 async function capture(session: Session, entry: Entry, vp: Viewport, scheme: Scheme) {
   const { page, errors } = session;
   const label = `${entry.name} ${vp} ${scheme}`;
-  const primary = vp === "desktop" && scheme === "default";
+  const primary = vp === "desktop" && scheme === (after ? "light" : "default");
   errors.length = 0;
   try {
     const started = Date.now();
@@ -238,6 +316,16 @@ async function capture(session: Session, entry: Entry, vp: Viewport, scheme: Sch
       }
       await page.screenshot({ path: path.join(screensDir, `${entry.name}-${vp}-${scheme}.png`), fullPage: true });
       shots.push(label);
+
+      if (after) {
+        const axeAll = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
+        blockingByCapture.set(
+          label,
+          axeAll.violations
+            .filter((v) => v.impact === "serious" || v.impact === "critical")
+            .map((v) => `${v.impact} \`${v.id}\` ×${v.nodes.length} (\`${(v.nodes[0]?.target.join(" ") ?? "").replace(/\|/g, "\\|")}\`)`),
+        );
+      }
 
       if (primary) {
         const url = page.url();
@@ -292,7 +380,7 @@ async function capture(session: Session, entry: Entry, vp: Viewport, scheme: Sch
 
 function writeReports() {
   const lines: string[] = [];
-  lines.push("# Nexus 1.0 axe report", "", "Desktop 1440x900, default colour scheme. Tags: wcag2a, wcag2aa, wcag21a, wcag21aa, wcag22aa, best-practice.", "");
+  lines.push(after ? "# Nexus 1.0 axe report (after the redesign)" : "# Nexus 1.0 axe report", "", after ? "Per-page tables: desktop 1440x900, light theme; the last section covers both widths and themes." : "Desktop 1440x900, default colour scheme. Tags: wcag2a, wcag2aa, wcag21a, wcag21aa, wcag22aa, best-practice.", "");
   const totals = new Map<string, number>();
   const rules = new Map<string, { count: number; impact: string; help: string; helpUrl: string }>();
   for (const [name, result] of axeByPage) {
@@ -327,7 +415,14 @@ function writeReports() {
   }
   lines.push("");
   if (failures.length) lines.push("## Failed captures", "", ...failures.map((f) => `- ${f}`), "");
-  fs.writeFileSync(path.join(docsDir, "axe-report.md"), lines.join("\n"));
+  if (after) {
+    const pages = [...new Set([...blockingByCapture.keys()].map((key) => key.split(" ")[0]))];
+    const blockingTotal = [...blockingByCapture.values()].reduce((sum, list) => sum + list.length, 0);
+    lines.push("## Serious and critical, every page × width × theme", "", `Captures analysed: ${blockingByCapture.size} (${pages.length} pages × 1440/390 × light/dark). Captures with serious/critical rules: ${[...blockingByCapture.values()].filter((list) => list.length).length}. Rules: ${blockingTotal}.`, "");
+    for (const [key, list] of blockingByCapture) if (list.length) lines.push(`- **${key}**: ${list.join("; ")}`);
+    lines.push("");
+  }
+  fs.writeFileSync(path.join(docsDir, after ? "axe-report-after.md" : "axe-report.md"), lines.join("\n"));
 
   const inv: string[] = ["# Nexus 1.0 UI inventory", "", "Desktop 1440x900, default scheme, logged in as smoke-admin. Load time is goto(load) only, before settle.", ""];
   for (const item of inventory) {
@@ -336,7 +431,7 @@ function writeReports() {
     inv.push(`- Headings: ${item.headings.length ? item.headings.join(" / ").replace(/\n/g, " ") : "none"}`, "");
   }
   if (failures.length) inv.push("## Failed captures", "", ...failures.map((f) => `- ${f}`), "");
-  fs.writeFileSync(path.join(docsDir, "inventory.md"), inv.join("\n"));
+  fs.writeFileSync(path.join(docsDir, after ? "inventory-after.md" : "inventory.md"), inv.join("\n"));
 }
 
 test.describe("UI capture", () => {
@@ -354,7 +449,7 @@ test.describe("UI capture", () => {
           const session = await newSession(context);
           try {
             // Logged-out pages first, in the same context before login.
-            const anonEntries: Entry[] = [{ name: "login", path: "/login" }, { name: "signup", path: "/signup" }];
+            const anonEntries: Entry[] = [{ name: "login", path: "/login" }, { name: "signup", path: "/signup" }, ...(after ? [{ name: "reset-password", path: "/reset-password?token=preview" }] : [])];
             for (const entry of anonEntries) await capture(session, entry, vp, scheme);
 
             await login(session.page);
