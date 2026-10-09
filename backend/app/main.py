@@ -18,6 +18,7 @@ from app.db_migrations import upgrade_database
 from app.services import metadata_client
 from app.logging_config import (
     setup_logging,
+    redact_url,
     set_request_id,
     get_logger,
     get_request_id,
@@ -116,7 +117,7 @@ async def log_requests(request: Request, call_next):
     logger.info(
         "request_started",
         method=request.method,
-        path=request.url.path,
+        path=redact_url(request.url.path),
     )
 
     try:
@@ -126,7 +127,7 @@ async def log_requests(request: Request, call_next):
         logger.error(
             "request_failed",
             method=request.method,
-            path=request.url.path,
+            path=redact_url(request.url.path),
             duration_ms=duration_ms,
             error=str(e),
         )
@@ -137,7 +138,7 @@ async def log_requests(request: Request, call_next):
     logger.info(
         "request_completed",
         method=request.method,
-        path=request.url.path,
+        path=redact_url(request.url.path),
         status_code=response.status_code,
         duration_ms=duration_ms,
     )

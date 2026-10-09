@@ -1,4 +1,5 @@
 import logging
+import re
 import sys
 import json
 from datetime import datetime, timezone
@@ -10,6 +11,32 @@ request_id_var: ContextVar[Optional[str]] = ContextVar("request_id", default=Non
 user_id_var: ContextVar[Optional[int]] = ContextVar("user_id", default=None)
 library_id_var: ContextVar[Optional[int]] = ContextVar("library_id", default=None)
 novel_id_var: ContextVar[Optional[int]] = ContextVar("novel_id", default=None)
+
+
+# Credentials that travel in the URL: Kobo device tokens and personal feed
+# tokens in the path, one-time links (password reset and similar) in ?token=.
+_SECRET_PATTERNS = (
+    (re.compile(r"(/kobo/)[^/?#\s]+"), r"\1***"),
+    (re.compile(r"(/feeds/)[^/?#\s]+?(\.atom)"), r"\1***\2"),
+    (re.compile(r"(/feeds/)[^/?#\s.]+"), r"\1***"),
+    (re.compile(r"([?&](?:token|access_token|code|state)=)[^&#\s]+", re.IGNORECASE), r"\1***"),
+)
+
+
+def redact_url(value: str) -> str:
+    """Mask URL credentials before a path or URL reaches a log line."""
+    for pattern, replacement in _SECRET_PATTERNS:
+        value = pattern.sub(replacement, value)
+    return value
+
+
+class AccessLogRedactionFilter(logging.Filter):
+    """uvicorn's access log passes (client, method, path, version, status)."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.args, tuple):
+            record.args = tuple(redact_url(arg) if isinstance(arg, str) else arg for arg in record.args)
+        return True
 
 
 class StructuredFormatter(logging.Formatter):
@@ -95,6 +122,12 @@ def setup_logging(level: str = "INFO") -> logging.Logger:
 
     logging.getLogger("uvicorn").setLevel(logging.INFO)
     logging.getLogger("fastapi").setLevel(logging.INFO)
+    access = logging.getLogger("uvicorn.access")
+    if not any(isinstance(f, AccessLogRedactionFilter) for f in access.filters):
+        access.addFilter(AccessLogRedactionFilter())
+    # httpx logs every outgoing URL at INFO; webhook and Apprise URLs carry secrets.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
 
     return root_logger
 
