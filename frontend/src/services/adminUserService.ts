@@ -1,5 +1,6 @@
 import apiClient from "./apiClient";
 import type { SignupMode } from "./authService";
+import type { ContentLimits } from "../types/household";
 
 export type AdminUser = {
   id: number;
@@ -9,6 +10,7 @@ export type AdminUser = {
   created_at: string | null;
   last_seen_at: string | null;
   active_sessions: number;
+  content_limits?: ContentLimits | null;
 };
 
 export type Invite = {

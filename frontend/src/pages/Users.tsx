@@ -1,11 +1,13 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { Copy, KeyRound, RefreshCw, ShieldCheck, ShieldOff, Ticket, Trash2, UserCheck, UserX } from "lucide-react";
+import { Copy, Gauge, KeyRound, RefreshCw, ShieldCheck, ShieldOff, Ticket, Trash2, UserCheck, UserX } from "lucide-react";
 import { Dialog, Button } from "../components/ui";
 import { adminUserService, AdminUser, Invite } from "../services/adminUserService";
 import type { SignupMode } from "../services/authService";
 import { getUserFacingError } from "../services/apiClient";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/useToast";
+import { ContentLimitsDialog } from "../components/household/ContentLimitsDialog";
+import { describeLimits } from "../types/household";
 import "../styles/operations.css";
 import "../styles/integrations.css";
 import "../styles/accounts.css";
@@ -110,6 +112,7 @@ const Users: React.FC = () => {
   };
 
   const [pendingDelete, setPendingDelete] = useState<AdminUser | null>(null);
+  const [limitsFor, setLimitsFor] = useState<AdminUser | null>(null);
   const deleteUser = (user: AdminUser) => {
     setPendingDelete(null);
     void run(() => adminUserService.deleteUser(user.id), `${user.username} deleted`, "Could not delete the user");
@@ -254,9 +257,11 @@ const Users: React.FC = () => {
                       {isMe && " (you)"}
                       {user.is_admin && <span className="integration-good">admin</span>}
                       {user.is_disabled && <span className="integration-warning"> disabled</span>}
+                      {user.content_limits?.limited && <span className="integration-warning"> limited</span>}
                     </strong>
                     <small>
                       Last active {formatDate(user.last_seen_at)} · {user.active_sessions} signed-in device{user.active_sessions === 1 ? "" : "s"}
+                      {user.content_limits?.limited && <> · {describeLimits(user.content_limits)}</>}
                     </small>
                   </div>
                   <div className="integration-actions">
@@ -286,6 +291,13 @@ const Users: React.FC = () => {
                         {user.is_disabled ? <><UserCheck size={14} /> Enable</> : <><UserX size={14} /> Disable</>}
                       </button>
                     )}
+                    <button
+                      className="operations-action operations-action--quiet"
+                      aria-label={`Content limits for ${user.username}`}
+                      onClick={() => setLimitsFor(user)}
+                    >
+                      <Gauge size={14} /> Content limits
+                    </button>
                     <button className="operations-action operations-action--quiet" onClick={() => void issueResetLink(user)}>
                       <KeyRound size={14} /> Reset link
                     </button>
@@ -310,6 +322,11 @@ const Users: React.FC = () => {
           <Button variant="ghost" onClick={() => setPendingDelete(null)}>Keep account</Button>
           <Button variant="danger" onClick={() => pendingDelete && deleteUser(pendingDelete)}>Delete account</Button>
         </>}
+      />
+      <ContentLimitsDialog
+        user={limitsFor}
+        onClose={() => setLimitsFor(null)}
+        onSaved={(userId, limits) => setUsers((rows) => rows.map((row) => (row.id === userId ? { ...row, content_limits: limits } : row)))}
       />
     </div>
   );

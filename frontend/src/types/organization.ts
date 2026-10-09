@@ -12,6 +12,9 @@ export interface Shelf {
   name: string;
   position: number;
   novel_ids: number[];
+  /** How many people the shelf is shared with (G4). */
+  share_count?: number;
+  share_notes?: boolean;
 }
 
 export interface PersonalData {

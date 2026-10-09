@@ -5,6 +5,7 @@ import { Popover } from "../ui";
 import { ThemeSwitcher } from "../../theme/ThemeSwitcher";
 import { useAuth } from "../../context/AuthContext";
 import { initials } from "./navItems";
+import { LimitedProfileBadge } from "../household/LimitedProfileNotice";
 
 /** Sidebar profile button: Settings, Admin (admins), Theme, Sign out. */
 export function ProfileMenu() {
@@ -29,7 +30,7 @@ export function ProfileMenu() {
       )}
     >
       <div className="app-profile__panel">
-        <p className="app-profile__who">Signed in as <strong>{name}</strong></p>
+        <p className="app-profile__who">Signed in as <strong>{name}</strong> <LimitedProfileBadge /></p>
         <ul className="app-profile__links">
           <li>
             <Link className="ui-menu__item" to="/settings/account" onClick={() => setOpen(false)}>

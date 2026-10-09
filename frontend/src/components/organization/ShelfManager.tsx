@@ -4,6 +4,7 @@ import { getUserFacingError } from "../../services/apiClient";
 import { useToast } from "../../context/useToast";
 import { Button, Input, Sheet } from "../ui";
 import type { Shelf } from "../../types/organization";
+import { ShareShelfDialog } from "../household/ShareShelfDialog";
 
 interface ShelfManagerProps {
   open: boolean;
@@ -24,6 +25,7 @@ export const ShelfManager: React.FC<ShelfManagerProps> = ({ open, onClose, shelv
   const [renaming, setRenaming] = useState<number | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [confirming, setConfirming] = useState<number | null>(null);
+  const [sharing, setSharing] = useState<Shelf | null>(null);
   const newRef = useRef<HTMLInputElement | null>(null);
 
   const create = async (event: React.FormEvent) => {
@@ -100,7 +102,13 @@ export const ShelfManager: React.FC<ShelfManagerProps> = ({ open, onClose, shelv
                     <span className="shelf-manager__name">
                       {shelf.name}
                       <span className="text-secondary text-sm"> · {shelf.novel_ids.length} {shelf.novel_ids.length === 1 ? "story" : "stories"}</span>
+                      {!!shelf.share_count && (
+                        <span className="text-secondary text-sm"> · shared with {shelf.share_count} {shelf.share_count === 1 ? "person" : "people"}</span>
+                      )}
                     </span>
+                    <Button size="sm" variant="ghost" aria-label={`Share ${shelf.name}`} onClick={() => setSharing(shelf)}>
+                      Share
+                    </Button>
                     <Button size="sm" variant="ghost" aria-label={`Rename ${shelf.name}`} onClick={() => { setRenaming(shelf.id); setRenameValue(shelf.name); }}>
                       Rename
                     </Button>
@@ -114,6 +122,11 @@ export const ShelfManager: React.FC<ShelfManagerProps> = ({ open, onClose, shelv
           </ul>
         )}
       </div>
+      <ShareShelfDialog
+        shelf={sharing}
+        onClose={() => setSharing(null)}
+        onChanged={(shelfId, count) => onChanged(shelves.map((item) => (item.id === shelfId ? { ...item, share_count: count } : item)))}
+      />
     </Sheet>
   );
 };

@@ -177,6 +177,15 @@ describe("Story page", () => {
     await waitFor(() => expect(organizationService.addBlocklistEntry).toHaveBeenCalledWith("tag", "Slow burn"));
   });
 
+  it("explains a story outside the profile's content limits", async () => {
+    const forbidden = Object.assign(new Error("Forbidden"), { isAxiosError: true, response: { status: 403, data: {} } });
+    vi.mocked(discoveryService.getNovelById).mockRejectedValue(forbidden);
+    vi.mocked(storyService.membership).mockRejectedValue(forbidden);
+    renderAt("/story/4");
+    expect(await screen.findByText("Not available on your profile")).toBeInTheDocument();
+    expect(screen.getByText(/content limits an administrator set/)).toBeInTheDocument();
+  });
+
   it("redirects the old library URL to the story's catalog id", async () => {
     vi.mocked(storyService.membership).mockResolvedValue({ metadata_id: 4, library_entries: [], support_links: [] });
     renderAt("/library/1/novels/11");

@@ -29,7 +29,7 @@ export interface LiveResponse {
   errors: SiteError[];
 }
 
-export type ImportItemStatus = "queued" | "running" | "linked" | "duplicate" | "unsupported" | "failed";
+export type ImportItemStatus = "queued" | "running" | "linked" | "duplicate" | "unsupported" | "failed" | "restricted";
 
 export interface ImportJob {
   id: number;

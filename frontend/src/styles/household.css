@@ -1,0 +1,25 @@
+/* Household (G4): share dialog, "Shared with me", admin content limits. */
+.share-shelf,
+.content-limits { display: grid; gap: var(--sp-4); }
+.share-shelf__add,
+.content-limits__tags { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--sp-2); }
+.share-shelf__add > .ui-field,
+.content-limits__tags > .ui-field { flex: 1 1 12rem; }
+.share-shelf__list { display: grid; gap: var(--sp-1); margin: 0; padding: 0; list-style: none; }
+.share-shelf__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: var(--touch-min);
+}
+.share-shelf__name { flex: 1 1 8rem; min-width: 0; overflow-wrap: anywhere; }
+.content-limits__chips { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+
+.shared-shelves { display: grid; gap: var(--sp-3); margin-top: var(--sp-6); }
+.shared-shelves__title { margin: 0; font-size: 1.1rem; }
+.shared-shelves__list,
+.shared-shelves__stories ul { display: grid; gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
+.shared-shelves__head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+.shared-shelves__stories { padding-left: var(--sp-3); }
+.shared-shelves__note { font-style: italic; }

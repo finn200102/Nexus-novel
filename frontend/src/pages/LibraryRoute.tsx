@@ -5,6 +5,7 @@ import { openAddStory } from "../components/add/addStoryEvents";
 import { useLibraryContext } from "../context/useLibraryContext";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { EmptyState, Button } from "../components/ui";
+import { SharedWithMe } from "../components/household/SharedWithMe";
 
 interface StoryHandoff {
   storyLink?: string;
@@ -48,5 +49,10 @@ export default function LibraryRoute() {
     );
   }
 
-  return <LibraryPage key={libraryId} library_id={libraryId} />;
+  return (
+    <>
+      <LibraryPage key={libraryId} library_id={libraryId} />
+      <SharedWithMe />
+    </>
+  );
 }

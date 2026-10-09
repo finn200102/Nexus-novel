@@ -3,6 +3,7 @@ import { LogOut } from "lucide-react";
 import { authService, LinkedSignInStatus } from "../../services/authService";
 import { getUserFacingError } from "../../services/apiClient";
 import { useAuth } from "../../context/AuthContext";
+import { LimitedProfileNotice } from "../../components/household/LimitedProfileNotice";
 import { useToast } from "../../context/useToast";
 import { usePageTitle } from "../../hooks/usePageTitle";
 import { Button, Input, PageHeader } from "../../components/ui";
@@ -61,6 +62,7 @@ const SettingsAccount: React.FC = () => {
         title="Profile & security"
         description={`Signed in as ${user?.username ?? "you"}${user?.is_admin ? " (administrator)" : ""}.`}
       />
+      <LimitedProfileNotice />
 
       <section className="settings-group" aria-labelledby="settings-password">
         <h2 id="settings-password">{settingFirstPassword ? "Set a password" : "Change password"}</h2>

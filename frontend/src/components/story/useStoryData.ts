@@ -1,3 +1,4 @@
+import axios from "axios";
 import { useCallback, useEffect, useState } from "react";
 import { discoveryService } from "../../services/discoveryService";
 import { novelService } from "../../services/novelService";
@@ -15,6 +16,8 @@ export interface StoryData {
   loading: boolean;
   /** Nothing could be loaded: neither a catalog record nor a library copy. */
   notFound: boolean;
+  /** The story is outside the content limits of this profile (the API answered 403). */
+  restricted: boolean;
   catalog: DiscoveredNovel | null;
   entries: LibraryEntry[];
   /** Author support links from the catalog story (validated by the API). */
@@ -33,8 +36,11 @@ export interface StoryData {
  * copy's library data. `preferredCopy` picks among several copies (from `?copy=`); `fallbackCopy`
  * serves library stories that have no catalog id yet.
  */
+const isForbidden = (reason: unknown) => axios.isAxiosError(reason) && reason.response?.status === 403;
+
 export function useStoryData(metadataId: number | null, preferredCopy: number | null, fallbackCopy: LibraryCopyRef | null = null): StoryData {
   const [loading, setLoading] = useState(true);
+  const [restricted, setRestricted] = useState(false);
   const [catalog, setCatalog] = useState<DiscoveredNovel | null>(null);
   const [entries, setEntries] = useState<LibraryEntry[]>([]);
   const [supportLinks, setSupportLinks] = useState<SupportLink[]>([]);
@@ -49,12 +55,14 @@ export function useStoryData(metadataId: number | null, preferredCopy: number | 
     let nextCatalog: DiscoveredNovel | null = null;
     let nextEntries: LibraryEntry[] = [];
     let nextSupport: SupportLink[] = [];
+    let nextRestricted = false;
     if (metadataId) {
       const [catalogResult, membershipResult] = await Promise.allSettled([
         discoveryService.getNovelById(metadataId),
         storyService.membership(metadataId),
       ]);
       if (catalogResult.status === "fulfilled" && catalogResult.value && "id" in catalogResult.value) nextCatalog = catalogResult.value;
+      if (catalogResult.status === "rejected" && isForbidden(catalogResult.reason)) nextRestricted = true;
       if (membershipResult.status === "fulfilled") {
         nextEntries = membershipResult.value.library_entries;
         nextSupport = membershipResult.value.support_links;
@@ -75,9 +83,15 @@ export function useStoryData(metadataId: number | null, preferredCopy: number | 
         novelService.getFollowSettings(nextCopy.libraryId, nextCopy.novelId),
       ]);
       if (novelResult.status === "fulfilled" && novelResult.value && "id" in novelResult.value) nextNovel = novelResult.value as Novel;
+      if (novelResult.status === "rejected" && isForbidden(novelResult.reason)) nextRestricted = true;
       if (settingsResult.status === "fulfilled") nextSettings = settingsResult.value;
     }
     if (!isActive()) return;
+    if (nextRestricted) {
+      nextCatalog = null;
+      nextNovel = null;
+    }
+    setRestricted(nextRestricted);
     setCatalog(nextCatalog);
     setEntries(nextEntries);
     setSupportLinks(nextSupport);
@@ -98,6 +112,7 @@ export function useStoryData(metadataId: number | null, preferredCopy: number | 
   return {
     loading,
     notFound: !loading && !catalog && !novel,
+    restricted: !loading && restricted,
     catalog,
     entries,
     supportLinks,

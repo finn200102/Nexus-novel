@@ -28,6 +28,7 @@ import { MoreFiltersSheet } from "../components/discovery/MoreFiltersSheet";
 import { ResultsGrid } from "../components/discovery/ResultsGrid";
 import { discoverSiteLabel } from "../components/discovery/sites";
 import { LiveResult } from "../services/liveSearchService";
+import { LimitedProfileNotice } from "../components/household/LimitedProfileNotice";
 import "../styles/live-search.css";
 import "../styles/discover.css";
 
@@ -301,6 +302,7 @@ const Discover: React.FC = () => {
   return (
     <div className="discover-page">
       <PageHeader title="Discover" description="Search and browse stories on supported sites." />
+      <LimitedProfileNotice />
 
       <Tabs<"catalog" | "live">
         label="Where to search"

@@ -67,7 +67,7 @@ export const StoryPage: React.FC<StoryPageProps> = ({ fallbackCopy }) => {
   const inLibrary = !!(novel && copy);
   const storyMetadataId = view.metadataId;
 
-  usePageTitle(data.loading ? null : data.notFound ? "Story not found" : view.title, {
+  usePageTitle(data.loading ? null : data.restricted ? "Not available" : data.notFound ? "Story not found" : view.title, {
     back: inLibrary ? { to: "/library", label: "Back to Library" } : { to: "/discover", label: "Back to Discover" },
   });
 
@@ -301,6 +301,19 @@ export const StoryPage: React.FC<StoryPageProps> = ({ fallbackCopy }) => {
             </div>
           </div>
         </SkeletonGroup>
+      </div>
+    );
+  }
+
+  if (data.restricted) {
+    return (
+      <div className="story">
+        <h1 tabIndex={-1} className="visually-hidden">Story not available on this profile</h1>
+        <EmptyState
+          title="Not available on your profile"
+          description="This story is outside the content limits an administrator set for your profile."
+          action={<Link to="/discover" className="ui-button ui-button--primary ui-button--md">Go to Discover</Link>}
+        />
       </div>
     );
   }
