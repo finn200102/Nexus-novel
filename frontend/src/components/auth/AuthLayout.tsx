@@ -1,37 +1,31 @@
 import React from "react";
+import { BookOpen } from "lucide-react";
 import "../../styles/auth-styles.css";
 
 interface AuthLayoutProps {
   title: string;
-  subtitle: string;
+  /** One plain sentence under the title. */
+  description?: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
 }
 
-const AuthLayout: React.FC<AuthLayoutProps> = ({
-  title,
-  subtitle,
-  children,
-  footer,
-}) => {
-  return (
-    <section className="auth-shell">
-      <div className="auth-panel">
-        <header className="auth-panel__header">
-          <p>{subtitle}</p>
-          <h1>{title}</h1>
-        </header>
-        <div className="auth-panel__body">{children}</div>
-        {footer && <footer className="auth-panel__footer">{footer}</footer>}
-      </div>
-      <div className="auth-visual">
-        <div className="auth-visual__overlay">
-          <h2>Curate your universe</h2>
-          <p>Sync every saga, bookmark new chapters, and dive back in instantly.</p>
-        </div>
-      </div>
-    </section>
-  );
-};
+/** Sign in, create account and reset password: one centred card (WP-D14). */
+const AuthLayout: React.FC<AuthLayoutProps> = ({ title, description, children, footer }) => (
+  <main id="main" className="auth-shell">
+    <div className="auth-card">
+      <p className="auth-card__brand">
+        <span className="auth-card__mark" aria-hidden="true"><BookOpen /></span>
+        Nexus
+      </p>
+      <header className="auth-card__header">
+        <h1 tabIndex={-1}>{title}</h1>
+        {description && <p className="auth-card__description">{description}</p>}
+      </header>
+      <div className="auth-card__body">{children}</div>
+      {footer && <footer className="auth-card__footer">{footer}</footer>}
+    </div>
+  </main>
+);
 
 export default AuthLayout;

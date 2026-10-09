@@ -170,7 +170,7 @@ const NovelList: React.FC<NovelListProps> = ({
       setSelectedNovels(new Set());
     } catch (err) {
       console.error("Failed to delete novels:", err);
-      alert("Failed to delete some novels. Please try again.");
+      alert("Some stories could not be removed. Try again.");
     } finally {
       setDeleteLoading(false);
     }

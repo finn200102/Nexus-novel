@@ -32,9 +32,9 @@ test.describe("Nexus real-stack 1.0 UI", () => {
     const [, libraryId, novelId] = readerPath!.match(/^\/library\/(\d+)\/novels\/(\d+)\/\d+$/) ?? [];
 
     await page.goto("/login");
-    await page.getByLabel("Username:").fill(username!);
-    await page.getByLabel("Password:").fill(password!);
-    await page.getByRole("button", { name: "Login" }).click();
+    await page.getByLabel("Username").fill(username!);
+    await page.getByLabel(/^Password/).fill(password!);
+    await page.getByRole("button", { name: "Sign in" }).click();
     await expect(page).not.toHaveURL(/\/login(?:$|\?)/);
 
     // Discover → Search the sites (Royal Road only).

@@ -386,7 +386,7 @@ const ListenPlayer: React.FC<ListenPlayerProps> = ({ chapter, libraryId: library
         await audioService.remove(serverAudioJob.id);
         setServerAudioJob(null);
       } catch (error) {
-        setAudioPlayerError(error instanceof Error ? error.message : "Could not delete the durable audio job.");
+        setAudioPlayerError(error instanceof Error ? error.message : "Could not delete the saved audio.");
         return;
       }
     } else {

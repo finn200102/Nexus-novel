@@ -190,7 +190,7 @@ const StoryGuide: React.FC = () => {
       addToast(result.queued ? `Queued ${result.queued} downloaded chapter${result.queued === 1 ? "" : "s"} for analysis.` : "Downloaded chapters are already analyzed or queued.", "success");
       window.setTimeout(() => void load(true), 700);
     } catch {
-      addToast("Could not queue the Story Guide. You can try again safely.", "error");
+      addToast("Could not start the AI story guide. You can try again safely.", "error");
     } finally {
       setBuilding(false);
     }
@@ -249,7 +249,7 @@ const StoryGuide: React.FC = () => {
   const evidenceCount = projection?.coverage.citations || 0;
   const coveragePercent = projection?.coverage.analyzed_chapter_count && projection.safe_through_chapter ? Math.min(100, Math.round((projection.coverage.analyzed_chapter_count / projection.safe_through_chapter) * 100)) : 0;
 
-  if (loading) return <div className="novel-insights story-guide-page"><div className="story-guide-page__loading"><span className="story-guide-page__loading-orb">◇</span><strong>Loading your Story Guide</strong><p>Preparing the latest cited knowledge snapshot…</p></div></div>;
+  if (loading) return <div className="novel-insights story-guide-page"><div className="story-guide-page__loading"><span className="story-guide-page__loading-orb">◇</span><strong>Loading the AI story guide</strong><p>Preparing the latest cited knowledge snapshot…</p></div></div>;
   if (!projection) return <div className="novel-insights story-guide-page"><div className="novel-insights__panel story-guide-page__state-panel"><p className="novel-insights__eyebrow">Story encyclopedia</p><h1>Guide temporarily unavailable</h1><p className="novel-insights__notice">{projectionError || "The optional analysis service did not respond. Your reading, downloads, and chapter evidence remain safe."}</p><button className="novel-insights__browse" type="button" onClick={() => void load()}>Try again</button></div></div>;
 
   return (
@@ -258,7 +258,7 @@ const StoryGuide: React.FC = () => {
       <header className="novel-insights__panel novel-insights__guide story-guide-page__hero">
         <div className="story-guide-page__hero-copy">
           <p className="novel-insights__eyebrow">Nexus story encyclopedia</p>
-          <h1>Story Guide</h1>
+          <h1>AI story guide</h1>
           <p className="novel-insights__notice">Verified chapter-cited knowledge through chapter <strong>{projection.safe_through_chapter}</strong>. This private reference stays bounded to your saved reading position.</p>
         </div>
         <div className="story-guide-page__hero-actions">
@@ -268,7 +268,7 @@ const StoryGuide: React.FC = () => {
           <Link className="novel-insights__browse" to={`/story-guide/${id}/review`}>Review claims</Link>
           <Link className="novel-insights__browse" to="/discover">Back to Discover</Link>
         </div>
-        <div className="story-guide-page__coverage" aria-label="Story Guide coverage">
+        <div className="story-guide-page__coverage" aria-label="AI story guide coverage">
           <div><span>Evidence snapshot</span><strong>{projection.coverage.state === "degraded" ? "Needs attention" : projection.coverage.state === "analyzing" || processingStates.has(guide?.guide_status || "") ? "Updating" : projection.coverage.state === "ready" ? "Verified snapshot" : "Partial snapshot"}</strong></div>
           <div><span>Chapter dossiers</span><strong>{projection.coverage.validated_dossier_count || 0} of {projection.safe_through_chapter}</strong></div>
           <div><span>Guide evidence</span><strong>{evidenceCount} cited items</strong></div>
@@ -277,7 +277,7 @@ const StoryGuide: React.FC = () => {
       </header>
 
       {!projection.coverage.analyzed_chapter_count ? <section className="novel-insights__panel"><EmptyState title={projection.safe_through_chapter === 0 ? "Start reading to unlock a spoiler-safe guide" : "Your guide starts with downloaded chapters"}>{projection.safe_through_chapter === 0 ? "Nexus will not reveal analyzed material ahead of your saved reading position. Open a chapter first, then return for a guide bounded to what you have reached." : "Download public chapters first. Nexus will analyze them in the background and keep the resulting guide bounded to what you have read."}</EmptyState></section> : <>
-        <nav className="story-guide-page__tabs" aria-label="Story Guide sections">
+        <nav className="story-guide-page__tabs" aria-label="AI story guide sections">
           {GUIDE_TABS.map((tab) => <button key={tab.id} className={activeTab === tab.id ? "story-guide-page__tab story-guide-page__tab--active" : "story-guide-page__tab"} type="button" onClick={() => setActiveTab(tab.id)}>{tab.label}{tab.id === "characters" && <span>{projection.characters.length}</span>}{tab.id === "relationships" && <span>{projection.relationships.length}</span>}{tab.id === "chapters" && <span>{projection.chapter_dossiers?.length || 0}</span>}</button>)}
         </nav>
 

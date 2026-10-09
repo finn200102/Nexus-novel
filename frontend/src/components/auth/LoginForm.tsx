@@ -2,21 +2,13 @@ import React, { FormEvent, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../../context/AuthContext";
-import "../../styles/auth-styles.css";
-
-interface FormData {
-  username: string;
-  password: string;
-}
+import { Banner, Button, Input } from "../ui";
 
 const LoginForm: React.FC = () => {
-  const [formData, setFormData] = useState<FormData>({
-    username: "",
-    password: "",
-  });
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitStatus, setSubmitStatus] = useState<"success" | "error" | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string>("");
+  const [errorMessage, setErrorMessage] = useState("");
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const { login, isAuthenticated } = useAuth();
@@ -29,80 +21,43 @@ const LoginForm: React.FC = () => {
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsSubmitting(true);
-    setSubmitStatus(null);
     setErrorMessage("");
-
     try {
-      await login(formData.username, formData.password);
-      setSubmitStatus("success");
-      setFormData({ username: "", password: "" });
+      await login(username, password);
       navigate("/");
     } catch (error) {
-      setSubmitStatus("error");
-      if (axios.isAxiosError(error)) {
-        setErrorMessage(
-          error.response?.data?.detail || error.message || "Invalid credentials"
-        );
-      } else if (error instanceof Error) {
-        setErrorMessage(error.message);
-      } else {
-        setErrorMessage("An error occurred during login");
-      }
+      const detail = axios.isAxiosError(error) ? error.response?.data?.detail : undefined;
+      setErrorMessage(
+        typeof detail === "string" && detail
+          ? detail
+          : axios.isAxiosError(error) && !error.response
+            ? "We couldn't reach the server. Check your connection and try again."
+            : "That username and password don't match. Try again.",
+      );
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData((prevData) => ({
-      ...prevData,
-      [name]: value,
-    }));
-  };
-
   return (
-    <form className="login-form" onSubmit={handleSubmit}>
-      <div className="form-group">
-        <label htmlFor="username" className="form-label">
-          Username:
-        </label>
-        <input
-          id="username"
-          name="username"
-          type="text"
-          value={formData.username}
-          onChange={handleChange}
-          required
-          className="form-input"
-        />
-      </div>
-      <div className="form-group">
-        <label htmlFor="password" className="form-label">
-          Password:
-        </label>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          value={formData.password}
-          onChange={handleChange}
-          required
-          className="form-input"
-        />
-      </div>
-      <button type="submit" disabled={isSubmitting} className="login-button">
-        {isSubmitting ? "Logging in..." : "Login"}
-      </button>
-      {params.get("reset") && submitStatus === null && (
-        <p className="status-message success">Password changed. Sign in with your new password.</p>
+    <form className="auth-form" onSubmit={handleSubmit}>
+      {params.get("reset") && !errorMessage && (
+        <Banner tone="success">Password changed. Sign in with your new password.</Banner>
       )}
-      {submitStatus === "success" && (
-        <p className="status-message success">Login successful!</p>
-      )}
-      {submitStatus === "error" && (
-        <p className="status-message error">Error: {errorMessage}</p>
-      )}
+      <Input label="Username" name="username" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} required />
+      <Input
+        label="Password"
+        name="password"
+        type="password"
+        autoComplete="current-password"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        required
+      />
+      {errorMessage && <p className="auth-form__error" role="alert">{errorMessage}</p>}
+      <Button type="submit" variant="primary" size="lg" block loading={isSubmitting}>
+        Sign in
+      </Button>
     </form>
   );
 };

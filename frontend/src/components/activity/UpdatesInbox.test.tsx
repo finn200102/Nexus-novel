@@ -63,7 +63,7 @@ describe("UpdatesInbox", () => {
     vi.mocked(activityService.getInbox).mockResolvedValue([]);
     renderInbox();
 
-    expect(await screen.findByText("You are all caught up.")).toBeTruthy();
+    expect(await screen.findByText("You're all caught up.")).toBeTruthy();
     expect(screen.queryByText("Mark all read")).toBeNull();
   });
 

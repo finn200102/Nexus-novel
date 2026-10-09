@@ -29,7 +29,7 @@ const ERROR_TEXT: Record<string, string> = {
   source_blocked: "blocked by the site",
   timeout: "timed out",
   unsupported: "not supported",
-  metadata_unavailable: "metadata server unavailable",
+  metadata_unavailable: "story catalog offline",
 };
 
 const siteLabel = (site: string) => SEARCH_SITES.find((option) => option.value === site)?.label ?? site;

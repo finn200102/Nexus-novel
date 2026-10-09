@@ -4,7 +4,7 @@ test.describe("Nexus smoke workflows", () => {
   test("signs in and loads the library", async ({ signedInPage }) => {
     await signedInPage.goto("/library");
     await expect(signedInPage).toHaveURL(/\/library/);
-    await expect(signedInPage.locator("body")).not.toContainText("Welcome back");
+    await expect(signedInPage.locator("body")).not.toContainText("Your library is waiting");
   });
 
   test("metadata outage leaves a usable error state", async ({ signedInPage }) => {

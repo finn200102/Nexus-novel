@@ -43,7 +43,7 @@ describe("SignupForm", () => {
     const user = userEvent.setup();
 
     await fillCredentials(user);
-    await user.click(screen.getByRole("button", { name: /submit/i }));
+    await user.click(screen.getByRole("button", { name: /create account/i }));
 
     expect(mocked.register).toHaveBeenCalledWith({ username: "testuser", password: "password123", invite_code: undefined });
     expect(screen.queryByLabelText(/invite code/i)).not.toBeInTheDocument();
@@ -54,7 +54,7 @@ describe("SignupForm", () => {
     renderForm();
 
     expect(await screen.findByText(/first account/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /submit/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /create account/i })).toBeInTheDocument();
   });
 
   it("asks for an invite code in invite mode and prefills it from the link", async () => {
@@ -65,7 +65,7 @@ describe("SignupForm", () => {
 
     expect(await screen.findByLabelText(/invite code/i)).toHaveValue("abc123");
     await fillCredentials(user);
-    await user.click(screen.getByRole("button", { name: /submit/i }));
+    await user.click(screen.getByRole("button", { name: /create account/i }));
 
     expect(mocked.register).toHaveBeenCalledWith({ username: "testuser", password: "password123", invite_code: "abc123" });
   });
@@ -74,8 +74,8 @@ describe("SignupForm", () => {
     mocked.signupConfig.mockResolvedValueOnce({ signup_mode: "closed", first_user: false });
     renderForm();
 
-    expect(await screen.findByText(/sign-up is closed/i)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /submit/i })).not.toBeInTheDocument();
+    expect(await screen.findByText(/new accounts are turned off/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /create account/i })).not.toBeInTheDocument();
   });
 
   it("shows the server's error and keeps the input", async () => {
@@ -84,10 +84,10 @@ describe("SignupForm", () => {
     const user = userEvent.setup();
 
     await fillCredentials(user);
-    await user.click(screen.getByRole("button", { name: /submit/i }));
+    await user.click(screen.getByRole("button", { name: /create account/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/error signing up/i)).toBeInTheDocument();
+      expect(screen.getByText(/couldn.t create the account/i)).toBeInTheDocument();
     });
     expect(screen.getByLabelText(/username/i)).toHaveValue("testuser");
   });
@@ -99,9 +99,9 @@ describe("SignupForm", () => {
     const user = userEvent.setup();
 
     await fillCredentials(user);
-    await user.click(screen.getByRole("button", { name: /submit/i }));
+    await user.click(screen.getByRole("button", { name: /create account/i }));
 
-    expect(screen.getByRole("button", { name: /submitting/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /create account/i })).toHaveAttribute("aria-busy", "true");
     finish();
   });
 });

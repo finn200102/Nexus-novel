@@ -87,6 +87,18 @@ const storyFixture = (path: string): unknown => {
     return { novel_id: 11, follow_state: "reading", download_policy: "none", download_count: 1, notification_policy: "immediate", notification_count: 1 };
   }
   if (pathname === "/novel/") return LIBRARY_NOVELS;
+  if (pathname === "/admin/integrations/merge-reviews") return { data: [] };
+  if (pathname === "/admin/integrations/webhooks") return [];
+  if (pathname === "/stats/summary") {
+    const daily = Array.from({ length: 7 }, (_, i) => ({ date: `2026-07-${20 + i}`, seconds: [1200, 0, 2400, 900, 3600, 600, 1800][i], words: 3000 * i, chapters_finished: i }));
+    return {
+      range: "week", start: "2026-07-20", end: "2026-07-26",
+      totals: { seconds: 10500, words: 42000, chapters_finished: 14, stories_finished: 1 },
+      daily, streak: { current: 3, longest: 9, min_seconds: 300 },
+      top_stories: [{ novel_id: 11, title: "The Quiet Ledger", seconds: 6000, words: 24000 }],
+      by_site: [{ site: "royalroad", seconds: 8000 }], by_tag: [{ tag: "cozy", seconds: 4000 }],
+    };
+  }
   if (pathname.startsWith("/personal/library/")) return { novels: { 13: { rating: 5, user_tags: ["cozy"] } } };
   if (pathname === "/chapter/11") return STORY_CHAPTERS;
   if (pathname === "/chapter/progress/11") return { chapter_number: 1 };

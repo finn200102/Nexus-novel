@@ -6,11 +6,11 @@ import AuthLayout from "../components/auth/AuthLayout";
 const SignupPage: React.FC = () => {
   return (
     <AuthLayout
-      title="Create your account"
-      subtitle="Join Nexus Novel"
+      title="Create account"
+      description="Save stories from your favourite sites and read them in one place."
       footer={
         <p>
-          Already registered? <Link to="/login">Sign in</Link>
+          Already have an account? <Link to="/login">Sign in</Link>
         </p>
       }
     >

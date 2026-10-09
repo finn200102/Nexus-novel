@@ -38,7 +38,7 @@ export const ShelfPicker: React.FC<ShelfPickerProps> = ({ novelId, shelves, onCh
     <details className="shelf-picker">
       <summary>Shelves{current.some(memberOf) ? ` · ${current.filter(memberOf).length}` : ""}</summary>
       {current.length === 0 ? (
-        <p className="shelf-picker__empty">Create a shelf in the Library to file this novel.</p>
+        <p className="shelf-picker__empty">Create a shelf from Library › Organize › Shelves to file this story.</p>
       ) : (
         <ul>
           {current.map((shelf) => (

@@ -22,9 +22,9 @@ test.describe("catalog and operations resilience", () => {
   test("keeps the catalog page usable after a preview timeout and recovers on retry", async ({ page }) => {
     await installMockApi(page, { admin: true, previewFailure: "timeout" });
     await page.goto("/login");
-    await page.getByLabel("Username:").fill("e2e-user");
-    await page.getByLabel("Password:").fill("NexusE2E-1234");
-    await page.getByRole("button", { name: "Login" }).click();
+    await page.getByLabel("Username").fill("e2e-user");
+    await page.getByLabel(/^Password/).fill("NexusE2E-1234");
+    await page.getByRole("button", { name: "Sign in" }).click();
     await page.goto("/scrape-jobs");
     await page.getByRole("button", { name: /preview results/i }).click();
     await expect(page.getByText(/timed out|could not preview|could not reach the service/i)).toBeVisible();
@@ -46,9 +46,9 @@ test.describe("catalog and operations resilience", () => {
   test("non-admin catalog API failure is shown as a permission error", async ({ page }) => {
     await installMockApi(page, { admin: false });
     await page.goto("/login");
-    await page.getByLabel("Username:").fill("e2e-user");
-    await page.getByLabel("Password:").fill("NexusE2E-1234");
-    await page.getByRole("button", { name: "Login" }).click();
+    await page.getByLabel("Username").fill("e2e-user");
+    await page.getByLabel(/^Password/).fill("NexusE2E-1234");
+    await page.getByRole("button", { name: "Sign in" }).click();
     await page.goto("/scrape-jobs");
     await expect(page.getByText(/administrator access is required|permission/i)).toBeVisible();
   });

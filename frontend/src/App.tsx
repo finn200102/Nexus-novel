@@ -66,8 +66,8 @@ export function AppRoutes() {
         <Route path="discover/:site" element={<Discover />} />
         {/* storyId = catalog (metadata) id; library copies join in via /stories/:id (D9). */}
         <Route path="story/:storyId" element={<Story />} />
-        <Route path="story/:metadataId/guide" element={<Titled title="Story Guide"><StoryGuide /></Titled>} />
-        <Route path="story/:metadataId/guide/review" element={<Titled title="Story Guide review"><StoryGuideReview /></Titled>} />
+        <Route path="story/:metadataId/guide" element={<Titled title="AI story guide"><StoryGuide /></Titled>} />
+        <Route path="story/:metadataId/guide/review" element={<Titled title="AI story guide review"><StoryGuideReview /></Titled>} />
         <Route path="library" element={<LibraryRoute />} />
         {/* Old library story URL: redirects to /story/:catalogId?copy=:novelId. */}
         <Route path="library/:libraryId/novels/:novelId" element={<LibraryStoryRedirect />} />

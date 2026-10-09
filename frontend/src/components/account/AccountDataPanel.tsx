@@ -8,9 +8,9 @@ import "../../styles/account-data.css";
 
 const SUMMARY_LABELS: [string, string][] = [
   ["libraries_created", "Libraries created"],
-  ["novels_created", "Novels added"],
-  ["novels_linked", "Novels already present"],
-  ["novels_failed", "Novels not imported"],
+  ["novels_created", "Stories added"],
+  ["novels_linked", "Stories already in your library"],
+  ["novels_failed", "Stories not imported"],
   ["follow_states_updated", "Follow states updated"],
   ["progress_applied", "Progress updated"],
   ["history_added", "History points added"],
@@ -87,7 +87,7 @@ const AccountDataPanel: React.FC = () => {
       <div className="account-data__body">
         <p>
           Export your libraries, follow states, progress, history, annotations and saved searches as one JSON file.
-          Novels are identified by their source URL, so importing the file again re-links them and changes nothing that is already there.
+          Stories are matched by their link, so importing the file again re-links them and changes nothing that is already there.
         </p>
         <div className="account-data__actions">
           <button type="button" onClick={() => void exportData()} disabled={exporting}>

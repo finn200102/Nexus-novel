@@ -3,9 +3,9 @@ import { installMockApi, authUser } from "./mockApi";
 
 const signIn = async (page: Page, username = authUser.username) => {
   await page.goto("/login");
-  await page.getByLabel("Username:").fill(username);
-  await page.getByLabel("Password:").fill(authUser.password);
-  await page.getByRole("button", { name: "Login" }).click();
+  await page.getByLabel("Username").fill(username);
+  await page.getByLabel(/^Password/).fill(authUser.password);
+  await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL("http://127.0.0.1:4173/");
 };
 
@@ -41,9 +41,9 @@ test.describe("Nexus authentication", () => {
   test("shows invalid credentials and stays on login", async ({ page }) => {
     await installMockApi(page, { admin: true });
     await page.goto("/login");
-    await page.getByLabel("Username:").fill("invalid");
-    await page.getByLabel("Password:").fill("wrong");
-    await page.getByRole("button", { name: "Login" }).click();
+    await page.getByLabel("Username").fill("invalid");
+    await page.getByLabel(/^Password/).fill("wrong");
+    await page.getByRole("button", { name: "Sign in" }).click();
     await expect(page).toHaveURL(/\/login$/);
     await expect(page.getByText("Invalid credentials")).toBeVisible();
   });
@@ -51,17 +51,17 @@ test.describe("Nexus authentication", () => {
   test("creates an account when sign-up is open", async ({ page }) => {
     await installMockApi(page, { admin: true, signupMode: "open" });
     await page.goto("/signup");
-    await page.getByLabel("Username:").fill("new-e2e-user");
-    await page.getByLabel("Password:").fill(authUser.password);
-    await page.getByRole("button", { name: "Submit" }).click();
+    await page.getByLabel("Username").fill("new-e2e-user");
+    await page.getByLabel(/^Password/).fill(authUser.password);
+    await page.getByRole("button", { name: "Create account" }).click();
     await expect(page).toHaveURL("http://127.0.0.1:4173/");
   });
 
   test("sign-up is closed once an administrator exists", async ({ page }) => {
     await installMockApi(page, { signupMode: "closed" });
     await page.goto("/signup");
-    await expect(page.getByText(/sign-up is closed/i)).toBeVisible();
-    await expect(page.getByRole("button", { name: "Submit" })).toHaveCount(0);
+    await expect(page.getByText(/new accounts are turned off/i)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Create account" })).toHaveCount(0);
   });
 
   test("an invite link lets a new reader sign up once", async ({ page }) => {
@@ -69,19 +69,19 @@ test.describe("Nexus authentication", () => {
     api.addInvite("welcome-code");
 
     await page.goto("/signup?invite=welcome-code");
-    await expect(page.getByLabel("Invite code:")).toHaveValue("welcome-code");
-    await page.getByLabel("Username:").fill("invited-reader");
-    await page.getByLabel("Password:").fill(authUser.password);
-    await page.getByRole("button", { name: "Submit" }).click();
+    await expect(page.getByLabel("Invite code")).toHaveValue("welcome-code");
+    await page.getByLabel("Username").fill("invited-reader");
+    await page.getByLabel(/^Password/).fill(authUser.password);
+    await page.getByRole("button", { name: "Create account" }).click();
     await expect(page).toHaveURL("http://127.0.0.1:4173/");
 
     await page.getByRole("button", { name: /invited-reader/ }).click();
     await page.getByRole("dialog", { name: "Account" }).getByRole("button", { name: "Sign out" }).click();
     await expect(page).toHaveURL(/\/login$/);
     await page.goto("/signup?invite=welcome-code");
-    await page.getByLabel("Username:").fill("second-try");
-    await page.getByLabel("Password:").fill(authUser.password);
-    await page.getByRole("button", { name: "Submit" }).click();
+    await page.getByLabel("Username").fill("second-try");
+    await page.getByLabel(/^Password/).fill(authUser.password);
+    await page.getByRole("button", { name: "Create account" }).click();
     await expect(page.getByText("This invite code is not valid.")).toBeVisible();
   });
 
@@ -90,15 +90,15 @@ test.describe("Nexus authentication", () => {
     api.addResetToken("one-time-token");
 
     await page.goto("/reset-password?token=one-time-token");
-    await page.getByLabel("New password:").fill("a-brand-new-password");
-    await page.getByLabel("Repeat password:").fill("a-brand-new-password");
+    await page.getByLabel("New password").fill("a-brand-new-password");
+    await page.getByLabel("Repeat password").fill("a-brand-new-password");
     await page.getByRole("button", { name: "Set password" }).click();
     await expect(page).toHaveURL(/\/login\?reset=1$/);
     await expect(page.getByText(/password changed/i)).toBeVisible();
 
     await page.goto("/reset-password?token=one-time-token");
-    await page.getByLabel("New password:").fill("another-new-password");
-    await page.getByLabel("Repeat password:").fill("another-new-password");
+    await page.getByLabel("New password").fill("another-new-password");
+    await page.getByLabel("Repeat password").fill("another-new-password");
     await page.getByRole("button", { name: "Set password" }).click();
     await expect(page.getByText(/invalid or has expired/i)).toBeVisible();
   });

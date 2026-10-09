@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { authService, SignupConfig } from "../../services/authService";
 import { getUserFacingError } from "../../services/apiClient";
-import "../../styles/auth-styles.css";
+import { Banner, Button, Input } from "../ui";
 
 interface FormData {
   username: string;
@@ -50,7 +50,7 @@ const SignupForm: React.FC = () => {
       });
       navigate("/");
     } catch (error) {
-      setErrorMessage(getUserFacingError(error, "Error signing up. Please try again."));
+      setErrorMessage(getUserFacingError(error, "We couldn't create the account. Try again."));
     } finally {
       setIsSubmitting(false);
     }
@@ -65,78 +65,51 @@ const SignupForm: React.FC = () => {
   };
 
   if (!config) {
-    return <p className="status-message" role="status">Loading…</p>;
+    return <p className="text-secondary" role="status">Loading…</p>;
   }
 
   if (closed) {
     return (
-      <p className="status-message error" role="status">
-        Sign-up is closed on this Nexus instance. Ask the administrator for an account or an invite.
-      </p>
+      <Banner tone="info">
+        New accounts are turned off on this server. Ask the person who runs it for an account or an invite.
+      </Banner>
     );
   }
 
   return (
-    <form className="signup-form" onSubmit={handleSubmit}>
+    <form className="auth-form" onSubmit={handleSubmit}>
       {config.first_user && (
-        <p className="status-message success">This is the first account; it will administer this Nexus instance.</p>
+        <Banner tone="info">This is the first account, so it can manage this server (users, sites, backups).</Banner>
       )}
-      <div className="form-group">
-        <label htmlFor="username" className="form-label">
-          Username:
-        </label>
-        <input
-          id="username"
-          name="username"
-          type="text"
-          value={formData.username}
-          onChange={handleChange}
-          required
-          autoComplete="username"
-          className="form-input"
-        />
-      </div>
-
-      <div className="form-group">
-        <label htmlFor="password" className="form-label">
-          Password:
-        </label>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          value={formData.password}
-          onChange={handleChange}
-          required
-          minLength={8}
-          autoComplete="new-password"
-          className="form-input"
-        />
-      </div>
-
+      <Input label="Username" id="username" name="username" value={formData.username} onChange={handleChange} required autoComplete="username" />
+      <Input
+        label="Password"
+        id="password"
+        name="password"
+        type="password"
+        hint="At least 8 characters."
+        value={formData.password}
+        onChange={handleChange}
+        required
+        minLength={8}
+        autoComplete="new-password"
+      />
       {needsInvite && (
-        <div className="form-group">
-          <label htmlFor="inviteCode" className="form-label">
-            Invite code:
-          </label>
-          <input
-            id="inviteCode"
-            name="inviteCode"
-            type="text"
-            value={formData.inviteCode}
-            onChange={handleChange}
-            required
-            autoComplete="off"
-            className="form-input"
-          />
-        </div>
+        <Input
+          label="Invite code"
+          id="inviteCode"
+          name="inviteCode"
+          hint="From the invite link or message you got."
+          value={formData.inviteCode}
+          onChange={handleChange}
+          required
+          autoComplete="off"
+        />
       )}
-
-      <button type="submit" disabled={isSubmitting} className="submit-button">
-        {isSubmitting ? "Submitting..." : "Submit"}
-      </button>
-
-      {errorMessage && <p className="status-message error">{errorMessage}</p>}
+      {errorMessage && <p className="auth-form__error" role="alert">{errorMessage}</p>}
+      <Button type="submit" variant="primary" size="lg" block loading={isSubmitting}>
+        Create account
+      </Button>
     </form>
   );
 };

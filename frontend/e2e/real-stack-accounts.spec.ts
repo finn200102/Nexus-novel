@@ -19,9 +19,9 @@ const freshPage = async (browser: Browser): Promise<Page> => (await browser.newC
 
 const signUp = async (page: Page, path: string, username: string, password: string) => {
   await page.goto(path);
-  await page.getByLabel("Username:").fill(username);
-  await page.getByLabel("Password:").fill(password);
-  await page.getByRole("button", { name: "Submit" }).click();
+  await page.getByLabel("Username").fill(username);
+  await page.getByLabel(/^Password/).fill(password);
+  await page.getByRole("button", { name: "Create account" }).click();
 };
 
 test.describe("Nexus real-stack accounts", () => {
@@ -40,7 +40,7 @@ test.describe("Nexus real-stack accounts", () => {
       await request.put(api("/admin/settings"), { headers, data: { signup_mode: "closed" } });
       const visitor = await freshPage(browser);
       await visitor.goto("/signup");
-      await expect(visitor.getByText(/sign-up is closed/i)).toBeVisible();
+      await expect(visitor.getByText(/new accounts are turned off/i)).toBeVisible();
 
       // Invite only: an invite link works once.
       await request.put(api("/admin/settings"), { headers, data: { signup_mode: "invite" } });
@@ -71,22 +71,22 @@ test.describe("Nexus real-stack accounts", () => {
       // Reset link: sets a new password once and ends existing sessions.
       const device = await freshPage(browser);
       await device.goto("/login");
-      await device.getByLabel("Username:").fill(username);
-      await device.getByLabel("Password:").fill("first-password-123");
-      await device.getByRole("button", { name: "Login" }).click();
+      await device.getByLabel("Username").fill(username);
+      await device.getByLabel(/^Password/).fill("first-password-123");
+      await device.getByRole("button", { name: "Sign in" }).click();
       await expect(device).not.toHaveURL(/login/);
       const link = await (await request.post(api(`/admin/users/${createdUserId}/password-reset`), { headers, data: {} })).json();
       const resetter = await freshPage(browser);
       await resetter.goto(link.path);
-      await resetter.getByLabel("New password:").fill("second-password-456");
-      await resetter.getByLabel("Repeat password:").fill("second-password-456");
+      await resetter.getByLabel("New password").fill("second-password-456");
+      await resetter.getByLabel("Repeat password").fill("second-password-456");
       await resetter.getByRole("button", { name: "Set password" }).click();
       await expect(resetter).toHaveURL(/\/login\?reset=1/);
       await device.reload();
       await expect(device).toHaveURL(/\/login/);
-      await resetter.getByLabel("Username:").fill(username);
-      await resetter.getByLabel("Password:").fill("second-password-456");
-      await resetter.getByRole("button", { name: "Login" }).click();
+      await resetter.getByLabel("Username").fill(username);
+      await resetter.getByLabel(/^Password/).fill("second-password-456");
+      await resetter.getByRole("button", { name: "Sign in" }).click();
       await expect(resetter).not.toHaveURL(/login/);
     } finally {
       if (createdUserId !== null) await request.delete(api(`/admin/users/${createdUserId}`), { headers });

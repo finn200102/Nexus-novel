@@ -84,9 +84,9 @@ async function newSession(context: BrowserContext): Promise<Session> {
 
 async function login(page: Page) {
   await page.goto("/login");
-  await page.getByLabel("Username:").fill("smoke-admin");
-  await page.getByLabel("Password:").fill("smoke-password-123");
-  await page.getByRole("button", { name: "Login" }).click();
+  await page.getByLabel("Username").fill("smoke-admin");
+  await page.getByLabel(/^Password/).fill("smoke-password-123");
+  await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).not.toHaveURL(/\/login(?:$|\?)/);
 }
 

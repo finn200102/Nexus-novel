@@ -55,7 +55,7 @@ const UpdatesInbox: React.FC<UpdatesInboxProps> = ({ libraryId, onChanged }) => 
     </div>}
     {(error || loadError) && <p className="updates-inbox__error" role="alert">{error ?? "Could not load updates."}</p>}
     {loading && <p className="updates-page__empty">Loading updates…</p>}
-    {!loading && rows.length === 0 && <EmptyState level={3} title="You are all caught up." description="New chapters from stories you follow appear here." />}
+    {!loading && rows.length === 0 && <EmptyState level={3} title="You're all caught up." description="New chapters from stories you follow appear here." />}
     {!loading && rows.length > 0 && <ul className="updates-inbox__list">
       {rows.map((row) => <li key={row.novel_id} className="updates-inbox__row">
         <div className="updates-inbox__body">

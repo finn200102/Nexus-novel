@@ -1,135 +1,53 @@
+/* Sign in, create account, reset password (WP-D14). Tokens only. */
 .auth-shell {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 2rem;
-  background: var(--scrim);
-  border-radius: 32px;
-  padding: 2.5rem;
+  min-height: 100vh;
+  min-height: 100dvh;
+  place-items: center;
+  padding: var(--sp-6) var(--sp-4);
+  background: var(--bg);
+}
+.auth-card {
+  display: grid;
+  gap: var(--sp-5);
+  width: 100%;
+  max-width: 26rem;
+  padding: var(--sp-6);
   border: 1px solid var(--border);
-  box-shadow: 0 30px 80px rgba(2, 6, 23, 0.5);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--elev-1);
 }
-
-.auth-panel {
-  background: var(--scrim);
-  border-radius: 28px;
-  padding: 2rem;
-  border: 1px solid var(--border-strong);
-  color: var(--text);
-}
-
-.auth-panel__header p {
-  text-transform: uppercase;
-  letter-spacing: 0.2em;
-  font-size: 0.8rem;
-  color: var(--text-muted);
+.auth-card__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
   margin: 0;
+  font-size: var(--fs-lg);
+  font-weight: 700;
 }
-
-.auth-panel__header h1 {
-  margin-top: 0.35rem;
+.auth-card__mark {
+  display: inline-grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--r-sm);
+  background: var(--accent-fill);
+  color: var(--on-accent);
 }
+.auth-card__mark svg { width: 1.125rem; height: 1.125rem; }
+.auth-card__header { display: grid; gap: var(--sp-1); }
+.auth-card__header h1 { margin: 0; font-size: var(--fs-2xl); line-height: var(--lh-2xl); }
+.auth-card__header h1:focus { outline: none; }
+.auth-card__description { margin: 0; color: var(--text-2); }
+.auth-card__footer { padding-top: var(--sp-4); border-top: 1px solid var(--border); color: var(--text-2); }
+.auth-card__footer p { margin: 0; }
+.auth-card__footer a,
+.auth-form a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.auth-form { display: grid; gap: var(--sp-4); }
+.auth-form__error { margin: 0; color: var(--danger); }
 
-.auth-panel__body {
-  margin-top: 1.5rem;
-}
-
-.auth-panel__footer {
-  margin-top: 1.5rem;
-  color: var(--text);
-}
-
-.auth-panel__footer a {
-  color: var(--accent);
-}
-
-.auth-visual {
-  position: relative;
-  border-radius: 28px;
-  background: url("https://images.unsplash.com/photo-1473862177706-d538df0adf66?auto=format&fit=crop&w=900&q=60")
-      center/cover,
-    linear-gradient(120deg, var(--accent-fill), var(--accent-fill));
-  min-height: 320px;
-  overflow: hidden;
-}
-
-.auth-visual__overlay {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg, var(--accent-subtle), var(--accent-subtle));
-  color: var(--text);
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  padding: 2rem;
-}
-
-.login-form,
-.signup-form {
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-
-.form-label {
-  font-size: 0.9rem;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-.form-input {
-  border-radius: 14px;
-  border: 1px solid var(--border-strong);
-  background: var(--scrim);
-  color: var(--text);
-  padding: 0.85rem 1rem;
-}
-
-.login-button,
-.submit-button {
-  border: none;
-  border-radius: 16px;
-  padding: 0.9rem 1.2rem;
-  font-weight: 600;
-  background: linear-gradient(135deg, var(--info), var(--accent-fill));
-  color: var(--text);
-  cursor: pointer;
-}
-
-.login-button:disabled,
-.submit-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.status-message {
-  padding: 0.85rem;
-  border-radius: 12px;
-  font-weight: 600;
-}
-
-.status-message.success {
-  background: color-mix(in srgb, var(--success) 15%, transparent);
-  color: var(--success);
-}
-
-.status-message.error {
-  background: color-mix(in srgb, var(--danger) 15%, transparent);
-  color: var(--danger);
-}
-
-@media (max-width: 720px) {
-  .auth-shell {
-    padding: 1.5rem;
-  }
-
-  .auth-visual {
-    min-height: 200px;
-  }
+@media (max-width: 479px) {
+  .auth-shell { place-items: start center; padding-top: var(--sp-5); }
+  .auth-card { padding: var(--sp-5) var(--sp-4); }
 }

@@ -101,8 +101,8 @@ describe("AccountDataPanel", () => {
     expect(await screen.findByRole("status")).toBeInTheDocument();
     expect(userDataService.importData).toHaveBeenCalledWith(payload);
     expect(mocks.refreshLibraries).toHaveBeenCalledOnce();
-    expect(screen.getByText("Novels added").nextElementSibling).toHaveTextContent("1");
-    expect(screen.getByText("Novels not imported").nextElementSibling).toHaveTextContent("1");
+    expect(screen.getByText("Stories added").nextElementSibling).toHaveTextContent("1");
+    expect(screen.getByText("Stories not imported").nextElementSibling).toHaveTextContent("1");
     expect(screen.getByText(/Not a supported source url/)).toBeInTheDocument();
     expect(screen.getByText(/Time loops/)).toBeInTheDocument();
   });

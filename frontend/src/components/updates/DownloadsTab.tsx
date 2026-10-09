@@ -380,7 +380,7 @@ const DownloadsTab: React.FC<DownloadsTabProps> = ({ jobs, setJobs }) => {
                     className="downloads-btn downloads-btn--view"
                     onClick={() => handleNovelClick(status.novel)}
                   >
-                    View Novel
+                    Open story
                   </button>
                 </div>
               </div>

@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import AuthLayout from "../components/auth/AuthLayout";
 import { authService } from "../services/authService";
 import { getUserFacingError } from "../services/apiClient";
-import "../styles/auth-styles.css";
+import { Banner, Button, Input } from "../components/ui";
 
 const ResetPasswordPage: React.FC = () => {
   const [params] = useSearchParams();
@@ -35,25 +35,19 @@ const ResetPasswordPage: React.FC = () => {
   return (
     <AuthLayout
       title="Choose a new password"
-      subtitle="Password reset"
+      description="Use at least 8 characters."
       footer={<p>Remembered it? <Link to="/login">Sign in</Link></p>}
     >
       {!token ? (
-        <p className="status-message error">This link is missing its reset code. Ask your administrator for a new link.</p>
+        <Banner tone="warning">This link is missing its reset code. Ask the person who runs this server for a new link.</Banner>
       ) : (
-        <form className="login-form" onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label htmlFor="new-password" className="form-label">New password:</label>
-            <input id="new-password" type="password" required minLength={8} autoComplete="new-password" className="form-input" value={password} onChange={(e) => setPassword(e.target.value)} />
-          </div>
-          <div className="form-group">
-            <label htmlFor="confirm-password" className="form-label">Repeat password:</label>
-            <input id="confirm-password" type="password" required minLength={8} autoComplete="new-password" className="form-input" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
-          </div>
-          <button type="submit" disabled={isSubmitting} className="login-button">
-            {isSubmitting ? "Saving..." : "Set password"}
-          </button>
-          {error && <p className="status-message error">{error}</p>}
+        <form className="auth-form" onSubmit={handleSubmit}>
+          <Input label="New password" type="password" required minLength={8} autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <Input label="Repeat password" type="password" required minLength={8} autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+          {error && <p className="auth-form__error" role="alert">{error}</p>}
+          <Button type="submit" variant="primary" size="lg" block loading={isSubmitting}>
+            Set password
+          </Button>
         </form>
       )}
     </AuthLayout>

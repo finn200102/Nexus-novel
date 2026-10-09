@@ -275,7 +275,7 @@ const Discover: React.FC = () => {
       addToast(`"${novel.title}" added to your library!`, "success");
     } catch (err) {
       console.error("Failed to add novel:", err);
-      addToast(getUserFacingError(err, "Failed to add novel to library"), "error");
+      addToast(getUserFacingError(err, "Could not add the story to your library."), "error");
     }
   };
 
@@ -288,7 +288,7 @@ const Discover: React.FC = () => {
       await discoveryService.addToLibrary(activeLibraryId, result.source_url);
       addToast(`"${result.title}" added to your library!`, "success");
     } catch (err) {
-      addToast(getUserFacingError(err, "Failed to add novel to library"), "error");
+      addToast(getUserFacingError(err, "Could not add the story to your library."), "error");
     }
   };
 
@@ -375,7 +375,7 @@ const Discover: React.FC = () => {
       {catalogStatus === "offline" && (
         <div className="discover-catalog-status discover-catalog-status--offline" role="status">
           <span className="discover-catalog-status__dot" aria-hidden="true" />
-          <span>Metadata catalog unavailable</span>
+          <span>The story catalog is offline</span>
         </div>
       )}
 
@@ -623,7 +623,7 @@ const Discover: React.FC = () => {
           <BookOpen size={32} aria-hidden="true" />
           {searchFromUrl || hasActiveFilters ? (
             <>
-              <h2>No matching novels</h2>
+              <h2>No matching stories</h2>
               <p>Try a broader search or clear your filters to see more of the Nexus catalog.</p>
               <button type="button" onClick={clearFilters}>Clear filters</button>
             </>
@@ -631,7 +631,7 @@ const Discover: React.FC = () => {
             <>
               <h2>Your catalog is ready for its first story</h2>
               <p>
-                The metadata server is connected, but it has no imported novels yet. Import a story URL or load a catalog export to start discovering.
+                The catalog has no stories yet. Add a story by link, or ask the person who runs this server to load a catalog.
               </p>
               <div className="discover-empty__actions">
                 <button type="button" onClick={() => openAddStory()}>

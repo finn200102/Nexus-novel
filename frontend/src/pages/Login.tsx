@@ -6,8 +6,8 @@ import AuthLayout from "../components/auth/AuthLayout";
 const LoginPage: React.FC = () => {
   return (
     <AuthLayout
-      title="Welcome back"
-      subtitle="Sign in to Nexus Novel"
+      title="Sign in"
+      description="Welcome back. Your library is waiting."
       footer={
         <p>
           New here? <Link to="/signup">Create an account</Link>
