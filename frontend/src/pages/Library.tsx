@@ -219,6 +219,7 @@ const LibraryPage: React.FC<LibraryPageProps> = ({ library_id }) => {
         ))}
       </div>
 
+      <h2 className="visually-hidden">Stories</h2>
       <NovelList
         library_id={library_id}
         searchTerm={searchTerm}

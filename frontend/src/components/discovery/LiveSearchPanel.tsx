@@ -87,7 +87,7 @@ export const LiveSearchPanel: React.FC<Props> = ({ onAdd }) => {
 
   return (
     <section className="live-search" aria-label="Search the sites">
-      <form className="live-search__form" role="search" onSubmit={submit}>
+      <form className="live-search__form" role="search" aria-label="Search the sites" onSubmit={submit}>
         <Input
           type="search"
           search

@@ -16,7 +16,7 @@ export function DiscoverSearchBar({ value, onChange, onSubmit, onClear }: Discov
     onSubmit();
   };
   return (
-    <form className="discover-search" role="search" onSubmit={submit}>
+    <form className="discover-search" role="search" aria-label="Search the catalog" onSubmit={submit}>
       <Input
         type="search"
         label="Search stories"

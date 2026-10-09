@@ -90,7 +90,7 @@ const Updates: React.FC<{ tab: UpdatesTab }> = ({ tab }) => {
       actions={<Button variant="ghost" size="sm" onClick={() => navigate("/settings/notifications")}>Notification settings</Button>}
     />
     <div className="visually-hidden" role="status" aria-live="polite">{announcement}</div>
-    {!activeLibrary && <EmptyState level={3} title="No library selected" description="Create or select a library to see updates." />}
+    {!activeLibrary && <EmptyState level={2} title="No library selected" description="Create or select a library to see updates." />}
     {activeLibrary && libraryId != null && <>
       <Tabs
         label="Updates sections"
