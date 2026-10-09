@@ -8,6 +8,7 @@ import { useSourceStatus } from "../hooks/useSourceStatus";
 import { downloadService } from "../services/downloadService";
 import { Button, CountBadge, EmptyState, PageHeader, Tabs, type TabItem } from "../components/ui";
 import UpdatesInbox from "../components/activity/UpdatesInbox";
+import NewWorksSection from "../components/follow/NewWorksSection";
 import DownloadsTab from "../components/updates/DownloadsTab";
 import ProblemsTab from "../components/updates/ProblemsTab";
 import type { DownloadJob } from "../types/activity";
@@ -98,6 +99,7 @@ const Updates: React.FC<{ tab: UpdatesTab }> = ({ tab }) => {
         onChange={(next) => navigate(TAB_PATHS[next])}
       />
       {tab === "new" && <UpdatesInbox libraryId={libraryId} onChanged={() => void unread.reload()} />}
+      {tab === "new" && <NewWorksSection />}
       {tab === "downloads" && <DownloadsTab jobs={jobs} setJobs={setJobs} />}
       {tab === "problems" && <ProblemsTab libraryId={libraryId} jobs={jobs} setJobs={setJobs} sources={sources.filter((status) => status.state !== "ok")} />}
     </>}

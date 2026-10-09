@@ -3,6 +3,8 @@ export interface DiscoveredNovel {
   title: string;
   author: string | null;
   author_id: number | null;
+  /** Catalog author id; opens /authors/:id. */
+  author_fk?: number | null;
   source_url: string;
   novel_site: string;
   img_url: string | null;

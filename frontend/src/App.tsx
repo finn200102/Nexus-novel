@@ -13,6 +13,8 @@ import Reader from "./pages/Reader";
 import Discover from "./pages/Discover";
 import Story, { LibraryStoryRedirect } from "./pages/Story";
 import Updates from "./pages/Updates";
+import AuthorPage from "./pages/AuthorPage";
+import FollowingPage from "./pages/FollowingPage";
 import Stats from "./pages/Stats";
 import Operations from "./pages/Operations";
 import ScrapeJobs from "./pages/ScrapeJobs";
@@ -69,6 +71,8 @@ export function AppRoutes() {
         <Route path="story/:metadataId/guide" element={<Titled title="AI story guide"><StoryGuide /></Titled>} />
         <Route path="story/:metadataId/guide/review" element={<Titled title="AI story guide review"><StoryGuideReview /></Titled>} />
         <Route path="library" element={<LibraryRoute />} />
+        <Route path="library/following" element={<FollowingPage />} />
+        <Route path="authors/:authorId" element={<AuthorPage />} />
         {/* Old library story URL: redirects to /story/:catalogId?copy=:novelId. */}
         <Route path="library/:libraryId/novels/:novelId" element={<LibraryStoryRedirect />} />
 
