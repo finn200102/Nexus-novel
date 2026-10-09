@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Copy, KeyRound, RefreshCw, ShieldCheck, ShieldOff, Ticket, Trash2, UserCheck, UserX } from "lucide-react";
+import { Dialog, Button } from "../components/ui";
 import { adminUserService, AdminUser, Invite } from "../services/adminUserService";
 import type { SignupMode } from "../services/authService";
 import { getUserFacingError } from "../services/apiClient";
@@ -108,8 +109,9 @@ const Users: React.FC = () => {
     }
   };
 
+  const [pendingDelete, setPendingDelete] = useState<AdminUser | null>(null);
   const deleteUser = (user: AdminUser) => {
-    if (!window.confirm(`Delete ${user.username} and all of their libraries, progress and history? This cannot be undone.`)) return;
+    setPendingDelete(null);
     void run(() => adminUserService.deleteUser(user.id), `${user.username} deleted`, "Could not delete the user");
   };
 
@@ -117,8 +119,7 @@ const Users: React.FC = () => {
     <div className="integrations-page">
       <header className="integrations-page__header">
         <div>
-          <p className="library-workspace__eyebrow">Administrator controls</p>
-          <h1>Users</h1>
+          <h2>Users &amp; invites</h2>
           <p>Decide who can sign up, hand out invites, and manage accounts.</p>
         </div>
         <button className="operations-refresh" onClick={() => void load()} disabled={loading}>
@@ -289,7 +290,7 @@ const Users: React.FC = () => {
                       <KeyRound size={14} /> Reset link
                     </button>
                     {!isMe && (
-                      <button className="operations-action operations-action--danger" onClick={() => deleteUser(user)}>
+                      <button className="operations-action operations-action--danger" onClick={() => setPendingDelete(user)}>
                         <Trash2 size={14} /> Delete
                       </button>
                     )}
@@ -300,6 +301,16 @@ const Users: React.FC = () => {
           </div>
         </article>
       </section>
+      <Dialog
+        open={pendingDelete !== null}
+        onClose={() => setPendingDelete(null)}
+        title={`Delete ${pendingDelete?.username ?? "this account"}?`}
+        description="This also deletes their libraries, reading progress and history. This can't be undone."
+        actions={<>
+          <Button variant="ghost" onClick={() => setPendingDelete(null)}>Keep account</Button>
+          <Button variant="danger" onClick={() => pendingDelete && deleteUser(pendingDelete)}>Delete account</Button>
+        </>}
+      />
     </div>
   );
 };

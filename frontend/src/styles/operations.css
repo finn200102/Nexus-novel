@@ -22,7 +22,8 @@
 .operations-action { border: 1px solid var(--accent); border-radius: 8px; background: var(--accent-fill); color: var(--on-accent); padding: 8px 10px; cursor: pointer; font-size: 12px; white-space: nowrap; }
 .operations-action:disabled { opacity: .55; cursor: not-allowed; }
 .operations-action--quiet { border-color: var(--accent); background: var(--accent-subtle); color: var(--accent); }
-.operations-action--danger { border-color: color-mix(in srgb, var(--danger) 45%, transparent); background: color-mix(in srgb, var(--danger) 35%, transparent); color: var(--danger); }
+.operations-action--danger { border-color: var(--danger); background: var(--danger-subtle); color: var(--danger); }
+.operations-alert { color: var(--text); }
 .operations-control-list { display: grid; gap: 8px; margin-top: 16px; }
 .operations-control-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border-radius: 9px; background: var(--accent-subtle); }
 .operations-control-row strong, .operations-control-row small { display: block; }

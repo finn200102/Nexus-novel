@@ -28,19 +28,19 @@ test.describe("catalog and operations resilience", () => {
     await page.goto("/scrape-jobs");
     await page.getByRole("button", { name: /preview results/i }).click();
     await expect(page.getByText(/timed out|could not preview|could not reach the service/i)).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Scrape Jobs" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Catalog jobs" })).toBeVisible();
     await page.getByRole("button", { name: /preview results/i }).click();
     await expect(page.getByText("A Fixture Story")).toBeVisible();
   });
 
   test("retains operations UI during metadata outage and supports retry/archive controls", async ({ signedInPage }) => {
     await signedInPage.goto("/operations");
-    await expect(signedInPage.getByRole("heading", { name: "Operations" })).toBeVisible();
+    await expect(signedInPage.getByRole("heading", { name: "Status", exact: true })).toBeVisible();
     await expect(signedInPage.getByText("Source timed out")).toBeVisible();
     await expect(signedInPage.getByRole("button", { name: "Retry" })).toBeVisible();
     await expect(signedInPage.getByText("fanfiction · degraded")).toBeVisible();
     await signedInPage.getByRole("button", { name: "History" }).click();
-    await expect(signedInPage.getByRole("heading", { name: "Archived metadata jobs" })).toBeVisible();
+    await expect(signedInPage.getByRole("heading", { name: "Archived catalog jobs" })).toBeVisible();
   });
 
   test("non-admin catalog API failure is shown as a permission error", async ({ page }) => {

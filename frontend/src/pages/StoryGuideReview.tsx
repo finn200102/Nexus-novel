@@ -53,7 +53,7 @@ const StoryGuideReview: React.FC = () => {
 
   return <div className="story-guide-page story-guide-review">
     <header className="novel-insights__panel story-guide-page__hero">
-      <div className="story-guide-page__hero-copy"><p className="novel-insights__eyebrow">Administrator editorial workbench</p><h1>Review Story Guide claims</h1><p className="novel-insights__notice">Approve, hide, or return AI-extracted claims to the suggestion queue. Every decision keeps its evidence and audit trail.</p></div>
+      <div className="story-guide-page__hero-copy"><p className="novel-insights__eyebrow">Admin review</p><h1>Review AI story guide claims</h1><p className="novel-insights__notice">Approve, hide, or return AI-extracted claims to the suggestion queue. Every decision keeps its evidence and audit trail.</p></div>
       <div className="story-guide-page__hero-actions"><button className="novel-insights__browse" type="button" onClick={() => void load()}>Refresh</button><Link className="novel-insights__browse" to={`/story-guide/${novelId}`}>Open reader guide</Link></div>
       <div className="story-guide-page__coverage"><div><span>Needs review</span><strong>{suggested.length}</strong></div><div><span>Reviewed</span><strong>{items.filter((item) => item.review_state === "approved").length}</strong></div><div><span>Hidden</span><strong>{items.filter((item) => item.review_state === "hidden").length}</strong></div><div><span>Audit events</span><strong>{history.length}</strong></div></div>
     </header>

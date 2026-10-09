@@ -111,3 +111,73 @@ test("story page keeps the old library and Discover URLs working", async ({ sign
   await expect(page).toHaveURL(/\/story\/5$/);
   await expect(page.getByRole("heading", { level: 1, name: "The Cartographer's Apprentice" })).toBeVisible();
 });
+
+// WP-D13 gate: every admin section (admin-only) is axe-clean with the same rule set, in both themes, at both widths.
+const ADMIN_PAGES = ["/admin/status", "/admin/jobs", "/admin/users", "/admin/duplicates"];
+
+for (const theme of ["light", "dark"] as const) {
+  for (const [size, viewport] of Object.entries(SIZES)) {
+    test(`admin sections are axe-clean (${theme}, ${size})`, async ({ signedInPage: page }) => {
+      await page.setViewportSize(viewport);
+      await page.evaluate((value) => localStorage.setItem("nexus-theme", value), theme);
+      for (const path of ADMIN_PAGES) {
+        await page.goto(path);
+        await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+        await expect(page.getByRole("navigation", { name: "Admin sections" })).toBeVisible();
+        await expect(page.getByRole("heading", { level: 1, name: "Admin" })).toBeVisible();
+        await page.waitForTimeout(500);
+        const result = await new AxeBuilder({ page }).withTags(TAGS).analyze();
+        const blocking = result.violations
+          .filter((v) => v.impact === "serious" || v.impact === "critical")
+          .map((v) => `${path} ${v.id}: ${v.nodes.map((n) => n.target.join(" ")).slice(0, 3).join(", ")}`);
+        expect(blocking, blocking.join("\n")).toEqual([]);
+      }
+    });
+  }
+}
+
+// WP-D12 gate: every settings section has no serious/critical axe violations, in both themes,
+// at desktop and phone width; old settings URLs redirect to their section.
+const SETTINGS_PAGES = [
+  "/settings/account",
+  "/settings/appearance",
+  "/settings/notifications",
+  "/settings/ereaders",
+  "/settings/hidden",
+  "/settings/data",
+];
+for (const theme of ["light", "dark"] as const) {
+  for (const [size, viewport] of Object.entries(SIZES)) {
+    test(`settings sections are axe-clean (${theme}, ${size})`, async ({ signedInPage: page }) => {
+      await page.setViewportSize(viewport);
+      await page.evaluate((value) => localStorage.setItem("nexus-theme", value), theme);
+      for (const path of SETTINGS_PAGES) {
+        await page.goto(path);
+        await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+        await page.waitForTimeout(500);
+        const result = await new AxeBuilder({ page }).withTags(TAGS).analyze();
+        const blocking = result.violations
+          .filter((v) => v.impact === "serious" || v.impact === "critical")
+          .map((v) => `${path} ${v.id}: ${v.nodes.map((n) => n.target.join(" ")).slice(0, 3).join(", ")}`);
+        expect(blocking, blocking.join("\n")).toEqual([]);
+      }
+      await page.goto("/settings");
+      await page.waitForTimeout(500);
+      const index = await new AxeBuilder({ page }).withTags(TAGS).analyze();
+      const indexBlocking = index.violations.filter((v) => v.impact === "serious" || v.impact === "critical").map((v) => `/settings ${v.id}`);
+      expect(indexBlocking, indexBlocking.join("\n")).toEqual([]);
+    });
+  }
+}
+
+test("old settings URLs redirect to their section", async ({ signedInPage: page }) => {
+  await page.setViewportSize(SIZES.desktop);
+  for (const [from, to] of [
+    ["/account", /\/settings\/account$/],
+    ["/notifications", /\/settings\/notifications$/],
+    ["/hidden-content", /\/settings\/hidden$/],
+  ] as const) {
+    await page.goto(from);
+    await expect(page).toHaveURL(to);
+  }
+});

@@ -20,10 +20,15 @@ import Integrations from "./pages/Integrations";
 import StoryGuide from "./pages/StoryGuide";
 import StoryGuideReview from "./pages/StoryGuideReview";
 import Users from "./pages/Users";
-import Account from "./pages/Account";
+import { AdminLayout } from "./pages/admin/AdminLayout";
 import ResetPassword from "./pages/ResetPassword";
-import NotificationSettings from "./pages/NotificationSettings";
-import HiddenContent from "./pages/HiddenContent";
+import SettingsLayout, { SettingsIndex } from "./pages/settings/SettingsLayout";
+import SettingsAccount from "./pages/settings/Account";
+import SettingsAppearance from "./pages/settings/Appearance";
+import SettingsNotifications from "./pages/settings/Notifications";
+import SettingsEReaders from "./pages/settings/EReaders";
+import SettingsHidden from "./pages/settings/Hidden";
+import SettingsData from "./pages/settings/Data";
 import More from "./pages/More";
 import NotFound from "./pages/NotFound";
 import { useAuth } from "./context/AuthContext";
@@ -40,17 +45,6 @@ const Titled = ({ title, children }: { title: string; children: ReactNode }) => 
   return <>{children}</>;
 };
 
-const SETTINGS_LINKS = [
-  { label: "Account", to: "/settings/account" },
-  { label: "Notifications", to: "/settings/notifications" },
-  { label: "Hidden content", to: "/settings/hidden" },
-];
-const ADMIN_LINKS = [
-  { label: "Status", to: "/admin/status" },
-  { label: "Catalog jobs", to: "/admin/jobs" },
-  { label: "Users", to: "/admin/users" },
-  { label: "Duplicates and webhooks", to: "/admin/duplicates" },
-];
 
 // Dev-only component gallery (/dev/ui); tree-shaken from production builds.
 const UiGallery = import.meta.env.DEV ? lazy(() => import("./pages/dev/UiGallery")) : null;
@@ -86,20 +80,22 @@ export function AppRoutes() {
         <Route path="activity" element={<Navigate replace to="/updates" />} />
         <Route path="downloads" element={<Navigate replace to="/updates/downloads" />} />
 
-        <Route path="settings" element={<SectionLayout label="Settings sections" links={SETTINGS_LINKS} />}>
-          <Route index element={<Navigate replace to="account" />} />
-          <Route path="account" element={<Titled title="Account"><Account /></Titled>} />
-          <Route path="notifications" element={<Titled title="Notifications"><NotificationSettings /></Titled>} />
-          <Route path="hidden" element={<Titled title="Hidden content"><HiddenContent /></Titled>} />
-          {/* appearance, reading, devices, data: split out of Account in D12. */}
+        <Route path="settings" element={<SettingsLayout />}>
+          <Route index element={<SettingsIndex />} />
+          <Route path="account" element={<SettingsAccount />} />
+          <Route path="appearance" element={<SettingsAppearance />} />
+          <Route path="notifications" element={<SettingsNotifications />} />
+          <Route path="ereaders" element={<SettingsEReaders />} />
+          <Route path="hidden" element={<SettingsHidden />} />
+          <Route path="data" element={<SettingsData />} />
           <Route path="*" element={<Navigate replace to="/settings/account" />} />
         </Route>
 
-        <Route path="admin" element={<SectionLayout label="Admin sections" links={ADMIN_LINKS} />}>
+        <Route path="admin" element={<AdminLayout />}>
           <Route index element={<Navigate replace to="status" />} />
           <Route path="status" element={<Titled title="Status"><Operations /></Titled>} />
           <Route path="jobs" element={<Titled title="Catalog jobs"><ScrapeJobs /></Titled>} />
-          <Route path="users" element={<Titled title="Users"><Users /></Titled>} />
+          <Route path="users" element={<Titled title="Users & invites"><Users /></Titled>} />
           <Route path="duplicates" element={<Titled title="Duplicates and webhooks"><Integrations /></Titled>} />
           <Route path="webhooks" element={<Titled title="Duplicates and webhooks"><Integrations /></Titled>} />
         </Route>

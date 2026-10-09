@@ -11,12 +11,12 @@ test.describe("Nexus smoke workflows", () => {
     await signedInPage.route("**/api/operations/summary**", (route) => route.abort("timedout"));
     await signedInPage.goto("/operations");
     await expect(signedInPage).toHaveURL(/\/admin\/status/);
-    await expect(signedInPage.getByRole("heading", { name: "Operations" })).toBeVisible();
+    await expect(signedInPage.getByRole("heading", { name: "Status", exact: true })).toBeVisible();
   });
 
   test("catalog page renders capability-driven controls", async ({ signedInPage }) => {
     await signedInPage.goto("/scrape-jobs");
-    await expect(signedInPage.getByRole("heading", { name: "Scrape Jobs" })).toBeVisible();
+    await expect(signedInPage.getByRole("heading", { name: "Catalog jobs" })).toBeVisible();
     await expect(signedInPage.getByRole("button", { name: /custom url list/i })).toBeVisible();
     await expect(signedInPage.getByRole("button", { name: /^crossover$/i })).toBeVisible();
   });

@@ -48,7 +48,7 @@ const Integrations: React.FC = () => {
   };
 
   return <div className="integrations-page">
-    <header className="integrations-page__header"><div><p className="library-workspace__eyebrow">Administrator controls</p><h1>Trust & integrations</h1><p>Review uncertain identity matches and manage signed, durable external event deliveries.</p></div><button className="operations-refresh" onClick={() => void load()} disabled={loading}><RefreshCw size={16} className={loading ? "is-spinning" : ""} /> Refresh</button></header>
+    <header className="integrations-page__header"><div><h2>Duplicates and webhooks</h2><p>Check possible duplicate stories and manage webhooks that send events to other apps.</p></div><button className="operations-refresh" onClick={() => void load()} disabled={loading}><RefreshCw size={16} className={loading ? "is-spinning" : ""} /> Refresh</button></header>
     {error && <div className="integrations-alert"><ShieldCheck size={18} /> {error}</div>}
     <section className="integrations-grid">
       <article className="integrations-panel"><header><div><h2>Merge review</h2><p>Nothing merges silently. Each decision is auditable and reversible.</p></div><span>{reviews.length} open</span></header>
