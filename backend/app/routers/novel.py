@@ -457,6 +457,34 @@ def scrape_novel_background(
         db.close()
 
 
+def scrape_within_limits(
+    novel_id: int,
+    metadata_id: int,
+    db_session_factory,
+    loop: asyncio.AbstractEventLoop | None,
+    user_id: int,
+    scrape=None,
+):
+    """Scrape a story added by link, then drop it again when it is outside the
+    content limits of the profile that added it (household profiles)."""
+    (scrape or scrape_novel_background)(novel_id, metadata_id, db_session_factory, loop)
+    db = db_session_factory()
+    try:
+        user = db.get(User, user_id)
+        novel = db.get(Novel, novel_id)
+        if user is None or novel is None or not content_limit_service.is_limited(user):
+            return
+        if novel.scrape_status != "completed":
+            return
+        allowed = _run_metadata_call(content_limit_service.story_allowed(user, novel.metadata_id), loop)
+        if not allowed:
+            logger.info("Story outside content limits removed", novel_id=novel_id, user_id=user_id)
+            db.delete(novel)
+            db.commit()
+    finally:
+        db.close()
+
+
 SUPPORTED_HOSTS = frozenset({
     "www.royalroad.com",
     "forums.spacebattles.com",
@@ -579,6 +607,17 @@ async def add_novel(
             detail="Failed to add novel: No metadata ID returned",
         )
 
+    if content_limit_service.is_limited(current_user):
+        # A story the catalog already knows is checked now; a new one once its
+        # metadata scrape finishes (see scrape_within_limits).
+        try:
+            known = await metadata_client.get_novel_metadata(int(metadata_id)) or {}
+        except Exception:  # pylint: disable=broad-except
+            known = {}
+        scraped = isinstance(known, dict) and known.get("status") != "scraping" and known.get("title") not in (None, "", "Scraping...")
+        if scraped and not content_limit_service.item_allowed(current_user, known):
+            raise content_limit_service.restricted()
+
     title = clean_title(None, novel.url) or "New Novel"
 
     novel_data = {
@@ -595,11 +634,12 @@ async def add_novel(
     from config.database import SessionLocal
 
     background_tasks.add_task(
-        scrape_novel_background,
+        scrape_within_limits,
         int(novel_obj.id),
         metadata_id,
         SessionLocal,
         asyncio.get_running_loop(),
+        int(current_user.id),
     )
 
     return novel_obj

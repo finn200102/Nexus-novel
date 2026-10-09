@@ -276,3 +276,33 @@ def test_import_results_skip_stories_beyond_limits(client, db, test_user, test_l
     assert sorted(item["status"] for item in report["items"]) == ["linked", "restricted"]
     db.expire_all()
     assert [novel.metadata_id for novel in db.query(Novel).filter(Novel.library_id == test_library.id)] == [1001]
+
+
+def test_add_by_link_refuses_known_story_beyond_limits(client, db, test_user, test_library, auth_headers, monkeypatch):
+    test_user.max_content_rating = "teen"
+    db.commit()
+    monkeypatch.setattr("app.services.metadata_client.scrape_novel_by_url",
+                        AsyncMock(return_value={"success": True, "novel_id": 2, "message": "exists"}))
+    with _patch_metadata():
+        response = client.post("/novel/", json={"library_id": test_library.id, "url": "https://www.royalroad.com/fiction/2/grim"},
+                               headers=auth_headers)
+    assert response.status_code == 403
+    assert db.query(Novel).filter(Novel.library_id == test_library.id).count() == 0
+
+
+def test_add_by_link_drops_new_story_beyond_limits_after_scrape(db, test_user, test_library):
+    from app.routers.novel import scrape_within_limits
+
+    test_user.max_content_rating = "teen"
+    db.commit()
+    kept = Novel(title="New", url="https://www.royalroad.com/fiction/1001/a", library_id=test_library.id, novel_site="royalroad",
+                 metadata_id=1001, scrape_status="pending")
+    dropped = Novel(title="New", url="https://www.royalroad.com/fiction/1002/b", library_id=test_library.id, novel_site="royalroad",
+                    metadata_id=1002, scrape_status="pending")
+    db.add_all([kept, dropped])
+    db.commit()
+    with _patch_metadata():
+        for novel in (kept, dropped):
+            scrape_within_limits(novel.id, novel.metadata_id, TestingSessionLocal, None, test_user.id, scrape=FakeScrape())
+    db.expire_all()
+    assert [novel.metadata_id for novel in db.query(Novel).filter(Novel.library_id == test_library.id)] == [1001]
