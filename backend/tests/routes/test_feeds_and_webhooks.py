@@ -183,11 +183,22 @@ def test_webhooks_belong_to_their_owner(client, auth_headers, db, test_user):
 def posts(monkeypatch):
     calls = SimpleNamespace(items=[], status=200)
 
-    def fake_post(url, content, headers, timeout, follow_redirects):
-        calls.items.append(SimpleNamespace(url=url, body=content, headers=headers, timeout=timeout, redirects=follow_redirects))
-        return SimpleNamespace(status_code=calls.status)
+    class FakeClient:
+        def __init__(self, transport, timeout, follow_redirects):
+            self.timeout, self.redirects, self.transport = timeout, follow_redirects, transport
 
-    monkeypatch.setattr(webhook_delivery.httpx, "post", fake_post)
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def post(self, url, content, headers):
+            calls.items.append(SimpleNamespace(url=url, body=content, headers=headers, timeout=self.timeout,
+                                               redirects=self.redirects, transport=self.transport))
+            return SimpleNamespace(status_code=calls.status)
+
+    monkeypatch.setattr(webhook_delivery.httpx, "Client", FakeClient)
     return calls
 
 
@@ -288,3 +299,19 @@ def test_test_send_reports_the_result(client, auth_headers, db, test_user, posts
     assert result.status_code == 200
     assert result.json() == {"ok": True, "status_code": 200, "error": None}
     assert json.loads(posts.items[0].body)["event"] == "test"
+
+
+def test_delivery_checks_the_address_it_connects_to(db, test_user, monkeypatch):
+    """DNS rebinding: the name resolves to a public address when checked, then to loopback."""
+    import socket
+
+    monkeypatch.setattr(settings, "NOTIFY_ALLOW_PRIVATE_HOSTS", False)
+    answers = iter(["93.184.216.34", "127.0.0.1", "127.0.0.1"])
+
+    def fake_getaddrinfo(host, port, *args, **kwargs):
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (next(answers), port or 0))]
+
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+    hook = make_hook(db, test_user, url="http://rebind.example/hook")
+    status_code, error = webhook_delivery.post_webhook(hook, {"event": "test"})
+    assert status_code is None and "not a public" in error

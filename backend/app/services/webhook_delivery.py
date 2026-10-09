@@ -26,7 +26,7 @@ from app.models.novel import Novel
 from app.models.update_event import NovelUpdateEvent
 from app.models.webhook import Webhook, WebhookDelivery
 from app.services.notification_crypto import decrypt_url
-from app.services.outbound_url import BlockedDestination, check_public_url
+from app.services.outbound_url import BlockedDestination, check_public_url, public_http_transport
 
 logger = logging.getLogger(__name__)
 
@@ -74,13 +74,8 @@ def post_webhook(hook: Webhook, payload: dict) -> tuple[int | None, str | None]:
     body = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
     try:
         check_public_url(url)
-        response = httpx.post(
-            url,
-            content=body,
-            headers=sign(body, secret),
-            timeout=WEBHOOK_TIMEOUT_SECONDS,
-            follow_redirects=False,
-        )
+        with httpx.Client(transport=public_http_transport(), timeout=WEBHOOK_TIMEOUT_SECONDS, follow_redirects=False) as client:
+            response = client.post(url, content=body, headers=sign(body, secret))
     except BlockedDestination as exc:
         return None, str(exc)[:255]
     except httpx.HTTPError as exc:
