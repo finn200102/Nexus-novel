@@ -2,7 +2,6 @@ import { lazy, Suspense, type ReactNode } from "react";
 import { BrowserRouter as Router, Navigate, Route, Routes } from "react-router-dom";
 import Layout from "./components/layout/Layout";
 import ReaderLayout from "./components/layout/ReaderLayout";
-import { SectionLayout } from "./components/layout/SectionLayout";
 import { LEGACY_REDIRECTS } from "./routes/legacyRedirects";
 import { LegacyRedirect } from "./routes/LegacyRedirect";
 import { usePageTitle } from "./hooks/usePageTitle";
