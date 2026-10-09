@@ -124,7 +124,24 @@ def unread_story_count(db: Session, *, user_id: int, library_id: int) -> int:
     Bell badge, Home "New chapters", Activity inbox and the operations summary
     all use this so they can never disagree.
     """
-    return len(inbox(db, user_id=user_id, library_id=library_id))
+    return len(inbox(db, user_id=user_id, library_id=library_id)) + len(_unread_new_work_keys(db, user_id))
+
+
+def _unread_new_work_keys(db: Session, user_id: int) -> set[str]:
+    """One key per unread author/series new-work event, so a work counts once.
+
+    New-work events have no novel (they are not tied to a library), so they sit
+    outside the inbox groups. Events without a work_key count on their own.
+    """
+    from app.services.creator_follow_service import NEW_WORK_EVENTS
+
+    rows = db.query(NovelUpdateEvent.id, NovelUpdateEvent.details).filter(
+        NovelUpdateEvent.user_id == user_id,
+        NovelUpdateEvent.event_type.in_(NEW_WORK_EVENTS),
+        NovelUpdateEvent.read_at.is_(None),
+        NovelUpdateEvent.notification_visible.is_(True),
+    ).all()
+    return {str((details or {}).get("work_key") or f"event:{event_id}") for event_id, details in rows}
 
 
 def mark_novel_read(db: Session, user_id: int, novel_id: int) -> int:

@@ -319,3 +319,25 @@ def test_inbox_count_endpoint_and_operations_match_inbox_rows(client, db, test_u
     assert len(rows) == 2
     assert count == {"count": 2}
     assert summary["unread_updates"] == 2
+
+
+def test_unread_story_count_includes_new_work_events_once_per_work(db, test_user, test_library):
+    from app.services.activity_service import unread_story_count
+
+    def new_work(work_key, *, read=False):
+        db.add(NovelUpdateEvent(
+            user_id=test_user.id,
+            novel_id=None,
+            event_type="author_new_work",
+            message="New work",
+            details={"work_key": work_key, "title": work_key, "url": f"https://example.test/{work_key}"},
+            notification_visible=True,
+            read_at=datetime.now(UTC) if read else None,
+        ))
+
+    new_work("royalroad:1")
+    new_work("royalroad:1")
+    new_work("sufficientvelocity:2")
+    new_work("royalroad:3", read=True)
+    db.commit()
+    assert unread_story_count(db, user_id=test_user.id, library_id=test_library.id) == 2
