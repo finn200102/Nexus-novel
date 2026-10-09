@@ -15,6 +15,7 @@ import ReaderEndOfChapter from "../components/reader/ReaderEndOfChapter";
 import ChapterSourceLink from "../components/reader/ChapterSourceLink";
 import ReaderSettingsControl from "../components/reader/ReaderSettingsSheet";
 import ListenPlayer from "../components/reader/ListenPlayer";
+import PreviouslyOn from "../components/reader/PreviouslyOn";
 import { AnnotationsSheet, NoteDialog, ReadingAnnotation, RecapData, RecapSheet, ShortcutsDialog } from "../components/reader/ReaderPanels";
 import {
   AuthorNotesMode,
@@ -519,6 +520,7 @@ const Reader: React.FC = () => {
           {error && <Banner tone="warning">{error}</Banner>}
           {showLabel && <p className="reader__chapter-label">{label}</p>}
           <h1 id="reader-chapter-title" tabIndex={-1}>{heading}</h1>
+          <PreviouslyOn novelId={novel_id} progress={progress} chapter={chapter} />
           <ChapterBody content={chapter.content} authorNotes={authorNotes} />
           <ReaderEndOfChapter
             chapterNumber={chapter.chapter_number}

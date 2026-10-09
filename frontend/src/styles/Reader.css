@@ -378,3 +378,14 @@
 .reader-state[data-reader-theme] { background: var(--reader-bg); color: var(--reader-text); }
 .reader-state h1 { margin: 0; font-size: var(--fs-xl); }
 .reader-state p { max-width: 40ch; margin: 0; color: var(--reader-muted); }
+
+/* ---------- Previously on (return recap) ---------- */
+.previously-on { margin: 0 0 var(--sp-5); padding: var(--sp-4); border: 1px solid var(--border); border-radius: 12px; }
+.previously-on__head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
+.previously-on h2 { margin: 0; font-size: var(--fs-md); font-weight: 600; }
+.previously-on h2:focus { outline: 2px solid var(--accent, currentColor); outline-offset: 2px; }
+.previously-on__close { background: none; border: 0; font-size: var(--fs-lg); line-height: 1; cursor: pointer; color: inherit; padding: 0 var(--sp-1); }
+.previously-on p, .previously-on ul { margin: var(--sp-2) 0 0; font-size: var(--fs-sm); line-height: var(--lh-md); }
+.previously-on__excerpt { color: var(--text-muted, inherit); font-style: italic; }
+.previously-on__foot { margin-top: var(--sp-3); }
+.previously-on__link { background: none; border: 0; padding: 0; font: inherit; font-size: var(--fs-sm); text-decoration: underline; cursor: pointer; color: inherit; }
