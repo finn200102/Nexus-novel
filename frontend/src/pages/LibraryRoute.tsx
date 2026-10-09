@@ -28,6 +28,9 @@ export default function LibraryRoute() {
 
   useEffect(() => {
     if (!params.has("library") && !wantsAdd) return;
+    // On a fresh page load the libraries are still loading: keep ?add=1 until
+    // there is a library to add to, otherwise the sheet never opens.
+    if (wantsAdd && libraryId == null) return;
     if (Number.isInteger(requested) && requested > 0 && requested !== activeLibraryId) selectLibrary(requested);
     if (wantsAdd && libraryId != null) {
       openAddStory({ libraryId, url: handoff ?? undefined });

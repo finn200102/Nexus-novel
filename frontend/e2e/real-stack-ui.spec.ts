@@ -26,7 +26,7 @@ test.describe("Nexus real-stack 1.0 UI", () => {
   test.skip(!realStack, "Set NEXUS_E2E_MODE=real to run against the configured API.");
   test.setTimeout(180_000);
 
-  test("discover, import, novel page, reader, inbox and account", async ({ page }) => {
+  test("discover, import, story page, reader, updates and settings", async ({ page }) => {
     test.skip(!username || !password || !readerPath, "Needs NEXUS_E2E_USER, NEXUS_E2E_PASSWORD and NEXUS_E2E_READER_PATH.");
     const errors = watchConsole(page);
     const [, libraryId, novelId] = readerPath!.match(/^\/library\/(\d+)\/novels\/(\d+)\/\d+$/) ?? [];
@@ -51,12 +51,16 @@ test.describe("Nexus real-stack 1.0 UI", () => {
     await live.getByRole("button", { name: "Search", exact: true }).click();
     await expect(live.getByText(/\d+ results · page 1/)).toBeVisible({ timeout: 60_000 });
 
-    // Bulk import of a pasted Royal Road URL.
-    await page.getByRole("tab", { name: "Bulk import" }).click();
-    const importForm = page.getByRole("region", { name: "Import stories" });
-    await importForm.getByLabel("Links to import").fill(importUrl);
+    // Bulk import of a pasted Royal Road URL (Library → Add story → Import).
+    await page.goto("/library");
+    await page.getByRole("button", { name: "Add story" }).click();
+    const addSheet = page.getByRole("dialog", { name: "Add story" });
+    await addSheet.getByRole("tab", { name: "Import" }).click();
+    const importForm = addSheet.getByRole("region", { name: "Import stories" });
+    await importForm.getByLabel("Links or page text").fill(importUrl);
     await importForm.getByRole("button", { name: "Start import" }).click();
-    await expect(page.getByRole("list", { name: "Recent imports" })).toBeVisible({ timeout: 30_000 });
+    await expect(importForm.getByRole("region", { name: "Recent imports" })).toBeVisible({ timeout: 30_000 });
+    await page.keyboard.press("Escape");
 
     // Story page (old library URL redirects to /story/:id): notes, shelves, offline control.
     await page.goto(`/library/${libraryId}/novels/${novelId}`);
@@ -68,31 +72,39 @@ test.describe("Nexus real-stack 1.0 UI", () => {
     await page.getByRole("tab", { name: "Chapters" }).click();
     await expect(page.getByRole("button", { name: "Save next 10 offline" })).toBeVisible();
 
-    // Reader: chapter drawer, paged mode, author's notes setting.
+    // Reader: chapter drawer, paged mode, author's notes setting (Text settings sheet).
     await page.goto(readerPath!);
-    await expect(page.locator(".reader-content, article").first()).toBeVisible();
-    await page.getByRole("button", { name: "Chapters", exact: true }).first().click();
-    await expect(page.getByRole("dialog", { name: "Chapter list" })).toBeVisible();
-    await page.getByRole("button", { name: "Close chapter list" }).click();
-    const settings = page.getByRole("complementary", { name: "Reader settings and notes" });
-    await settings.getByLabel("Reading mode").selectOption("paged");
-    await expect(page.getByText(/^page \d+ \/ \d+$/)).toBeVisible();
-    await settings.getByLabel("Reading mode").selectOption("scroll");
-    await settings.getByLabel("Author's notes").selectOption("shown");
-    await expect(settings.getByLabel("Author's notes")).toHaveValue("shown");
-    await settings.getByLabel("Author's notes").selectOption("collapsed");
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await page.getByRole("button", { name: "Chapters", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "Chapters" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Text settings" }).click();
+    const settings = page.getByRole("dialog", { name: "Text settings" });
+    await settings.getByRole("radiogroup", { name: "Reading mode" }).getByRole("radio", { name: "Pages" }).click();
+    await expect(page.getByText(/^Page \d+ of \d+/)).toBeVisible();
+    await settings.getByRole("radiogroup", { name: "Reading mode" }).getByRole("radio", { name: "Scroll" }).click();
+    const notes = settings.getByRole("radiogroup", { name: "Author’s notes" });
+    await notes.getByRole("radio", { name: "Show" }).click();
+    await expect(notes.getByRole("radio", { name: "Show" })).toHaveAttribute("aria-checked", "true");
+    await notes.getByRole("radio", { name: "Collapse" }).click();
+    await page.keyboard.press("Escape");
 
-    // Activity inbox.
+    // Updates (old /activity redirects): New chapters, Downloads, Problems.
     await page.goto("/activity");
-    await expect(page.getByRole("heading", { name: "Updates & activity" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
+    await expect(page).toHaveURL(/\/updates/);
+    await expect(page.getByRole("heading", { name: "Updates", level: 1 })).toBeVisible();
+    await expect(page.getByRole("tab", { name: /New chapters/ })).toBeVisible();
+    await page.getByRole("tab", { name: "Downloads" }).click();
 
-    // Account: e-reader app password (created and revoked), notifications, hidden content.
+    // Settings (old /account redirects): e-reader app password created and revoked.
     await page.goto("/account");
-    await expect(page.getByRole("heading", { name: "E-readers" })).toBeVisible();
+    await expect(page).toHaveURL(/\/settings\/account/);
+    await page.goto("/settings/ereaders");
+    await expect(page.getByRole("heading", { name: "E-readers", level: 1 })).toBeVisible();
     const device = `e2e-${Date.now()}`;
-    await page.getByLabel("Device name").fill(device);
-    await page.getByRole("button", { name: "Create app password" }).click();
+    const appPasswordForm = page.locator("form", { has: page.getByRole("button", { name: "Create app password" }) });
+    await appPasswordForm.getByLabel("Device name").fill(device);
+    await appPasswordForm.getByRole("button", { name: "Create app password" }).click();
     await expect(page.getByText("It is shown only once", { exact: false })).toBeVisible();
     const row = page.getByRole("listitem").filter({ hasText: device });
     await row.getByRole("button", { name: "Revoke" }).click();

@@ -27,8 +27,9 @@ test.describe("Nexus real-stack smoke", () => {
     // must restore the session.
     await page.reload();
     await expect(page).not.toHaveURL(/\/login(?:$|\?)/);
-    await page.getByRole("button", { name: "My library" }).click();
-    await expect(page).toHaveURL(/\/library\/\d+/);
+    await page.getByRole("navigation").first().getByRole("link", { name: "Library", exact: true }).click();
+    await expect(page).toHaveURL(/\/library(?:$|\?)/);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     expect(apiFailures, apiFailures.join("\n")).toEqual([]);
   });
 });

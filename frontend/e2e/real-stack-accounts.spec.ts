@@ -61,7 +61,9 @@ test.describe("Nexus real-stack accounts", () => {
       expect(refreshCookie?.httpOnly).toBe(true);
       expect(refreshCookie?.sameSite).toBe("Strict");
       expect(await invited.evaluate(() => JSON.stringify({ ...window.localStorage }))).not.toContain("eyJ");
-      await invited.getByRole("button", { name: "Sign out" }).click();
+      // Sign out lives in the profile menu since the redesign.
+      await invited.getByRole("button", { name: /Settings, theme, sign out/ }).click();
+      await invited.getByRole("button", { name: "Sign out", exact: true }).click();
       await expect(invited).toHaveURL(/\/login/);
       const anonymous = await playwrightRequest.newContext({ baseURL: test.info().project.use.baseURL });
       const replay = await anonymous.post(api("/auth/refresh"), { headers: { Cookie: `nexus_refresh=${refreshCookie!.value}` } });
