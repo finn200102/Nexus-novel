@@ -38,6 +38,7 @@ const SITE_LABELS: Record<string, string> = {
   ao3: "Archive of Our Own",
   webnovel: "WebNovel",
   sufficientvelocity: "Sufficient Velocity",
+  webserial: "Web serial",
   questionablequesting: "Questionable Questing",
   scribblehub: "Scribble Hub",
 };

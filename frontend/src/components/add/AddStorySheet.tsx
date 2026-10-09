@@ -5,6 +5,7 @@ import { useLibraryContext } from "../../context/useLibraryContext";
 import { useToast } from "../../context/useToast";
 import { novelService } from "../../services/novelService";
 import { ImportJobsPanel } from "./ImportJobsPanel";
+import { WebSerialNote } from "./WebSerialNote";
 import { notifyStoryAdded, parseLinks, type OpenAddStoryDetail } from "./addStoryEvents";
 import "../../styles/add-story.css";
 
@@ -124,6 +125,7 @@ export function AddStorySheet({ open, onClose, request }: AddStorySheetProps) {
                     onChange={(event) => setLinks(event.target.value)}
                     disabled={busy}
                   />
+                  <WebSerialNote links={links} />
                 </form>
               ),
             },
