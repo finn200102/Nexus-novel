@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 class AppPasswordCreate(BaseModel):
     label: str = Field(default="", max_length=120)
-    scope: Literal["opds", "kosync"]
+    scope: Literal["opds", "kosync", "extension"]
 
 
 class AppPasswordItem(BaseModel):

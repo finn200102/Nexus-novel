@@ -1,4 +1,4 @@
-"""App passwords for e-readers (OPDS downloads and KOReader sync).
+"""App passwords for e-readers (OPDS downloads and KOReader sync) and the browser extension.
 
 An app password is a random string shown once. The database keeps
 ``bcrypt(md5(app password))``. OPDS clients send the app password in HTTP Basic
@@ -22,7 +22,7 @@ from app.models.ereader import AppPassword
 from app.models.user import User
 from app.services.user_services import get_user_by_username
 
-SCOPES = ("opds", "kosync")
+SCOPES = ("opds", "kosync", "extension")
 MD5_HEX = re.compile(r"^[0-9a-f]{32}$")
 MAX_PER_USER = 25
 
@@ -96,6 +96,11 @@ def _authenticate(db: Session, request: Request, username: str, scope: str, key_
 def authenticate_basic(db: Session, request: Request, username: str, app_password: str) -> User:
     """OPDS: HTTP Basic credentials, with the app password as the password."""
     return _authenticate(db, request, username, "opds", _md5_hex(app_password))
+
+
+def authenticate_extension(db: Session, request: Request, username: str, app_password: str) -> User:
+    """Browser extension (/ext): HTTP Basic with an app password of scope ``extension``."""
+    return _authenticate(db, request, username, "extension", _md5_hex(app_password))
 
 
 def authenticate_kosync(db: Session, request: Request, username: str, key: str) -> User:

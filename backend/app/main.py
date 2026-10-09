@@ -9,6 +9,7 @@ from uuid import uuid4
 from app import models  # noqa: F401  (registers every mapper before the first request)
 from config.database import engine
 from config.settings import settings
+from app.routers import ext
 from app.routers import auth, novel, library, chapter, discovery, follow, download, activity, operations, catalog_scrape, audio, saved_search, recommendations, admin_integrations, admin_users, notifications
 from app.routers import user_data, imports
 from app.routers import app_passwords, kosync, opds, personal_feed, reading_stats, source_status, stories, webhooks
@@ -58,6 +59,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# Added after CORSMiddleware so it is the outer layer: /ext/* answers extension origins itself.
+app.add_middleware(ext.ExtensionCorsMiddleware)
 
 app.include_router(auth.router)
 app.include_router(novel.router)
@@ -90,6 +93,7 @@ app.include_router(personal_feed.router)
 app.include_router(reading_stats.router)
 app.include_router(creator_follows.router)
 app.include_router(highlights_export.router)
+app.include_router(ext.router)
 
 
 @app.middleware("http")
