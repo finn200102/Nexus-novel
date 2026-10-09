@@ -1,14 +1,17 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { getUserFacingError } from "../../services/apiClient";
 import { ImportJob, liveSearchService } from "../../services/liveSearchService";
+import { calibreService } from "../../services/calibreService";
 import { Badge, Button, Input, Select, TextArea } from "../ui";
+import { CalibreFileField } from "./CalibreFileField";
 
-type Source = "url_list" | "rr_list" | "epub" | "ao3_bookmarks" | "ffn_favorites";
+type Source = "url_list" | "rr_list" | "epub" | "calibre" | "ao3_bookmarks" | "ffn_favorites";
 
 const SOURCES: Array<{ value: Source; label: string; hint: string }> = [
   { value: "url_list", label: "A list of links or a CSV file's text", hint: "Paste story links or a CSV export. Every link is added." },
   { value: "rr_list", label: "My Royal Road follows or favorites", hint: "Copy the text of your Royal Road follows or favorites page and paste it here." },
   { value: "epub", label: "EPUB files", hint: "EPUBs made by FanFicFare or FicHub include the story's link, so we can find it." },
+  { value: "calibre", label: "Calibre library (metadata.db)", hint: "Pick metadata.db from your Calibre library folder. Stories are matched by their source links." },
   { value: "ao3_bookmarks", label: "AO3 bookmarks", hint: "Public bookmarks of an AO3 user." },
   { value: "ffn_favorites", label: "FanFiction.Net favorites", hint: "Public favorites of a FanFiction.Net profile. Enter the number from the profile link." },
 ];
@@ -66,6 +69,7 @@ export const ImportJobsPanel: React.FC<Props> = ({ libraryId, onError }) => {
     try {
       let job: ImportJob;
       if (source === "epub") job = await liveSearchService.importEpubs(libraryId, files);
+      else if (source === "calibre") job = await calibreService.importCalibre(libraryId, files[0]);
       else if (source === "ao3_bookmarks" || source === "ffn_favorites") job = await liveSearchService.importList(libraryId, source, text.trim());
       else job = await liveSearchService.importUrls(libraryId, text, source);
       setText("");
@@ -98,7 +102,7 @@ export const ImportJobsPanel: React.FC<Props> = ({ libraryId, onError }) => {
           onChange={(event) => setSource(event.target.value as Source)}
           options={SOURCES.map((item) => ({ value: item.value, label: item.label }))}
         />
-        {source === "epub" ? (
+        {source === "calibre" ? <CalibreFileField onFiles={setFiles} /> : source === "epub" ? (
           <div className="ui-field">
             <label className="ui-field__label" htmlFor="add-import-files">EPUB files</label>
             <input
@@ -130,7 +134,7 @@ export const ImportJobsPanel: React.FC<Props> = ({ libraryId, onError }) => {
           />
         )}
         <Button type="submit" variant="primary" loading={busy}
-          disabled={busy || (source === "epub" ? files.length === 0 : !text.trim())}>Start import</Button>
+          disabled={busy || (source === "epub" || source === "calibre" ? files.length === 0 : !text.trim())}>Start import</Button>
       </form>
 
       {jobs.length > 0 && (
