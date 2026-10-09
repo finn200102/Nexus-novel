@@ -10,6 +10,7 @@ from app.models.creator_follow import CreatorFollow
 from app.models.update_event import NovelUpdateEvent
 from app.models.user import User
 from app.services import metadata_client
+from app.services.support_links import clean_support_links
 from app.services.creator_follow_service import (
     NEW_WORK_EVENTS,
     FollowTargetRejected,
@@ -124,4 +125,5 @@ async def author_page(metadata_author_id: int, db: Session = Depends(get_db), cu
     }
     for profile in data.get("profiles", []):
         profile["follow_id"] = follows.get((profile.get("site"), profile.get("key")))
+    data["support_links"] = clean_support_links(data.get("support_links"))
     return data

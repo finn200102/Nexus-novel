@@ -131,3 +131,15 @@ def test_author_page_marks_followed_profiles(client_with_auth, db, test_user):
         works.return_value = data
         page = client_with_auth.get("/following/authors/1", headers=bearer_headers(test_user.id)).json()
     assert [profile["follow_id"] is not None for profile in page["profiles"]] == [True, False]
+
+
+def test_author_page_serves_only_valid_support_links(client_with_auth, db, test_user):
+    data = {"id": 1, "name": "writer", "site": "royalroad", "profiles": [], "support_links": [
+        {"kind": "kofi", "url": "https://ko-fi.com/writer"},
+        {"kind": "patreon", "url": "http://patreon.com/insecure"},
+        {"kind": "subscribestar", "url": "https://example.test/subscribestar.com"},
+    ]}
+    with patch("app.routers.creator_follows.metadata_client.get_author_works", new_callable=AsyncMock) as works:
+        works.return_value = data
+        page = client_with_auth.get("/following/authors/1", headers=bearer_headers(test_user.id)).json()
+    assert page["support_links"] == [{"kind": "kofi", "url": "https://ko-fi.com/writer"}]

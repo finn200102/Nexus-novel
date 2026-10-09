@@ -14,6 +14,9 @@ def no_metadata_hiatus():
     with patch(
         "app.routers.stories.metadata_client.get_hiatus_status",
         AsyncMock(side_effect=RuntimeError("metadata offline")),
+    ), patch(
+        "app.routers.stories.metadata_client.get_novel_metadata",
+        AsyncMock(side_effect=RuntimeError("metadata offline")),
     ):
         yield
 
@@ -123,3 +126,25 @@ def test_story_without_library_copy_has_no_source(client, db):
     response = client.get("/stories/99", headers=bearer_headers(me.id))
 
     assert response.json()["source"] is None
+
+
+def test_story_serves_only_valid_support_links(client, db):
+    me = _user(db, "reader")
+    catalog = {"support_links": [
+        {"kind": "patreon", "url": "https://www.patreon.com/writer"},
+        {"kind": "kofi", "url": "http://ko-fi.com/insecure"},
+        {"kind": "kofi", "url": "https://phish.example.test/ko-fi.com"},
+        {"kind": "liberapay", "url": "javascript:alert(1)"},
+    ]}
+    with patch("app.routers.stories.metadata_client.get_novel_metadata", AsyncMock(return_value=catalog)):
+        response = client.get("/stories/42", headers=bearer_headers(me.id))
+
+    assert response.status_code == 200
+    assert response.json()["support_links"] == [{"kind": "patreon", "url": "https://www.patreon.com/writer"}]
+
+
+def test_story_without_catalog_has_no_support_links(client, db):
+    me = _user(db, "reader")
+    response = client.get("/stories/42", headers=bearer_headers(me.id))
+
+    assert response.json()["support_links"] == []
