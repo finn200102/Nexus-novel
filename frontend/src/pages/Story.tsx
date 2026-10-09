@@ -7,6 +7,8 @@ import StoryAbout from "../components/story/StoryAbout";
 import StoryChapters from "../components/story/StoryChapters";
 import StoryDetails from "../components/story/StoryDetails";
 import StoryShelves from "../components/story/StoryShelves";
+import CompletionToggle from "../components/story/CompletionToggle";
+import HiatusBadge from "../components/story/HiatusBadge";
 import { PersonalPanel } from "../components/organization/PersonalPanel";
 import { useOfflineCopies } from "../components/novel/useOfflineCopies";
 import { useStoryData, type LibraryCopyRef } from "../components/story/useStoryData";
@@ -422,6 +424,7 @@ export const StoryPage: React.FC<StoryPageProps> = ({ fallbackCopy }) => {
     <div className="story-body story-body--single">
       <div className="story-main">
         <PersonalPanel novelId={copy.novelId} />
+        <CompletionToggle novelId={copy.novelId} />
         <StoryShelves novelId={copy.novelId} />
       </div>
     </div>
@@ -459,6 +462,7 @@ export const StoryPage: React.FC<StoryPageProps> = ({ fallbackCopy }) => {
             <div className="story-hero__badges">
               {site && <Badge>{site}</Badge>}
               {isExperimentalSite(view.site) && <Badge tone="warning">Experimental</Badge>}
+              {storyMetadataId && <HiatusBadge metadataId={storyMetadataId} />}
               {inLibrary && novel?.scrape_status === "pending" && <Badge tone="info">Updating…</Badge>}
               {inLibrary && novel?.scrape_status === "failed" && <Badge tone="danger">Update failed</Badge>}
               <SourceStatusChip site={view.site} />

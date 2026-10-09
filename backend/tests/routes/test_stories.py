@@ -1,7 +1,21 @@
+from unittest.mock import AsyncMock, patch
+
+import pytest
+
 from app.models.library import Library
 from app.models.novel import Novel
 from app.models.user import User
 from tests.auth_helpers import bearer_headers
+
+
+@pytest.fixture(autouse=True)
+def no_metadata_hiatus():
+    """Keep story tests off the metadata service; individual tests can override."""
+    with patch(
+        "app.routers.stories.metadata_client.get_hiatus_status",
+        AsyncMock(side_effect=RuntimeError("metadata offline")),
+    ):
+        yield
 
 
 def _user(db, name: str) -> User:
@@ -58,8 +72,30 @@ def test_story_never_shows_other_users_copies(client, db):
     response = client.get("/stories/42", headers=bearer_headers(me.id))
 
     assert response.status_code == 200
-    assert response.json() == {"metadata_id": 42, "library_entries": []}
+    body = response.json()
+    assert body["metadata_id"] == 42
+    assert body["library_entries"] == []
 
 
 def test_story_requires_sign_in(client):
     assert client.get("/stories/42").status_code == 401
+
+
+def test_story_reports_hiatus_from_metadata(client, db):
+    me = _user(db, "reader")
+    mock = AsyncMock(return_value={"state": "likely_hiatus", "baseline_days": 2.0, "last_update_at": "2020-01-01T00:00:00+00:00"})
+    with patch("app.routers.stories.metadata_client.get_hiatus_status", mock):
+        response = client.get("/stories/42", headers=bearer_headers(me.id))
+
+    assert response.status_code == 200
+    assert response.json()["hiatus"]["state"] == "hiatus"
+    assert response.json()["hiatus"]["last_update_at"] == "2020-01-01T00:00:00+00:00"
+    mock.assert_awaited_once_with(42)
+
+
+def test_story_hiatus_degrades_when_metadata_is_down(client, db):
+    me = _user(db, "reader")
+    response = client.get("/stories/42", headers=bearer_headers(me.id))
+
+    assert response.status_code == 200
+    assert response.json()["hiatus"] == {"state": "active", "last_update_at": None, "label": "Update timing unknown"}

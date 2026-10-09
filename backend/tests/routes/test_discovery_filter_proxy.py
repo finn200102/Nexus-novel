@@ -19,7 +19,7 @@ def test_discovery_forwards_repeatable_filters_as_lists(client, test_user):
             "&exclude_tag=character death&exclude_tag=gore"
             "&exclude_fandom=Harry Potter&exclude_genre=horror"
             "&exclude_author=Alice&exclude_text=gore&exclude_text=blood"
-            "&language=en&language=French&complete_only=true&crossover=false",
+            "&language=en&language=French&complete_only=true&hide_inactive=true&crossover=false",
             headers=bearer_headers(test_user.id),
         )
 
@@ -36,6 +36,7 @@ def test_discovery_forwards_repeatable_filters_as_lists(client, test_user):
     assert kwargs["exclude_text"] == ["gore", "blood"]
     assert kwargs["language"] == ["en", "French"]
     assert kwargs["complete_only"] is True
+    assert kwargs["hide_inactive"] is True
     assert kwargs["crossover"] is False
 
 
@@ -50,6 +51,7 @@ def test_discovery_defaults_leave_new_filters_inactive(client, test_user):
     assert kwargs["exclude_tag"] is None
     assert kwargs["tag_mode"] == "all"
     assert kwargs["complete_only"] is False
+    assert kwargs["hide_inactive"] is False
     assert kwargs["crossover"] is None
 
 

@@ -11,14 +11,16 @@ from app.auth.dependencies import get_current_user
 from app.models.library import Library
 from app.models.novel import Novel
 from app.models.user import User
+from app.services import metadata_client
+from app.services.hiatus_view import hiatus_view
 from config.database import get_db
 
 router = APIRouter(prefix="/stories", tags=["stories"], responses={404: {"description": "Not found"}})
 
 
 @router.get("/{metadata_id:int}")
-def get_story(metadata_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """The current user's library copies of a catalog story (empty when not in a library)."""
+async def get_story(metadata_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """The current user's library copies of a catalog story (empty when not in a library), plus hiatus info."""
     rows = (
         db.query(Novel, Library)
         .join(Library, Novel.library_id == Library.id)
@@ -26,8 +28,13 @@ def get_story(metadata_id: int, db: Session = Depends(get_db), current_user: Use
         .order_by(Library.name, Novel.id)
         .all()
     )
+    try:
+        raw_hiatus = await metadata_client.get_hiatus_status(metadata_id)
+    except RuntimeError:
+        raw_hiatus = None
     return {
         "metadata_id": metadata_id,
+        "hiatus": hiatus_view(raw_hiatus),
         "library_entries": [
             {
                 "novel_id": novel.id,
