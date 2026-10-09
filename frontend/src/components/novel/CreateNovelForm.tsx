@@ -9,6 +9,8 @@ interface CreateNovelProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void;
+  /** Pre-fills the single-URL field when the drawer opens (Home's add-story handoff). */
+  initialUrl?: string;
 }
 
 type DrawerMode = "single" | "batch";
@@ -18,6 +20,7 @@ const CreateNovelForm: React.FC<CreateNovelProps> = ({
   isOpen,
   onClose,
   onSuccess,
+  initialUrl = "",
 }) => {
   const [mode, setMode] = useState<DrawerMode>("single");
   const [urlInput, setUrlInput] = useState("");
@@ -38,12 +41,14 @@ const CreateNovelForm: React.FC<CreateNovelProps> = ({
   }, [isOpen, onClose]);
 
   useEffect(() => {
-    if (!isOpen) {
+    if (isOpen) {
+      setUrlInput(initialUrl);
+    } else {
       setUrlInput("");
       setBatchInput("");
       setMode("single");
     }
-  }, [isOpen, library_id]);
+  }, [isOpen, library_id, initialUrl]);
 
   if (!isOpen) {
     return null;

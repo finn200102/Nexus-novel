@@ -1,11 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { novelService } from "../../services/novelService";
-import NovelCard from "./NovelCard";
-import "../../styles/novel-list.css";
+import LibraryStoryCard from "../library/LibraryStoryCard";
+import { EmptyState } from "../ui";
 import { Novel } from "../../types/novel";
 import { NovelCardSkeleton } from "../common/Skeleton";
-import { ShelfPicker } from "../organization/ShelfPicker";
 import { organizationService } from "../../services/organizationService";
 import type { LibraryPersonalEntry, Shelf } from "../../types/organization";
 import type { LibraryNovelOptions } from "../../services/novelService";
@@ -25,6 +23,10 @@ interface NovelListProps {
   shelfId?: number | null;
   userTag?: string;
   minRating?: number;
+  /** Follow state to show ("all" for every story). Filtered on the client. */
+  statusFilter?: string;
+  /** Receives every story the current query returned, before the status filter (for chip counts). */
+  onNovelsLoaded?: (novels: Novel[]) => void;
 }
 
 // The server orders these, so the client keeps the order it receives.
@@ -43,6 +45,8 @@ const NovelList: React.FC<NovelListProps> = ({
   shelfId = null,
   userTag = "",
   minRating = 0,
+  statusFilter = "all",
+  onNovelsLoaded,
 }) => {
   const [novels, setNovels] = useState<Novel[]>([]);
   const [personal, setPersonal] = useState<Record<string, LibraryPersonalEntry>>({});
@@ -50,7 +54,6 @@ const NovelList: React.FC<NovelListProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [selectedNovels, setSelectedNovels] = useState<Set<number>>(new Set());
   const [deleteLoading, setDeleteLoading] = useState<boolean>(false);
-  const navigate = useNavigate();
 
   useEffect(() => {
     let isCancelled = false;
@@ -100,6 +103,10 @@ const NovelList: React.FC<NovelListProps> = ({
   }, [library_id, refreshKey]);
 
   useEffect(() => {
+    onNovelsLoaded?.(novels);
+  }, [novels, onNovelsLoaded]);
+
+  useEffect(() => {
     if (!selectionMode) {
       setSelectedNovels(new Set());
     }
@@ -108,6 +115,7 @@ const NovelList: React.FC<NovelListProps> = ({
   const processedNovels = useMemo(() => {
     const normalizedSource = sourceFilter.toLowerCase();
     const filtered = novels.filter((novel) => {
+      if (statusFilter !== "all" && novel.follow_state !== statusFilter) return false;
       if (normalizedSource === "all") return true;
       const site = (novel.novel_site || novel.source_url || "").toLowerCase();
       return site.includes(normalizedSource);
@@ -129,7 +137,7 @@ const NovelList: React.FC<NovelListProps> = ({
       );
     }
     return sorted;
-  }, [novels, sourceFilter, sortBy]);
+  }, [novels, sourceFilter, sortBy, statusFilter]);
 
   const handleNovelClick = (novelId: number) => {
     if (selectionMode) {
@@ -140,8 +148,6 @@ const NovelList: React.FC<NovelListProps> = ({
         updatedSelection.add(novelId);
       }
       setSelectedNovels(updatedSelection);
-    } else {
-      navigate(`/library/${library_id}/novels/${novelId}`);
     }
   };
 
@@ -180,64 +186,49 @@ const NovelList: React.FC<NovelListProps> = ({
   };
 
   return (
-    <div className={`novel-list novel-list--${viewMode}`}>
+    <div className={`library-list library-list--${viewMode}`}>
       {loading && (
-        <div className="novel-list__grid">
+        <div className="library-list__grid" aria-hidden="true">
           {Array.from({ length: 8 }).map((_, i) => (
             <NovelCardSkeleton key={`skeleton-${i}`} />
           ))}
         </div>
       )}
-      {error && <p className="novel-list__status novel-list__status--error">{error}</p>}
+      {error && (
+        <p className="library-list__error" role="alert">
+          {error}. Check your connection and reload the page.
+        </p>
+      )}
       {!loading && processedNovels.length === 0 && !error && (
-        <p className="novel-list__status">No novels match your filters.</p>
+        <EmptyState
+          title={novels.length === 0 ? "No stories in this library yet" : "No stories match these filters"}
+          description={novels.length === 0 ? "Add a story from a link to start your library." : "Try another search, shelf, or status."}
+        />
       )}
 
       {processedNovels.length > 0 && (
-        <div className="novel-list__grid">
+        <div className="library-list__grid">
           {processedNovels.map((novel) => (
-            <div
+            <LibraryStoryCard
               key={novel.id}
-              className={`novel-card-wrapper ${
-                selectionMode && selectedNovels.has(novel.id) ? "is-selected" : ""
-              }`}
-            >
-              {selectionMode && (
-                <div className="novel-card-checkbox">
-                  <input
-                    type="checkbox"
-                    checked={selectedNovels.has(novel.id)}
-                    onChange={() => handleNovelClick(novel.id)}
-                    onClick={(event) => event.stopPropagation()}
-                  />
-                </div>
-              )}
-              <NovelCard
-                novel={novel}
-                isSelected={selectedNovels.has(novel.id)}
-                onClick={() => handleNovelClick(novel.id)}
-              />
-              {!selectionMode && (
-                <div className="novel-card-organize">
-                  {personal[String(novel.id)]?.rating != null && (
-                    <span className="novel-card-organize__rating" aria-label={`Your rating ${personal[String(novel.id)]?.rating} of 5`}>
-                      ★ {personal[String(novel.id)]?.rating}
-                    </span>
-                  )}
-                  {shelves.length > 0 && (
-                    <ShelfPicker novelId={novel.id} shelves={shelves} onChanged={onShelvesChanged} />
-                  )}
-                </div>
-              )}
-            </div>
+              novel={novel}
+              libraryId={library_id}
+              compact={viewMode === "list"}
+              personalRating={personal[String(novel.id)]?.rating ?? null}
+              selectionMode={selectionMode}
+              selected={selectedNovels.has(novel.id)}
+              onToggleSelect={() => handleNovelClick(novel.id)}
+              shelves={shelves}
+              onShelvesChanged={onShelvesChanged}
+            />
           ))}
         </div>
       )}
 
       {selectionMode && (
-        <div className="novel-selection-toolbar">
+        <div className="library-selection-bar">
           <span>{selectedNovels.size} selected</span>
-          <div className="novel-selection-toolbar__actions">
+          <div className="library-selection-bar__actions">
             <button type="button" onClick={selectAll}>
               Select all
             </button>

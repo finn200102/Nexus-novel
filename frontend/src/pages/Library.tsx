@@ -2,14 +2,20 @@ import React, { useEffect, useMemo, useState } from "react";
 import NovelList, { LibrarySortBy } from "../components/novel/NovelList";
 import CreateNovelForm from "../components/novel/CreateNovelForm";
 import { ShelfBar } from "../components/organization/ShelfBar";
+import { FOLLOW_STATE_LABELS } from "../components/library/followStates";
 import { useLibraryContext } from "../context/useLibraryContext";
 import { organizationService } from "../services/organizationService";
+import { usePageTitle } from "../hooks/usePageTitle";
+import { Button, FilterChip, Input, PageHeader, SegmentedControl, Select } from "../components/ui";
+import type { Novel } from "../types/novel";
 import type { Shelf } from "../types/organization";
-import "../styles/library.css";
+import "../styles/library-page.css";
 import "../styles/organization.css";
 
 interface LibraryPageProps {
   library_id: number;
+  /** Story link handed over from Home (`location.state.storyLink`); opens the add drawer prefilled. */
+  prefillUrl?: string | null;
 }
 
 const sourceOptions = [
@@ -23,18 +29,38 @@ const sourceOptions = [
   { value: "scribblehub", label: "ScribbleHub (experimental)" },
 ];
 
-const LibraryPage: React.FC<LibraryPageProps> = ({ library_id }) => {
+const sortOptions = [
+  { value: "recent", label: "Recently updated" },
+  { value: "updated_since_read", label: "Updated since I last read" },
+  { value: "personal_rating", label: "My rating" },
+  { value: "title", label: "Title" },
+  { value: "chapters", label: "Chapter count" },
+];
+
+const STATE_KEYS = ["reading", "plan_to_read", "on_hold", "completed", "dropped"] as const;
+
+const LibraryPage: React.FC<LibraryPageProps> = ({ library_id, prefillUrl = null }) => {
   const { libraries, activeLibraryId, selectLibrary } = useLibraryContext();
+  const libraryMeta = useMemo(
+    () => libraries.find((library) => library.id === library_id),
+    [libraries, library_id]
+  );
+  const libraryName = libraryMeta?.name || "Library";
+  usePageTitle(libraryName);
+
   const [searchTerm, setSearchTerm] = useState("");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [sortBy, setSortBy] = useState<LibrarySortBy>("recent");
   const [shelves, setShelves] = useState<Shelf[]>([]);
   const [shelfId, setShelfId] = useState<number | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [loadedNovels, setLoadedNovels] = useState<Novel[]>([]);
   const [userTag, setUserTag] = useState("");
   const [minRating, setMinRating] = useState(0);
   const [tagOptions, setTagOptions] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [drawerUrl, setDrawerUrl] = useState("");
   const [selectionMode, setSelectionMode] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -54,9 +80,16 @@ const LibraryPage: React.FC<LibraryPageProps> = ({ library_id }) => {
   }, []);
 
   useEffect(() => {
+    if (!prefillUrl) return;
+    setDrawerUrl(prefillUrl);
+    setIsDrawerOpen(true);
+  }, [prefillUrl]);
+
+  useEffect(() => {
     const listener = (event: Event) => {
       const customEvent = event as CustomEvent<{ libraryId?: number }>;
       if (!customEvent.detail || customEvent.detail.libraryId === library_id) {
+        setDrawerUrl("");
         setIsDrawerOpen(true);
       }
     };
@@ -64,118 +97,111 @@ const LibraryPage: React.FC<LibraryPageProps> = ({ library_id }) => {
     return () => window.removeEventListener("nexus:add-novel", listener);
   }, [library_id]);
 
-  const libraryMeta = useMemo(
-    () => libraries.find((library) => library.id === library_id),
-    [libraries, library_id]
-  );
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const novel of loadedNovels) counts[novel.follow_state] = (counts[novel.follow_state] ?? 0) + 1;
+    return counts;
+  }, [loadedNovels]);
 
   const handleDrawerSuccess = () => {
     setRefreshKey((prev) => prev + 1);
   };
 
-  return (
-    <div className="library-workspace">
-      <header className="library-workspace__header">
-        <div>
-          <p className="library-workspace__eyebrow">Library</p>
-          <h1>{libraryMeta?.name || "Library"}</h1>
-          <p className="library-workspace__summary">
-            Focus on your curated collection, keep metadata up to date, and manage downloads.
-          </p>
-        </div>
-        <div className="library-workspace__actions">
-          <button
-            type="button"
-            className="library-ghost-btn"
-            onClick={() => setSelectionMode((prev) => !prev)}
-          >
-            {selectionMode ? "Done" : "Organize"}
-          </button>
-          <button
-            type="button"
-            className="library-primary-btn"
-            onClick={() => setIsDrawerOpen(true)}
-          >
-            Add novel
-          </button>
-        </div>
-      </header>
+  const openAdd = () => {
+    setDrawerUrl("");
+    setIsDrawerOpen(true);
+  };
 
-      <div className="library-controls">
-        <div className="library-search">
-          <input
-            type="search"
-            placeholder="Search by title or author"
-            value={searchTerm}
-            onChange={(event) => setSearchTerm(event.target.value)}
-          />
-        </div>
-        <div className="library-select-group">
-          <label>
-            Source
-            <select
-              value={sourceFilter}
-              onChange={(event) => setSourceFilter(event.target.value)}
+  return (
+    <div className="library-page">
+      <PageHeader
+        title={libraryName}
+        description="Your saved stories. Open one to read, or add a new story from a link."
+        actions={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => setSelectionMode((prev) => !prev)}
             >
-              {sourceOptions.map((option) => (
-                <option value={option.value} key={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Sort
-            <select
-              value={sortBy}
-              onChange={(event) => setSortBy(event.target.value as LibrarySortBy)}
-            >
-              <option value="recent">Recently updated</option>
-              <option value="updated_since_read">Updated since I last read</option>
-              <option value="personal_rating">My rating</option>
-              <option value="title">Title</option>
-              <option value="chapters">Chapter count</option>
-            </select>
-          </label>
-          <label>
-            My tag
-            <input
-              type="search"
-              list="library-user-tags"
-              value={userTag}
-              placeholder="Any tag"
-              onChange={(event) => setUserTag(event.target.value)}
-            />
-            <datalist id="library-user-tags">
-              {tagOptions.map((tag) => <option key={tag} value={tag} />)}
-            </datalist>
-          </label>
-          <label>
-            Min. my rating
-            <select value={minRating} onChange={(event) => setMinRating(Number(event.target.value))}>
-              <option value={0}>Any</option>
-              {[1, 2, 3, 4, 5].map((stars) => (
-                <option key={stars} value={stars}>{stars}★ and up</option>
-              ))}
-            </select>
-          </label>
-        </div>
-        <div className="library-view-toggle">
-          <button
-            type="button"
-            className={viewMode === "grid" ? "is-active" : ""}
-            onClick={() => setViewMode("grid")}
+              {selectionMode ? "Done" : "Organize"}
+            </Button>
+            <Button variant="primary" onClick={openAdd}>
+              Add story
+            </Button>
+          </>
+        }
+      />
+
+      <div className="library-toolbar">
+        <Input
+          type="search"
+          label="Search"
+          hideLabel
+          placeholder="Search by title or author"
+          value={searchTerm}
+          onChange={(event) => setSearchTerm(event.target.value)}
+          onClear={() => setSearchTerm("")}
+          search
+        />
+        <Select
+          label="Source"
+          hideLabel
+          value={sourceFilter}
+          onChange={(event) => setSourceFilter(event.target.value)}
+          options={sourceOptions}
+        />
+        <Select
+          label="Sort"
+          hideLabel
+          value={sortBy}
+          onChange={(event) => setSortBy(event.target.value as LibrarySortBy)}
+          options={sortOptions}
+        />
+        <Input
+          label="My tag"
+          hideLabel
+          list="library-user-tags"
+          value={userTag}
+          placeholder="My tag"
+          onChange={(event) => setUserTag(event.target.value)}
+        />
+        <datalist id="library-user-tags">
+          {tagOptions.map((tag) => <option key={tag} value={tag} />)}
+        </datalist>
+        <Select
+          label="Minimum my rating"
+          hideLabel
+          value={String(minRating)}
+          onChange={(event) => setMinRating(Number(event.target.value))}
+          options={[
+            { value: "0", label: "Any rating" },
+            ...[1, 2, 3, 4, 5].map((stars) => ({ value: String(stars), label: `${stars}★ and up` })),
+          ]}
+        />
+        <SegmentedControl
+          label="View"
+          value={viewMode}
+          onChange={setViewMode}
+          options={[
+            { value: "grid", label: "Grid" },
+            { value: "list", label: "List" },
+          ]}
+        />
+      </div>
+
+      <div className="library-status-chips" role="group" aria-label="Filter by reading status">
+        <FilterChip selected={statusFilter === "all"} onChange={() => setStatusFilter("all")}>
+          All ({loadedNovels.length})
+        </FilterChip>
+        {STATE_KEYS.filter((key) => statusCounts[key]).map((key) => (
+          <FilterChip
+            key={key}
+            selected={statusFilter === key}
+            onChange={() => setStatusFilter(statusFilter === key ? "all" : key)}
           >
-            Grid
-          </button>
-          <button
-            type="button"
-            className={viewMode === "list" ? "is-active" : ""}
-            onClick={() => setViewMode("list")}
-          >
-            List
-          </button>
-        </div>
+            {FOLLOW_STATE_LABELS[key]} ({statusCounts[key]})
+          </FilterChip>
+        ))}
       </div>
 
       <ShelfBar
@@ -198,6 +224,8 @@ const LibraryPage: React.FC<LibraryPageProps> = ({ library_id }) => {
         shelfId={shelfId}
         userTag={userTag}
         minRating={minRating}
+        statusFilter={statusFilter}
+        onNovelsLoaded={setLoadedNovels}
       />
 
       <CreateNovelForm
@@ -205,6 +233,7 @@ const LibraryPage: React.FC<LibraryPageProps> = ({ library_id }) => {
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
         onSuccess={handleDrawerSuccess}
+        initialUrl={drawerUrl}
       />
     </div>
   );

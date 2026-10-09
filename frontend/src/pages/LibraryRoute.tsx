@@ -1,15 +1,18 @@
 import { useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
 import LibraryPage from "./Library";
 import LibrarySwitcher from "../components/layout/LibrarySwitcher";
 import { useLibraryContext } from "../context/useLibraryContext";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { EmptyState, Button } from "../components/ui";
 
+interface StoryHandoff {
+  storyLink?: string;
+}
+
 /**
  * `/library` for the active library. `?library=<id>` (old `/library/:id` links) selects that
  * library; `?add=1` opens the add form (top bar Add story). Both are removed from the URL after.
- * The library switcher sits here until D10 moves it into the page.
  */
 export default function LibraryRoute() {
   usePageTitle("Library");
@@ -18,6 +21,8 @@ export default function LibraryRoute() {
   const requested = Number(params.get("library"));
   const libraryId = Number.isInteger(requested) && requested > 0 ? requested : activeLibraryId;
   const wantsAdd = params.get("add") === "1";
+  const location = useLocation();
+  const handoff = (location.state as StoryHandoff | null)?.storyLink ?? null;
 
   useEffect(() => {
     if (!params.has("library") && !wantsAdd) return;
@@ -44,12 +49,12 @@ export default function LibraryRoute() {
 
   return (
     <>
-      {libraries.length > 0 && (
+      {libraries.length > 1 && (
         <div className="library-route__switcher">
           <LibrarySwitcher onCreateLibrary={() => window.dispatchEvent(new Event("nexus:create-library"))} />
         </div>
       )}
-      <LibraryPage key={libraryId} library_id={libraryId} />
+      <LibraryPage key={libraryId} library_id={libraryId} prefillUrl={handoff} />
     </>
   );
 }
