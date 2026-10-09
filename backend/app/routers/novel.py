@@ -480,6 +480,19 @@ def supported_src(url):
     return parsed.scheme in ("http", "https") and (parsed.hostname or "").lower() in SUPPORTED_HOSTS
 
 
+def is_web_serial_url(url):
+    """An http(s) URL with a host that matches no known site: read as a web serial."""
+    try:
+        parsed = urlparse(str(url or "").strip())
+    except ValueError:
+        return False
+    return parsed.scheme in ("http", "https") and bool(parsed.hostname)
+
+
+def accepted_src(url):
+    return supported_src(url) or is_web_serial_url(url)
+
+
 def get_site_name_from_url(url):
     if "royalroad" in url:
         return "royalroad"
@@ -497,7 +510,7 @@ def get_site_name_from_url(url):
         return "questionablequesting"
     if "scribblehub" in url:
         return "scribblehub"
-    return None
+    return "webserial" if is_web_serial_url(url) else None
 
 
 def check_library(db, library_id, current_user):
@@ -534,7 +547,7 @@ async def add_novel(
     if existing_novel:
         return existing_novel
 
-    if not supported_src(novel.url):
+    if not accepted_src(novel.url):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Not a supported source url"
         )

@@ -98,7 +98,7 @@ def test_two_hundred_mixed_urls_report_every_item(client, db, test_user, test_li
     for n in range(1, 41):
         lines.append(AO3.format(n))
     for n in range(1, 21):
-        lines.append(f"https://example.com/story/{n}")  # unsupported
+        lines.append(f"https://:443/story/{n}")  # unsupported: no host
     for n in range(1, 21):
         lines.append(FFN.format(n))  # listed twice
     for n in range(1, 11):

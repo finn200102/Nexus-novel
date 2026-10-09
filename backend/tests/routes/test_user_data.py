@@ -273,7 +273,7 @@ def test_import_reports_unsupported_source_per_novel(client, test_user, scrape):
     document = {
         "format": "nexus-user-export",
         "version": 1,
-        "libraries": [{"name": "Imported", "novels": [{"url": "https://example.com/story/1"}]}],
+        "libraries": [{"name": "Imported", "novels": [{"url": "ftp://example.com/story/1"}]}],
     }
 
     response = client.post("/me/import", json=document, headers=_headers(test_user))

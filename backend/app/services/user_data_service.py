@@ -43,7 +43,7 @@ from app.routers.novel import (
     get_existing_follow,
     get_or_create_follow,
     get_site_name_from_url,
-    supported_src,
+    accepted_src,
 )
 from app.schemas.user_data import EXPORT_FORMAT, EXPORT_VERSION, UserDataDocument
 from app.services import import_job_service
@@ -443,7 +443,7 @@ def title_from_url(url: str) -> str:
 
 
 def _create_novel(db: Session, library: Library, item) -> tuple[Novel | None, str | None]:
-    if not supported_src(item.url):
+    if not accepted_src(item.url):
         return None, "Not a supported source url"
     site_name = get_site_name_from_url(item.url)
     if not site_name:

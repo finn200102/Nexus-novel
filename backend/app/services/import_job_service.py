@@ -25,10 +25,11 @@ from app.models.import_job import ImportJob, ImportJobItem
 from app.models.library import Library
 from app.models.novel import Novel
 from app.models.user import User
-from app.routers.novel import get_site_name_from_url, scrape_novel_background, supported_src
+from app.routers.novel import accepted_src, get_site_name_from_url, scrape_novel_background, supported_src
 from app.services import metadata_client
 from app.services.novel_title import clean_title
 import app.services.novel_services as novel_services
+from app.services import calibre_service
 
 logger = get_logger(__name__)
 
@@ -105,7 +106,8 @@ def epub_source_url(data: bytes) -> str | None:
                 if any(supported_src(url) for url in candidates):
                     break
     supported = [url for url in candidates if supported_src(url)]
-    return (supported or candidates or [None])[0]
+    webserial = [url for url in candidates if accepted_src(url)]
+    return (supported or webserial or candidates or [None])[0]
 
 
 def _add_items(db: Session, job: ImportJob, entries: list[dict], seen: set[str]) -> int:
@@ -225,7 +227,7 @@ async def _process_item(db: Session, job: ImportJob, item: ImportJobItem, sessio
         if not url:
             item.status, item.reason = "unsupported", item.reason or "no story URL found"
             return
-        if not supported_src(url) or not site:
+        if not accepted_src(url) or not site:
             item.status, item.reason = "unsupported", "not a supported source URL"
             return
         existing = _library_novel(db, job.library_id, url)
@@ -253,7 +255,7 @@ async def _process_item(db: Session, job: ImportJob, item: ImportJobItem, sessio
     if novel.metadata_id is None:
         # Created by /me/import: the metadata scrape starts here, one at a time.
         site = novel.novel_site or get_site_name_from_url(novel.url or "")
-        if not novel.url or not site or not supported_src(novel.url):
+        if not novel.url or not site or not accepted_src(novel.url):
             item.status, item.reason = "unsupported", "not a supported source URL"
             return
         metadata_id, failure = await _start_metadata(novel.url, site)
@@ -305,6 +307,7 @@ async def run_import_job(job_id: int, session_factory, *, scrape: ScrapeRunner =
                 return
             try:
                 await _process_item(db, job, item, session_factory, scrape, loop)
+                calibre_service.apply_calibre_meta(db, job, item)
             except Exception as exc:  # one bad item never stops the job
                 db.rollback()
                 logger.error("Import item failed", job_id=job.id, position=item.position, error=str(exc))
