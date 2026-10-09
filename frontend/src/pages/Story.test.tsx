@@ -120,7 +120,7 @@ beforeEach(() => {
 
 describe("Story page", () => {
   it("renders a catalog-only story with Add to library and no library tabs", async () => {
-    vi.mocked(storyService.membership).mockResolvedValue({ metadata_id: 4, library_entries: [] });
+    vi.mocked(storyService.membership).mockResolvedValue({ metadata_id: 4, library_entries: [], support_links: [] });
     vi.mocked(discoveryService.addToLibrary).mockResolvedValue({ id: 11 });
     renderAt("/story/4");
 
@@ -138,6 +138,7 @@ describe("Story page", () => {
     vi.mocked(storyService.membership).mockResolvedValue({
       metadata_id: 4,
       library_entries: [{ novel_id: 11, library_id: 1, library_name: "Main", title: "The Quiet Ledger", follow_state: "reading", scrape_status: "completed" }],
+      support_links: [],
     });
     renderAt("/story/4");
 
@@ -167,7 +168,7 @@ describe("Story page", () => {
   });
 
   it("hides a tag from its menu instead of a per-tag Hide pill", async () => {
-    vi.mocked(storyService.membership).mockResolvedValue({ metadata_id: 4, library_entries: [] });
+    vi.mocked(storyService.membership).mockResolvedValue({ metadata_id: 4, library_entries: [], support_links: [] });
     vi.mocked(organizationService.addBlocklistEntry).mockResolvedValue({ id: 5, kind: "tag", value: "Slow burn", created_at: null });
     renderAt("/story/4");
 
@@ -177,7 +178,7 @@ describe("Story page", () => {
   });
 
   it("redirects the old library URL to the story's catalog id", async () => {
-    vi.mocked(storyService.membership).mockResolvedValue({ metadata_id: 4, library_entries: [] });
+    vi.mocked(storyService.membership).mockResolvedValue({ metadata_id: 4, library_entries: [], support_links: [] });
     renderAt("/library/1/novels/11");
     await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/story/4?copy=11"));
   });
