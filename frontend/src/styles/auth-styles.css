@@ -46,6 +46,8 @@
 .auth-form a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
 .auth-form { display: grid; gap: var(--sp-4); }
 .auth-form__error { margin: 0; color: var(--danger); }
+.auth-sso { display: grid; gap: var(--sp-4); margin-bottom: var(--sp-4); }
+.auth-sso__divider { margin: 0; color: var(--text-2); text-align: center; font-size: var(--fs-sm); }
 
 @media (max-width: 479px) {
   .auth-shell { place-items: start center; padding-top: var(--sp-5); }

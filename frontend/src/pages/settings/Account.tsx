@@ -1,12 +1,13 @@
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { LogOut } from "lucide-react";
-import { authService } from "../../services/authService";
+import { authService, LinkedSignInStatus } from "../../services/authService";
 import { getUserFacingError } from "../../services/apiClient";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/useToast";
 import { usePageTitle } from "../../hooks/usePageTitle";
 import { Button, Input, PageHeader } from "../../components/ui";
 import { SETTINGS_BACK } from "./settingsNav";
+import LinkedSignIn from "../../components/settings/LinkedSignIn";
 
 const SettingsAccount: React.FC = () => {
   usePageTitle("Profile & security", { back: SETTINGS_BACK });
@@ -15,6 +16,13 @@ const SettingsAccount: React.FC = () => {
   const [form, setForm] = useState({ current: "", next: "", confirm: "" });
   const [saving, setSaving] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [signIn, setSignIn] = useState<LinkedSignInStatus | null>(null);
+  const loadSignIn = useCallback(() => {
+    authService.linkedSignIn().then(setSignIn).catch(() => setSignIn(null));
+  }, []);
+  useEffect(loadSignIn, [loadSignIn]);
+  // Accounts created through single sign-on start without a password.
+  const settingFirstPassword = signIn?.has_password === false;
 
   const changePassword = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -26,7 +34,8 @@ const SettingsAccount: React.FC = () => {
     try {
       await authService.changePassword(form.current, form.next);
       setForm({ current: "", next: "", confirm: "" });
-      addToast("Password changed. Other devices were signed out.", "success");
+      addToast(settingFirstPassword ? "Password set." : "Password changed. Other devices were signed out.", "success");
+      if (settingFirstPassword) loadSignIn();
     } catch (err) {
       addToast(getUserFacingError(err, "Could not change the password"), "error");
     } finally {
@@ -54,17 +63,19 @@ const SettingsAccount: React.FC = () => {
       />
 
       <section className="settings-group" aria-labelledby="settings-password">
-        <h2 id="settings-password">Change password</h2>
+        <h2 id="settings-password">{settingFirstPassword ? "Set a password" : "Change password"}</h2>
         <p className="settings-group__hint">Use at least 8 characters. Your other devices will be signed out.</p>
         <form className="settings-form" onSubmit={changePassword}>
-          <Input
-            label="Current password"
-            type="password"
-            required
-            autoComplete="current-password"
-            value={form.current}
-            onChange={(e) => setForm({ ...form, current: e.target.value })}
-          />
+          {!settingFirstPassword && (
+            <Input
+              label="Current password"
+              type="password"
+              required
+              autoComplete="current-password"
+              value={form.current}
+              onChange={(e) => setForm({ ...form, current: e.target.value })}
+            />
+          )}
           <Input
             label="New password"
             type="password"
@@ -85,11 +96,13 @@ const SettingsAccount: React.FC = () => {
           />
           <div>
             <Button type="submit" variant="primary" loading={saving}>
-              Change password
+              {settingFirstPassword ? "Set password" : "Change password"}
             </Button>
           </div>
         </form>
       </section>
+
+      <LinkedSignIn status={signIn} onChange={loadSignIn} />
 
       <section className="settings-group" aria-labelledby="settings-devices">
         <h2 id="settings-devices">Signed-in devices</h2>

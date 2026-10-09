@@ -24,11 +24,14 @@ from app.models.user import User
 from app.services import account_service
 from app.services.account_service import AccountError
 from app.services.user_services import get_user_by_username
+from app.routers import oidc
 from config.database import get_db
+from config.settings import settings
 from ..schemas.user import (
     LoginResponse,
     PasswordChange,
     PasswordReset,
+    OIDCConfig,
     SignupConfig,
     User as UserSchema,
     UserCreate,
@@ -52,11 +55,25 @@ def _signed_in(db: Session, user: User, request: Request, response: Response, me
 @router.get("/config", response_model=SignupConfig)
 def signup_config(db: Session = Depends(get_db)):
     """What the sign-up page should offer; public."""
-    return {"signup_mode": account_service.get_signup_mode(db), "first_user": not account_service.has_users(db)}
+    return {
+        "signup_mode": account_service.get_signup_mode(db),
+        "first_user": not account_service.has_users(db),
+        "password_login": settings.password_login_enabled,
+        "oidc": OIDCConfig(display_name=settings.NEXUS_OIDC_DISPLAY_NAME) if settings.oidc_enabled else None,
+    }
+
+
+def _require_password_login() -> None:
+    if not settings.password_login_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Password sign-in is disabled on this instance. Use single sign-on.",
+        )
 
 
 @router.post("/signup", response_model=LoginResponse, status_code=status.HTTP_201_CREATED)
 def signup(user: UserCreate, request: Request, response: Response, db: Session = Depends(get_db)):
+    _require_password_login()
     ip = client_ip(request)
     rate_limit.check(db, rate_limit.SIGNUPS_PER_IP, ip)
     rate_limit.record(db, rate_limit.SIGNUPS_PER_IP, ip)
@@ -91,6 +108,7 @@ def signup(user: UserCreate, request: Request, response: Response, db: Session =
 
 @router.post("/login", response_model=LoginResponse, status_code=status.HTTP_200_OK)
 def login(user_data: UserLogin, request: Request, response: Response, db: Session = Depends(get_db)):
+    _require_password_login()
     ip = client_ip(request)
     rate_limit.check(db, rate_limit.LOGIN_FAILURES_PER_IP, ip)
     rate_limit.check(db, rate_limit.LOGIN_FAILURES_PER_USER, user_data.username)
@@ -158,7 +176,9 @@ def change_password(
     """Change your own password; other devices are signed out."""
     user = auth.user
     rate_limit.check(db, rate_limit.PASSWORD_FAILURES_PER_USER, str(user.id))
-    if not verify_password(payload.current_password, user.password):
+    # An account created through single sign-on has no password yet and
+    # may set its first one without a current password.
+    if oidc.has_password(user) and not verify_password(payload.current_password, user.password):
         rate_limit.record(db, rate_limit.PASSWORD_FAILURES_PER_USER, str(user.id))
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect")
     account_service.set_password(db, user, payload.new_password)
@@ -191,3 +211,6 @@ def me(current_user: User = Depends(get_current_user)):
 def verify_token_endpoint(current_user: User = Depends(get_current_user)):
     """Endpoint to verify if the current token is valid"""
     return current_user
+
+
+router.include_router(oidc.router)

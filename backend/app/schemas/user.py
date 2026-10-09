@@ -73,11 +73,18 @@ class PasswordReset(NewPassword):
     token: str = Field(min_length=1, max_length=256)
 
 
+class OIDCConfig(BaseModel):
+    display_name: str
+
+
 class SignupConfig(BaseModel):
     signup_mode: str
     # True while the instance has no account: the first sign-up is always
     # allowed and becomes the administrator.
     first_user: bool
+    password_login: bool = True
+    # Present when single sign-on is configured.
+    oidc: OIDCConfig | None = None
 
 
 class AdminUser(BaseModel):

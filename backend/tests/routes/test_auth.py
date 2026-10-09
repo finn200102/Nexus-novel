@@ -73,7 +73,12 @@ def test_first_signup_becomes_admin_and_gets_a_session(client, db):
 def test_signup_is_closed_once_an_admin_exists(client):
     admin_client(client)
 
-    assert client.get("/auth/config").json() == {"signup_mode": "closed", "first_user": False}
+    assert client.get("/auth/config").json() == {
+        "signup_mode": "closed",
+        "first_user": False,
+        "password_login": True,
+        "oidc": None,
+    }
     response = signup(client, "second")
     assert response.status_code == status.HTTP_403_FORBIDDEN
 

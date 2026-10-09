@@ -21,6 +21,8 @@ class AuditAction(str, Enum):
     USER_DELETED = "user.deleted"
     PASSWORD_CHANGED = "user.password_changed"
     PASSWORD_RESET_ISSUED = "user.password_reset_issued"
+    SSO_LINKED = "user.sso_linked"
+    SSO_UNLINKED = "user.sso_unlinked"
     INSTANCE_SETTINGS_CHANGED = "instance.settings_changed"
     INVITE_CREATED = "invite.created"
     INVITE_REVOKED = "invite.revoked"

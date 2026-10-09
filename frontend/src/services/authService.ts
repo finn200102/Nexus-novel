@@ -19,6 +19,18 @@ export interface SignupConfig {
   signup_mode: SignupMode;
   /** No account exists yet: the first sign-up becomes the administrator. */
   first_user: boolean;
+  /** False when the instance only allows single sign-on. */
+  password_login?: boolean;
+  /** Present when single sign-on (OpenID Connect) is configured. */
+  oidc?: { display_name: string } | null;
+}
+
+export interface LinkedSignInStatus {
+  enabled: boolean;
+  display_name: string;
+  linked: boolean;
+  has_password: boolean;
+  password_login: boolean;
 }
 
 /**
@@ -102,5 +114,25 @@ export const authService = {
   async signupConfig(): Promise<SignupConfig> {
     const response = await apiClient.get<SignupConfig>("/auth/config");
     return response.data;
+  },
+
+  /** Full-page navigation target that starts single sign-on. */
+  singleSignOnUrl(): string {
+    return `${apiClient.defaults.baseURL ?? ""}/auth/oidc/login`;
+  },
+
+  async linkedSignIn(): Promise<LinkedSignInStatus> {
+    const response = await apiClient.get<LinkedSignInStatus>("/auth/oidc/status");
+    return response.data;
+  },
+
+  /** Returns the provider URL to visit; the callback links this account. */
+  async startLinkingSignIn(): Promise<string> {
+    const response = await apiClient.post<{ authorization_url: string }>("/auth/oidc/link");
+    return response.data.authorization_url;
+  },
+
+  async unlinkSignIn(): Promise<void> {
+    await apiClient.delete("/auth/oidc/link");
   },
 };

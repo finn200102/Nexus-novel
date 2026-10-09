@@ -20,6 +20,10 @@ PUBLIC = {
     ("POST", "/auth/refresh"),
     ("POST", "/auth/logout"),
     ("POST", "/auth/password-reset"),
+    # Single sign-on: the provider authenticates; the callback checks the
+    # signed flow cookie and the ID token.
+    ("GET", "/auth/oidc/login"),
+    ("GET", "/auth/oidc/callback"),
     # KOReader registration is refused: accounts are created in the web UI.
     ("POST", "/kosync/users/create"),
     ("GET", "/notifications/vapid-public-key"),

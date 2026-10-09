@@ -137,6 +137,35 @@ class Settings(BaseSettings):
         description="Contact for push services, mailto: or https: URL",
     )
 
+    # Single sign-on through an OpenID Connect provider (Authelia, Authentik,
+    # Keycloak, ...). Enabled when issuer and client id are set.
+    NEXUS_OIDC_ISSUER: str = Field(default="", description="OIDC issuer URL; empty disables single sign-on")
+    NEXUS_OIDC_CLIENT_ID: str = Field(default="", description="OIDC client id")
+    NEXUS_OIDC_CLIENT_SECRET: str = Field(default="", description="OIDC client secret")
+    NEXUS_OIDC_SCOPES: str = Field(default="openid profile email", description="Scopes requested at sign-in")
+    NEXUS_OIDC_DISPLAY_NAME: str = Field(default="SSO", description="Provider name on the sign-in button")
+    NEXUS_OIDC_REDIRECT_URI: str = Field(
+        default="",
+        description="Callback URL registered at the provider; empty = derived from the request",
+    )
+    NEXUS_OIDC_USERNAME_CLAIM: str = Field(default="preferred_username", description="Claim used as the username")
+    NEXUS_OIDC_ADMIN_GROUP: str = Field(default="", description="Group whose members are administrators")
+    NEXUS_OIDC_GROUPS_CLAIM: str = Field(default="groups", description="Claim that lists the user's groups")
+    NEXUS_OIDC_AUTO_CREATE: str = Field(
+        default="",
+        description="Create accounts on first sign-in: empty follows the sign-up mode, true always, false never",
+    )
+    NEXUS_PASSWORD_LOGIN: str = Field(default="enabled", description="Password sign-in: enabled or disabled")
+
+    @property
+    def oidc_enabled(self) -> bool:
+        return bool(self.NEXUS_OIDC_ISSUER.strip() and self.NEXUS_OIDC_CLIENT_ID.strip())
+
+    @property
+    def password_login_enabled(self) -> bool:
+        # Never lock everyone out: without single sign-on, passwords stay on.
+        return self.NEXUS_PASSWORD_LOGIN.strip().lower() != "disabled" or not self.oidc_enabled
+
     def model_post_init(self, __context) -> None:
         if self.SECRET_KEY.strip() in INSECURE_SECRET_KEYS:
             self.SECRET_KEY = _persisted_secret_key(self.DOWNLOAD_PATH)
