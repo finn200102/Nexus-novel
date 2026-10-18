@@ -67,6 +67,132 @@ def test_single_head():
     assert len(ScriptDirectory.from_config(alembic_config()).get_heads()) == 1
 
 
+@requires_postgres
+@pytest.mark.parametrize("same_operation", [False, True])
+def test_discovery_preferences_serialize_between_devices(postgres_engine, same_operation):
+    from concurrent.futures import ThreadPoolExecutor
+    from sqlalchemy.orm import sessionmaker
+    from fastapi import HTTPException
+    from app.models import User, ReaderPreference
+    from app.schemas.discovery_preferences import DiscoveryPreferenceWrite
+    from app.services.discovery_preferences import write
+    upgrade_database(postgres_engine)
+    factory = sessionmaker(bind=postgres_engine)
+    with factory() as db:
+        user = User(username="taste-owner", password="unused")
+        db.add(user); db.commit(); user_id = user.id
+    barrier = threading.Barrier(2)
+    def device(index):
+        with factory() as db:
+            user = db.get(User, user_id)
+            value = DiscoveryPreferenceWrite(expected_revision=0, operation_id="same" if same_operation else str(index), values={"tags": ["Slow burn"]})
+            barrier.wait(timeout=10)
+            try: return 200, write(db, user, value)
+            except HTTPException as exc: db.rollback(); return exc.status_code, exc.detail
+    with ThreadPoolExecutor(max_workers=2) as pool: results = list(pool.map(device, [1, 2]))
+    assert sorted(code for code, _ in results) == ([200, 200] if same_operation else [200, 409])
+    with factory() as db:
+        row = db.query(ReaderPreference).filter_by(scope="discovery").one()
+        assert row.revision == 1 and row.values["tags"] == ["Slow burn"]
+
+
+@requires_postgres
+def test_concurrent_demo_clicks_do_not_duplicate_stories(postgres_engine):
+    from concurrent.futures import ThreadPoolExecutor
+    from sqlalchemy.orm import sessionmaker
+    from app.models import User, Library, Novel, Chapter
+    from app.routers.onboarding import add_demo, DemoRequest
+    upgrade_database(postgres_engine)
+    factory = sessionmaker(bind=postgres_engine)
+    with factory() as db:
+        user = User(username="demo-owner", password="unused")
+        db.add(user); db.flush()
+        library = Library(name="Private", user_id=user.id)
+        db.add(library); db.commit()
+        user_id, library_id = user.id, library.id
+    barrier = threading.Barrier(2)
+    def click(_):
+        with factory() as db:
+            user = db.get(User, user_id)
+            barrier.wait(timeout=10)
+            return add_demo(DemoRequest(library_id=library_id), db, user)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(click, [1, 2]))
+    assert sorted(sum(story.created for story in result.stories) for result in results) == [0, 2]
+    with factory() as db:
+        assert db.query(Novel).count() == 2 and db.query(Chapter).count() == 3
+
+
+@requires_postgres
+def test_concurrent_source_replacements_retain_every_original(postgres_engine):
+    from concurrent.futures import ThreadPoolExecutor
+    from sqlalchemy.orm import sessionmaker
+    from app.models import User, Library, Novel, Chapter, ChapterVersion
+    from app.services.chapter_document import from_text
+    from app.services.chapter_services import update_chapter
+    upgrade_database(postgres_engine)
+    factory = sessionmaker(bind=postgres_engine)
+    original = from_text("Original chapter")
+    with factory() as db:
+        user = User(username="revision-owner", password="unused")
+        db.add(user); db.flush()
+        library = Library(name="Private", user_id=user.id)
+        db.add(library); db.flush()
+        novel = Novel(title="Versioned", library_id=library.id, url="nexus-local:concurrency")
+        db.add(novel); db.flush()
+        chapter = Chapter(novel_id=novel.id, chapter_number=1, content=original["plain_text"], document=original)
+        db.add(chapter); db.commit()
+        chapter_id = chapter.id
+    barrier = threading.Barrier(2)
+    def source(index):
+        with factory() as db:
+            barrier.wait(timeout=10)
+            return update_chapter(db, chapter_id, {"content": f"Revised chapter {index}"}).document["content_version"]
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        replacements = list(pool.map(source, [1, 2]))
+    with factory() as db:
+        current = db.get(Chapter, chapter_id)
+        versions = db.query(ChapterVersion).filter_by(chapter_id=chapter_id).all()
+        assert len(versions) == 2
+        assert {version.content_version for version in versions} | {current.document["content_version"]} == {original["content_version"], *replacements}
+
+
+@requires_postgres
+@pytest.mark.parametrize("same_operation", [False, True])
+def test_reader_preference_writes_serialize_between_devices(postgres_engine, same_operation):
+    from concurrent.futures import ThreadPoolExecutor
+    from fastapi import HTTPException
+    from sqlalchemy.orm import sessionmaker
+    from app.models.user import User
+    from app.models.reader_preference import ReaderPreference
+    from app.routers.reader_preferences import write
+    from app.schemas.reader_preferences import PreferenceWrite
+    upgrade_database(postgres_engine)
+    factory = sessionmaker(bind=postgres_engine)
+    with factory() as db:
+        user = User(username="two-device-test", password="unused")
+        db.add(user)
+        db.commit()
+        user_id = user.id
+    barrier = threading.Barrier(2)
+    def device(index):
+        with factory() as db:
+            user = db.get(User, user_id)
+            value = PreferenceWrite(expected_revision=0, operation_id="same" if same_operation else f"device-{index}", values={"typography": {"fontSize": 22}})
+            barrier.wait(timeout=10)
+            try:
+                return 200, write(db, user, value)
+            except HTTPException as exc:
+                db.rollback()
+                return exc.status_code, exc.detail
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(device, [1, 2]))
+    assert sorted(code for code, _ in results) == ([200, 200] if same_operation else [200, 409])
+    with factory() as db:
+        row = db.query(ReaderPreference).one()
+        assert row.revision == 1 and row.values == {"typography": {"fontSize": 22}}
+
+
 def test_empty_sqlite_database_upgrades_to_models(sqlite_engine):
     upgrade_database(sqlite_engine)
 
@@ -103,6 +229,13 @@ def test_pre_alembic_sqlite_database_is_upgraded_once(sqlite_engine):
     assert current_revision(sqlite_engine) == head_revision()
     assert {"is_admin", "is_disabled"} <= column_names(sqlite_engine, "users")
     assert {"metadata_id", "scrape_status", "followed_at"} <= column_names(sqlite_engine, "novels")
+    # The upgraded installation must be readable by today's application, not
+    # merely stamped at head with old nullable source columns still missing.
+    from app.models import Novel
+    from sqlalchemy.orm import Session
+    with Session(sqlite_engine) as db:
+        kept=db.get(Novel,1)
+        assert kept.title=='Kept' and kept.site is None and kept.site_story_id is None
     assert {"retry_count", "download_error"} <= column_names(sqlite_engine, "chapters")
     assert set(Base.metadata.tables) <= set(inspect(sqlite_engine).get_table_names())
     with sqlite_engine.connect() as connection:
@@ -206,6 +339,15 @@ def test_concurrent_starts_migrate_once(postgres_engine):
     assert errors == []
     assert current_revision(postgres_engine) == head_revision()
     assert schema_drift(postgres_engine) == []
+
+
+def test_stamped_legacy_database_missing_nullable_source_fact_reaches_readable_head(sqlite_engine):
+    with sqlite_engine.connect() as connection:
+        command.upgrade(alembic_config(connection),'0051');connection.commit()
+        connection.execute(text('ALTER TABLE novels DROP COLUMN site'));connection.commit()
+    upgrade_database(sqlite_engine)
+    assert current_revision(sqlite_engine)==head_revision()
+    assert 'site' in column_names(sqlite_engine,'novels')
 
 
 def test_case_colliding_usernames_block_the_unique_username_migration(sqlite_engine):

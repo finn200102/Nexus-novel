@@ -40,6 +40,7 @@ class Novel(BaseModel):
     followed_at: Optional[datetime] = None
     next_unread_chapter_id: Optional[int] = None
     next_unread_chapter_number: Optional[int] = None
+    chapter_manifest_review_required: bool = False
     created_at: datetime
     updated_at: datetime
 

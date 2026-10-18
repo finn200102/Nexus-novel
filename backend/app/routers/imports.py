@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 from config.database import get_db
 from app.auth.dependencies import get_current_user
 from app.models.import_job import ImportJob
+from app.models.import_job import ImportJobItem
+from app.models.novel import Novel
 from app.models.user import User
 from app.routers.novel import check_library
 from app.services import calibre_service
@@ -33,7 +35,7 @@ class UrlImportRequest(BaseModel):
 
 class EpubFile(BaseModel):
     name: str = Field(..., max_length=300)
-    data_base64: str
+    data_base64: str = Field(..., max_length=MAX_EPUB_BYTES * 4 // 3 + 4)
 
 
 class EpubImportRequest(BaseModel):
@@ -56,14 +58,49 @@ def _created(db: Session, job: ImportJob) -> dict:
     return imports.job_to_dict(db, job)
 
 
+def _url_entries(request: UrlImportRequest) -> list[dict]:
+    urls = imports.extract_urls(request.text, royalroad_paths=request.source == "rr_list")
+    if not urls:
+        raise HTTPException(422, detail="No URLs found")
+    if len(urls) > imports.MAX_ITEMS_PER_JOB:
+        raise HTTPException(422, detail=f"Split this list into batches of at most {imports.MAX_ITEMS_PER_JOB} links. Nothing was imported.")
+    return [{"url": url} for url in urls]
+
+
+@router.post("/urls/preview")
+def preview_urls(request: UrlImportRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Classify a pasted batch without creating entries or contacting sources."""
+    library = check_library(db, request.library_id, current_user)
+    existing = {imports.url_key(novel.url): novel for novel in db.query(Novel).filter(Novel.library_id == library.id).all() if novel.url}
+    seen = set()
+    items, counts = [], {}
+    for position, entry in enumerate(_url_entries(request)):
+        url = entry["url"]
+        key = imports.url_key(url)
+        item_status, reason = "ready", None
+        if not imports.accepted_src(url) or len(url) > 500:
+            item_status, reason = "unsupported", "Link is invalid or longer than 500 characters."
+        elif key in seen:
+            item_status, reason = "duplicate", "Listed more than once in this import."
+        elif key in existing:
+            item_status, reason = "duplicate", "Already in this library."
+        seen.add(key)
+        known = existing.get(key)
+        items.append({"position": position, "url": url, "title": known.title if known else None, "status": item_status, "reason": reason})
+        counts[item_status] = counts.get(item_status, 0) + 1
+    return {"library_id": library.id, "total_items": len(items), "items": items, "counts": counts,
+            "warnings": ["This preview checks links and duplicates. Source availability and household content limits are checked during import."]}
+
+
 @router.post("/urls", status_code=status.HTTP_202_ACCEPTED)
 def import_urls(request: UrlImportRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Queue every story URL found in pasted text or CSV."""
     library = check_library(db, request.library_id, current_user)
-    urls = imports.extract_urls(request.text, royalroad_paths=request.source == "rr_list")
-    if not urls:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="No URLs found")
-    job = imports.create_job(db, current_user, library, request.source, entries=[{"url": url} for url in urls])
+    entries = _url_entries(request)
+    for entry in entries:
+        if len(entry["url"]) > 500:
+            entry.update(url=None, status="unsupported", reason="Link is longer than 500 characters.")
+    job = imports.create_job(db, current_user, library, request.source, entries=entries)
     return _created(db, job)
 
 
@@ -72,6 +109,8 @@ def import_epubs(request: EpubImportRequest, db: Session = Depends(get_db), curr
     """Queue the original stories of EPUB files (FanFicFare, FicHub and similar)."""
     library = check_library(db, request.library_id, current_user)
     entries = []
+    if sum(len(upload.data_base64) for upload in request.files) > 80 * 1024 * 1024:
+        raise HTTPException(422, detail="Split this upload into batches smaller than 60 MB")
     for upload in request.files:
         try:
             data = base64.b64decode(upload.data_base64, validate=True)
@@ -85,7 +124,13 @@ def import_epubs(request: EpubImportRequest, db: Session = Depends(get_db), curr
         if url:
             entries.append({"label": upload.name, "url": url})
         else:
-            entries.append({"label": upload.name, "status": "unsupported", "reason": "no source URL in the EPUB"})
+            from app.services.local_epub import import_local_epub
+            try:
+                with db.begin_nested():
+                    result = import_local_epub(db, current_user, library, data)
+                entries.append({"label": upload.name, **result})
+            except ValueError as exc:
+                entries.append({"label": upload.name, "status": "failed", "reason": str(exc)})
     job = imports.create_job(db, current_user, library, "epub", entries=entries)
     return _created(db, job)
 
@@ -153,3 +198,22 @@ def cancel_import(job_id: int, db: Session = Depends(get_db), current_user: User
         job.finished_at = imports.utc_now()
         db.commit()
     return imports.job_to_dict(db, job)
+
+
+@router.post("/{job_id}/retry", status_code=status.HTTP_202_ACCEPTED)
+def retry_import(job_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    job = _own_job(db, job_id, current_user)
+    check_library(db, job.library_id, current_user)
+    if job.status in imports.ACTIVE_JOB_STATUSES:
+        raise HTTPException(409, detail="Wait for this import to stop before retrying it.")
+    retryable = db.query(ImportJobItem).filter(ImportJobItem.job_id == job.id,
+        ImportJobItem.status.in_(["failed", "queued", "running"]), ImportJobItem.url.isnot(None)).all()
+    resume_list = job.status == "failed" and job.source in imports.LIST_SOURCES and job.next_page is not None
+    if not retryable and not resume_list:
+        raise HTTPException(422, detail="There are no failed links to retry. Re-upload invalid EPUB files after correcting them.")
+    for item in retryable:
+        item.status, item.reason = "queued", None
+    job.status = "expanding" if resume_list else "queued"
+    job.finished_at, job.error = None, None
+    db.commit()
+    return imports.job_to_dict(db, job, items=True)

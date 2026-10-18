@@ -1,0 +1,14 @@
+.story-audio-exports { display: grid; gap: var(--sp-4); min-width: 0; padding-top: var(--sp-5); border-top: 1px solid var(--border); }
+.story-audio-exports > h3, .story-audio-exports p { margin: 0; }
+.story-audio-exports > section { display: grid; gap: var(--sp-3); min-width: 0; }
+.story-audio-exports__actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-3); }
+.story-audio-exports__chapters, .story-audio-exports__jobs { display: grid; gap: var(--sp-3); list-style: none; padding: 0; margin: 0; }
+.story-audio-exports__chapters > li, .story-audio-exports__jobs > li { display: grid; gap: var(--sp-2); padding: var(--sp-3); border: 1px solid var(--border); border-radius: var(--r-md); min-width: 0; }
+.story-audio-exports__chapters p { color: var(--text-2); font-size: var(--fs-sm); }
+.story-audio-exports__jobs h5 { margin: 0; font-size: var(--fs-md); }
+.story-audio-exports progress { accent-color: var(--accent); width: min(100%, 24rem); }
+.story-audio-exports .ui-field { max-width: 42rem; }
+.story-audio-exports p { overflow-wrap: anywhere; }
+
+.story-audio-exports__episodes { display: grid; gap: var(--sp-2); list-style: none; padding: 0; margin: 0; }
+.story-audio-exports__episodes > li { display: grid; justify-items: start; gap: var(--sp-2); padding: var(--sp-3); border-left: 2px solid var(--border); }

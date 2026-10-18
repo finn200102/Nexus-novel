@@ -1,5 +1,7 @@
 """Instance sign-up policy, invites, password resets and account removal."""
+from app.models.reader_guide import PrivateGuideJob, PrivateGuideArtifact, PrivateGuideOperation
 
+import logging
 import shutil
 from datetime import timedelta
 from pathlib import Path
@@ -9,7 +11,11 @@ from sqlalchemy.orm import Session
 from app.auth.passwords import hash_password
 from app.auth.sessions import hash_secret, new_secret, revoke_user_sessions, utcnow
 from app.models.account import InstanceSetting, InviteCode, PasswordResetToken, RefreshToken, UserSession
+from app.models.voice_profile import VoiceProfile
 from app.models.audio_job import ChapterAudioJob, ChapterAudioPart
+from app.models.audio_export import AudioExportJob
+from app.models.podcast import PodcastFeedToken
+from app.models.podcast_audio import PodcastAudioJob
 from app.models.download_job import ChapterDownloadJob
 from app.models.follow import UserNovelFollow
 from app.models.ereader import EpubBuild
@@ -17,10 +23,21 @@ from app.models.library import Library
 from app.models.novel import Novel
 from app.models.reading_annotation import ReadingAnnotation
 from app.models.reading_history import ReadingHistory
+from app.models.reading_run import ReadingRun, ReadingRunEvent
+from app.models.reading_continuity import ReadingContinuity
+from app.models.chapter_manifest import ChapterManifestReview, ChapterManifestReviewItem, ChapterManifestOperation
+from app.models.source_migration import SourceMigration, SourceMigrationOperation
+from app.models.import_reading_review import ImportReadingReview, ImportReadingOperation
+from app.models.portable_story_link import PortableStoryLink
+from app.models.smart_shelf import SmartShelf
+from app.models.catalog_watch import CatalogMatch, CatalogWatchSeen, CatalogWatch
+from app.models.notification_delivery import NotificationDelivery
 from app.models.reading_progress import ReadingProgress
 from app.models.saved_search import SavedSearch
 from app.models.update_event import NovelUpdateEvent
 from app.models.user import User
+from app.models.story_processing_permission import StoryProcessingPermission
+from app.models.translation import ReaderProviderRequest, ReaderProviderReconciliationOperation, TranslationJob, StoryGlossary, ReaderProvider
 from app.services.epub_service import epub_dir
 from config.settings import settings
 
@@ -182,17 +199,47 @@ def delete_user_account(db: Session, user: User) -> None:
     audio_job_ids = [row.id for row in db.query(ChapterAudioJob.id).filter(ChapterAudioJob.user_id == user_id)]
     if audio_job_ids:
         db.query(ChapterAudioPart).filter(ChapterAudioPart.job_id.in_(audio_job_ids)).delete(synchronize_session=False)
+    review_ids = db.query(ChapterManifestReview.id).filter(ChapterManifestReview.user_id == user_id)
+    db.query(ChapterManifestReviewItem).filter(ChapterManifestReviewItem.review_id.in_(review_ids)).delete(synchronize_session=False)
     for model in (
+        ChapterManifestOperation,
+        ChapterManifestReview,
+        ImportReadingOperation,
+        ImportReadingReview,
+        PortableStoryLink,
+        NotificationDelivery,
+        CatalogMatch,
+        CatalogWatchSeen,
+        CatalogWatch,
+        SourceMigrationOperation,
+        SourceMigration,
+        PrivateGuideArtifact,
+        PrivateGuideJob,
+        PrivateGuideOperation,
+        ReaderProviderReconciliationOperation,
+        ReaderProviderRequest,
+        TranslationJob,
+        StoryGlossary,
+        StoryProcessingPermission,
+        ReaderProvider,
         UserSession,
         PasswordResetToken,
         ChapterAudioJob,
+        AudioExportJob,
+        PodcastAudioJob,
+        PodcastFeedToken,
+        VoiceProfile,
         ChapterDownloadJob,
         UserNovelFollow,
         NovelUpdateEvent,
+        ReadingRunEvent,
+        ReadingRun,
+        ReadingContinuity,
         ReadingProgress,
         ReadingHistory,
         ReadingAnnotation,
         SavedSearch,
+        SmartShelf,
     ):
         db.query(model).filter(model.user_id == user_id).delete(synchronize_session=False)
     db.query(InviteCode).filter(InviteCode.created_by_id == user_id).update(
@@ -209,6 +256,14 @@ def delete_user_account(db: Session, user: User) -> None:
     db.commit()
     # Files go only once the rows are gone for good.
     _remove_user_files(disk_files, download_dirs)
+    # The owner row is gone before artifacts disappear, fencing active encoders.
+    from app.services.audio_export_service import ExportError, purge_export_files
+    from app.services.podcast_audio_service import purge_podcast_audio_files
+    try:
+        purge_export_files(user_id)
+        purge_podcast_audio_files(user_id)
+    except (ExportError, OSError):
+        logging.getLogger(__name__).warning("Private audiobook cleanup needs administrator attention for deleted account %s", user_id)
 
 
 def _user_disk_files(db: Session, user: User) -> list[Path]:
@@ -216,6 +271,8 @@ def _user_disk_files(db: Session, user: User) -> list[Path]:
     user_id = user.id
     paths = [Path(row.audio_path) for row in db.query(ChapterAudioJob.audio_path).filter(
         ChapterAudioJob.user_id == user_id, ChapterAudioJob.audio_path.isnot(None))]
+    paths += [Path(row.audio_path) for row in db.query(AudioExportJob.audio_path).filter(
+        AudioExportJob.user_id == user_id, AudioExportJob.audio_path.isnot(None))]
     job_ids = [row.id for row in db.query(ChapterAudioJob.id).filter(ChapterAudioJob.user_id == user_id)]
     if job_ids:
         paths += [Path(row.audio_path) for row in db.query(ChapterAudioPart.audio_path).filter(

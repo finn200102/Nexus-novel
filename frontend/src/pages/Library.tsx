@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import NovelList, { LibrarySortBy } from "../components/novel/NovelList";
 import { ShelfManager } from "../components/organization/ShelfManager";
 import { LibraryTitleMenu } from "../components/library/LibraryTitleMenu";
@@ -10,7 +10,9 @@ import { organizationService } from "../services/organizationService";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { SlidersHorizontal } from "lucide-react";
 import { Button, FilterChip, Input, Menu, PageHeader, SegmentedControl, Select } from "../components/ui";
-import type { Novel } from "../types/novel";
+import SmartShelves from "../components/organization/SmartShelves";
+import { libraryViewService, type LibraryViewOptions, type LibraryViewPage, type OwnedLibraryDefinition, type FollowState } from "../services/libraryViewService";
+import { onAccountStorageChange, storageGeneration } from "../services/accountStorage";
 import type { Shelf } from "../types/organization";
 import "../styles/library-page.css";
 import "../styles/organization.css";
@@ -18,17 +20,6 @@ import "../styles/organization.css";
 interface LibraryPageProps {
   library_id: number;
 }
-
-const sourceOptions = [
-  { value: "all", label: "All sources" },
-  { value: "royalroad", label: "Royal Road" },
-  { value: "spacebattles", label: "SpaceBattles" },
-  { value: "fanfiction", label: "FanFiction.Net" },
-  { value: "ao3", label: "Archive of Our Own" },
-  { value: "sufficientvelocity", label: "Sufficient Velocity" },
-  { value: "questionablequesting", label: "Questionable Questing" },
-  { value: "scribblehub", label: "Scribble Hub (experimental)" },
-];
 
 const sortOptions = [
   { value: "recent", label: "Recently updated" },
@@ -38,7 +29,7 @@ const sortOptions = [
   { value: "chapters", label: "Most chapters" },
 ];
 
-const STATE_KEYS = ["reading", "plan_to_read", "on_hold", "completed", "dropped"] as const;
+const STATE_KEYS = ["reading", "plan_to_read", "on_hold", "completed", "dropped", "ignored"] as const;
 
 const LibraryPage: React.FC<LibraryPageProps> = ({ library_id }) => {
   const { libraries, activeLibraryId, selectLibrary } = useLibraryContext();
@@ -56,7 +47,9 @@ const LibraryPage: React.FC<LibraryPageProps> = ({ library_id }) => {
   const [shelves, setShelves] = useState<Shelf[]>([]);
   const [shelfId, setShelfId] = useState<number | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [loadedNovels, setLoadedNovels] = useState<Novel[]>([]);
+  const [page, setPage] = useState<LibraryViewPage | null>(null);
+  const [options,setOptions] = useState<LibraryViewOptions|null>(null);
+  const [smartOpen,setSmartOpen] = useState(false);
   const [userTag, setUserTag] = useState("");
   const [minRating, setMinRating] = useState(0);
   const [tagOptions, setTagOptions] = useState<string[]>([]);
@@ -76,7 +69,7 @@ const LibraryPage: React.FC<LibraryPageProps> = ({ library_id }) => {
   useEffect(() => {
     let active = true;
     organizationService.listShelves().then((rows) => active && setShelves(rows)).catch(() => active && setShelves([]));
-    organizationService.tagSuggestions("").then((tags) => active && setTagOptions(tags)).catch(() => active && setTagOptions([]));
+    libraryViewService.options().then(values => { if(active){ setOptions(values);setTagOptions(values.user_tags); } }).catch(() => { if(active)setTagOptions([]); });
     return () => {
       active = false;
     };
@@ -91,22 +84,19 @@ const LibraryPage: React.FC<LibraryPageProps> = ({ library_id }) => {
     return () => window.removeEventListener(STORY_ADDED, listener);
   }, [library_id]);
 
-  const statusCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const novel of loadedNovels) counts[novel.follow_state] = (counts[novel.follow_state] ?? 0) + 1;
-    return counts;
-  }, [loadedNovels]);
-
+  const statusCounts = page?.status_counts ?? {};
   const extraFilters = (userTag ? 1 : 0) + (minRating > 0 ? 1 : 0);
   const showExtra = wide || moreFilters;
-  const storyCount = loadedNovels.length;
+  const storyCount = page?.library_total;
+  const currentDefinition = useMemo<OwnedLibraryDefinition>(() => ({version:1,scope:"owned_library",library_ids:[library_id],q:searchTerm,source:sourceFilter==="all"?null:sourceFilter,follow_states:statusFilter==="all"?[]:[statusFilter as FollowState],user_tag:userTag.trim()||null,min_rating:minRating||null,shelf_id:shelfId,sort_by:sortBy}), [library_id,searchTerm,sourceFilter,statusFilter,userTag,minRating,shelfId,sortBy]);
+  const sourceOptions = [{value:"all",label:"All sources"},...(options?.sources??[]).map(source=>({value:source.id,label:source.label})),...(sourceFilter!=="all"&&!options?.sources.some(source=>source.id===sourceFilter)?[{value:sourceFilter,label:sourceFilter}]:[])];
 
   return (
     <div className="library-page">
       <PageHeader
         className="library-page__header"
         title={<LibraryTitleMenu libraryId={library_id} name={libraryName} />}
-        description={storyCount > 0 ? `${storyCount} ${storyCount === 1 ? "story" : "stories"}` : undefined}
+        description={storyCount !== undefined ? `${storyCount} ${storyCount === 1 ? "story" : "stories"}` : undefined}
         actions={
           selectionMode ? (
             <Button variant="primary" onClick={() => setSelectionMode(false)}>Done</Button>
@@ -116,6 +106,7 @@ const LibraryPage: React.FC<LibraryPageProps> = ({ library_id }) => {
               items={[
                 { label: "Select stories", onSelect: () => setSelectionMode(true) },
                 { label: "Shelves…", onSelect: () => setShelvesOpen(true) },
+                { label: "Smart shelves…", onSelect: () => setSmartOpen(true) },
               ]}
               trigger={(props) => <Button {...props} variant="secondary">Organize</Button>}
             />
@@ -130,6 +121,7 @@ const LibraryPage: React.FC<LibraryPageProps> = ({ library_id }) => {
           hideLabel
           placeholder="Search by title or author"
           value={searchTerm}
+          maxLength={500}
           onChange={(event) => setSearchTerm(event.target.value)}
           onClear={() => setSearchTerm("")}
           search
@@ -206,7 +198,7 @@ const LibraryPage: React.FC<LibraryPageProps> = ({ library_id }) => {
 
       <div className="library-status-chips" role="group" aria-label="Filter by reading status">
         <FilterChip selected={statusFilter === "all"} onChange={() => setStatusFilter("all")}>
-          All ({loadedNovels.length})
+          All ({page ? Object.values(statusCounts).reduce((sum,value)=>sum+(value??0),0) : "…"})
         </FilterChip>
         {STATE_KEYS.filter((key) => statusCounts[key]).map((key) => (
           <FilterChip
@@ -234,8 +226,10 @@ const LibraryPage: React.FC<LibraryPageProps> = ({ library_id }) => {
         userTag={userTag}
         minRating={minRating}
         statusFilter={statusFilter}
-        onNovelsLoaded={setLoadedNovels}
+        onPageLoaded={setPage}
       />
+
+      <SmartShelves open={smartOpen} onClose={()=>setSmartOpen(false)} libraryId={library_id} initialDefinition={currentDefinition} shelves={shelves}/>
 
       <ShelfManager
         open={shelvesOpen}
@@ -249,4 +243,4 @@ const LibraryPage: React.FC<LibraryPageProps> = ({ library_id }) => {
   );
 };
 
-export default LibraryPage;
+export default function AccountLibraryPage(props:LibraryPageProps){ const generation=useSyncExternalStore(onAccountStorageChange,storageGeneration); return <LibraryPage key={`${generation}:${props.library_id}`} {...props}/>; }

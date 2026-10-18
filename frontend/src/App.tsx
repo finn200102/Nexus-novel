@@ -1,4 +1,4 @@
-import { lazy, Suspense, type ReactNode } from "react";
+import { Fragment, lazy, Suspense, type ReactNode } from "react";
 import { BrowserRouter as Router, Navigate, Route, Routes } from "react-router-dom";
 import Layout from "./components/layout/Layout";
 import ReaderLayout from "./components/layout/ReaderLayout";
@@ -22,6 +22,10 @@ import Integrations from "./pages/Integrations";
 import StoryGuide from "./pages/StoryGuide";
 import StoryGuideReview from "./pages/StoryGuideReview";
 import Users from "./pages/Users";
+import SourcePlugins from "./pages/admin/SourcePlugins";
+import { installPreferenceQueueSync } from "./services/readerPreferenceSync";
+
+installPreferenceQueueSync();
 import { AdminLayout } from "./pages/admin/AdminLayout";
 import ResetPassword from "./pages/ResetPassword";
 import SettingsLayout, { SettingsIndex } from "./pages/settings/SettingsLayout";
@@ -31,14 +35,21 @@ import SettingsNotifications from "./pages/settings/Notifications";
 import SettingsEReaders from "./pages/settings/EReaders";
 import SettingsHidden from "./pages/settings/Hidden";
 import SettingsData from "./pages/settings/Data";
+import SettingsProviders from "./pages/settings/Providers";
+import SettingsVoices from "./pages/settings/Voices";
+import SettingsReadingActivity from "./pages/settings/ReadingActivity";
+import Recommendations from "./pages/Recommendations";
+import Offline from "./pages/Offline";
 import More from "./pages/More";
 import NotFound from "./pages/NotFound";
 import { useAuth } from "./context/AuthContext";
 
 const ProtectedRoute = ({ children }: { children: ReactNode }) => {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user, offlineUser } = useAuth();
   if (isLoading) return <div className="auth-loading" role="status">Loading Nexus…</div>;
-  return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
+  // A silent refresh can discover an account switch in another tab. Remount
+  // private page state (including playing audio), not just its browser stores.
+  return isAuthenticated ? <Fragment key={user?.storage_id ?? user?.id ?? offlineUser?.storage_id ?? offlineUser?.id}>{children}</Fragment> : <Navigate to="/login" replace />;
 };
 
 /** Static page name for pages that do not call usePageTitle themselves. */
@@ -65,6 +76,8 @@ export function AppRoutes() {
       <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route index element={<Titled title="Home"><Home /></Titled>} />
         <Route path="discover" element={<Discover />} />
+        <Route path="for-you" element={<Recommendations />} />
+        <Route path="offline" element={<Offline />} />
         <Route path="discover/:site" element={<Discover />} />
         {/* storyId = catalog (metadata) id; library copies join in via /stories/:id (D9). */}
         <Route path="story/:storyId" element={<Story />} />
@@ -93,16 +106,20 @@ export function AppRoutes() {
           <Route path="ereaders" element={<SettingsEReaders />} />
           <Route path="hidden" element={<SettingsHidden />} />
           <Route path="data" element={<SettingsData />} />
+          <Route path="providers" element={<SettingsProviders />} />
+          <Route path="voices" element={<SettingsVoices />} />
+          <Route path="reading" element={<SettingsReadingActivity />} />
           <Route path="*" element={<Navigate replace to="/settings/account" />} />
         </Route>
 
         <Route path="admin" element={<AdminLayout />}>
           <Route index element={<Navigate replace to="status" />} />
           <Route path="status" element={<Titled title="Status"><Operations /></Titled>} />
+          <Route path="plugins" element={<Titled title="Source packages"><SourcePlugins /></Titled>} />
           <Route path="jobs" element={<Titled title="Catalog jobs"><ScrapeJobs /></Titled>} />
           <Route path="users" element={<Titled title="Users & invites"><Users /></Titled>} />
-          <Route path="duplicates" element={<Titled title="Duplicates and webhooks"><Integrations /></Titled>} />
-          <Route path="webhooks" element={<Titled title="Duplicates and webhooks"><Integrations /></Titled>} />
+          <Route path="duplicates" element={<Titled title="Catalog review and webhooks"><Integrations /></Titled>} />
+          <Route path="webhooks" element={<Titled title="Catalog review and webhooks"><Integrations /></Titled>} />
         </Route>
 
         <Route path="more" element={<More />} />

@@ -13,6 +13,8 @@ export default function More() {
     { label: "Settings", to: "/settings/account", icon: Settings },
     { label: "Downloads", to: "/updates/downloads", icon: Download },
     { label: "Reading stats", to: "/stats", icon: BarChart3 },
+    { label: "For you", to: "/for-you", icon: BarChart3 },
+    { label: "Offline library", to: "/offline", icon: Download },
     ...(user?.is_admin ? [{ label: "Admin", to: "/admin", icon: ShieldCheck }] : []),
   ];
 

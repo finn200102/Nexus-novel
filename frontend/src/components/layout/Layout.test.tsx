@@ -4,6 +4,8 @@ import { MemoryRouter, Route, Routes, Link } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import Layout from "./Layout";
 import { usePageTitle } from "../../hooks/usePageTitle";
+import { householdService } from "../../services/householdService";
+import { resetContentLimitsCache } from "../../hooks/useContentLimits";
 import { ThemeProvider } from "../../theme/ThemeProvider";
 
 const auth = { user: { username: "mira", is_admin: false } as { username: string; is_admin: boolean }, logout: vi.fn() };
@@ -21,6 +23,8 @@ vi.mock("../add/AddStorySheet", () => ({
 vi.mock("../../services/activityService", () => ({
   activityService: { getInbox: vi.fn().mockResolvedValue([{ novel_id: 1 }, { novel_id: 2 }]) },
 }));
+
+vi.mock("../../services/householdService", () => ({ householdService: { myLimits: vi.fn() } }));
 
 const Page = ({ title }: { title: string }) => {
   usePageTitle(title);
@@ -48,6 +52,9 @@ const renderShell = () =>
 
 describe("app shell", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
+    resetContentLimitsCache();
+    vi.mocked(householdService.myLimits).mockResolvedValue(null);
     auth.user = { username: "mira", is_admin: false };
   });
 
@@ -99,6 +106,8 @@ describe("app shell", () => {
     const panel = screen.getByRole("dialog", { name: "Account" });
     expect(within(panel).getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings/account");
     expect(within(panel).getByRole("radiogroup", { name: "Theme" })).toBeInTheDocument();
+    expect(householdService.myLimits).toHaveBeenCalledTimes(1);
+    expect(within(panel).queryByTestId("limited-profile-badge")).not.toBeInTheDocument();
     await user.click(within(panel).getByRole("button", { name: "Sign out" }));
     expect(auth.logout).toHaveBeenCalled();
   });

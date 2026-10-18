@@ -48,6 +48,14 @@ test.describe("Nexus real-stack accounts", () => {
       const invited = await freshPage(browser);
       await signUp(invited, `/signup?invite=${invite.code}`, username, "first-password-123");
       await expect(invited).not.toHaveURL(/signup|login/);
+      const firstUseStarted = Date.now();
+      await invited.goto("/");
+      await expect(invited.getByRole("heading", { name: "Add your first story", exact: true })).toBeVisible();
+      await invited.getByRole("button", { name: "Try a demo story", exact: true }).click();
+      await expect(invited.getByRole("heading", { name: "An unexpected light", exact: true })).toBeVisible();
+      await expect(invited.locator(".reader__content")).toContainText("Mara kept the last lighthouse");
+      expect(Date.now() - firstUseStarted).toBeLessThan(300_000);
+      await invited.goto("/");
       const users = await (await request.get(api("/admin/users"), { headers })).json();
       createdUserId = users.find((user: { username: string }) => user.username === username).id;
 

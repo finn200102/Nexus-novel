@@ -1,0 +1,52 @@
+import { readFileSync } from "node:fs";
+import { test, expect } from "@playwright/test";
+
+test("private companion uses the analysis service and caches cited evidence below the reading boundary", async ({ page, request }) => {
+  test.skip(process.env.NEXUS_E2E_MODE !== "real" || !process.env.NEXUS_E2E_COMPANION_FIXTURE, "Requires the isolated acceptance stack.");
+  await page.goto("/login");
+  await page.getByLabel("Username").fill(process.env.NEXUS_E2E_USER!);
+  await page.getByLabel("Password").fill(process.env.NEXUS_E2E_PASSWORD!);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page).not.toHaveURL(/\/login/);
+  const fixture = JSON.parse(readFileSync(process.env.NEXUS_E2E_COMPANION_FIXTURE!, "utf8"));
+  await page.goto(`/library/${fixture.library_id}/novels/${fixture.novel_id}/1`);
+  await page.getByRole("button", { name: "More reader actions" }).click();
+  await page.getByRole("menuitem", { name: "Translation & story companion" }).click();
+  await page.getByLabel("Provider", { exact: true }).selectOption({ label: "Fixture companion · fixture" });
+  await page.getByLabel("Use completed chapters through").fill("1");
+  await page.getByLabel("Story question").fill("Who is Alice?");
+  await page.getByRole("button", { name: "Ask with chapter evidence" }).click();
+  await expect(page.getByText("Alice arrives at the castle.", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText(/Through completed chapter 1/)).toBeVisible();
+  await page.getByRole("button", { name: "Ask with chapter evidence" }).click();
+  await expect(page.getByText(/Saved answer · Through completed chapter 1/)).toBeVisible();
+  const inspected = await request.get(`http://127.0.0.1:${process.env.NEXUS_FIXTURE_SOURCE_PORT || "8090"}/ai/requests`);
+  expect(inspected.ok()).toBeTruthy();
+  const inputs = (await inspected.json()).requests;
+  expect(inputs).toHaveLength(1);
+  expect(JSON.stringify(inputs)).not.toContain("FUTURE_ONLY");
+  expect(inputs[0].evidence.every((row: { chapter: number }) => row.chapter <= 1)).toBeTruthy();
+});
+
+test("retained chapter originals are available privately without advancing reading progress", async ({ page }) => {
+  test.skip(process.env.NEXUS_E2E_MODE !== "real" || !process.env.NEXUS_E2E_COMPANION_FIXTURE, "Requires the isolated acceptance stack.");
+  const fixture = JSON.parse(readFileSync(process.env.NEXUS_E2E_COMPANION_FIXTURE!, "utf8"));
+  await page.goto("/login");
+  await page.getByLabel("Username").fill(process.env.NEXUS_E2E_USER!);
+  await page.getByLabel("Password").fill(process.env.NEXUS_E2E_PASSWORD!);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page).not.toHaveURL(/\/login/);
+  const progressResponse = page.waitForResponse(response => response.url().endsWith(`/api/chapter/progress/${fixture.novel_id}`) && response.request().method() === "GET");
+  await page.goto(`/library/${fixture.library_id}/novels/${fixture.novel_id}/1`);
+  const before = await (await progressResponse).json();
+  await page.getByRole("button", { name: "More reader actions" }).click();
+  await page.getByRole("menuitem", { name: "Chapter versions", exact: true }).click();
+  await page.getByRole("button", { name: /Earlier original/ }).click();
+  await expect(page.getByRole("region", { name: "Saved original text" })).toContainText("Earlier original: Alice walks toward the castle.");
+  await page.getByRole("button", { name: "Close chapter versions", exact: true }).click();
+  const nextProgress = page.waitForResponse(response => response.url().endsWith(`/api/chapter/progress/${fixture.novel_id}`) && response.request().method() === "GET");
+  await page.reload();
+  const after = await (await nextProgress).json();
+  expect(after.revision).toBe(before.revision);
+  expect(after.locator_content_version).toBe(before.locator_content_version);
+});

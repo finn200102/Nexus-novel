@@ -1,5 +1,6 @@
 // src/services/apiClient.ts
 import axios, { InternalAxiosRequestConfig } from "axios";
+import { accountIdentity, activateAccountStorage, onAccountStorageChange, storageGeneration } from "./accountStorage";
 
 type PendingRequest = {
   controller: AbortController;
@@ -19,6 +20,8 @@ export const cancelPendingRequests = (matches?: string | RegExp) => {
   }
 };
 
+onAccountStorageChange(() => cancelPendingRequests());
+
 export const isRequestCancelled = (error: unknown) =>
   axios.isCancel(error) || (error instanceof DOMException && error.name === "AbortError");
 
@@ -28,6 +31,7 @@ export const getUserFacingError = (error: unknown, fallback: string) => {
   if (axios.isAxiosError(error)) {
     const detail = error.response?.data?.detail || error.response?.data?.message;
     if (typeof detail === "string" && detail.trim()) return detail.trim();
+    if (detail && typeof detail === "object" && typeof detail.message === "string") return detail.message;
     if (error.code === "ECONNABORTED" || error.code === "ETIMEDOUT") return "The request timed out. Please retry.";
     if (!error.response) return "Nexus could not reach the service. Please retry shortly.";
     if (error.response.status === 401) return "Your session expired. Please sign in again.";
@@ -54,6 +58,7 @@ const apiClient = axios.create({
 /** Session data returned by /auth/login, /auth/signup and /auth/refresh. */
 export interface SessionResponse {
   id: number;
+  storage_id?: string;
   username: string;
   message: string;
   access_token: string;
@@ -66,6 +71,7 @@ export interface SessionResponse {
 // refresh cookie through /auth/refresh, so nothing readable by scripts is
 // persisted.
 let accessToken: string | null = null;
+let sessionEpoch = 0;
 let refreshInFlight: Promise<SessionResponse | null> | null = null;
 const sessionListeners = new Set<(session: SessionResponse | null) => void>();
 
@@ -73,7 +79,9 @@ export const hasAccessToken = () => accessToken !== null;
 
 /** Store a new session (or null after sign-out) and notify listeners. */
 export const setSession = (session: SessionResponse | null) => {
+  sessionEpoch += 1;
   accessToken = session?.access_token ?? null;
+  activateAccountStorage(accountIdentity(session));
   for (const listener of sessionListeners) listener(session);
 };
 
@@ -84,19 +92,29 @@ export const onSessionChange = (listener: (session: SessionResponse | null) => v
   };
 };
 
+// Firefox may resolve an XHR from a rejected service-worker fetch with
+// status 0 and an empty body. This is no HTTP response, not a signed-out session.
+const requireHttpResponse = (response: {status:number;config:InternalAxiosRequestConfig;request?:unknown}) => {
+  if(response.status===0)throw new axios.AxiosError('No HTTP response was received','ERR_NETWORK',response.config,response.request);
+};
+
 /**
  * Exchange the refresh cookie for a new access token. Concurrent callers
  * share one request: the server rotates the cookie on every use.
  */
 export const refreshSession = (): Promise<SessionResponse | null> => {
   if (!refreshInFlight) {
+    const epoch = sessionEpoch;
     refreshInFlight = axios
       .post<SessionResponse>(`${API_BASE_URL}/auth/refresh`, null, { withCredentials: true, timeout: 15_000 })
       .then((response) => {
+        if (epoch !== sessionEpoch) throw new axios.CanceledError("Session changed during refresh");
+        requireHttpResponse(response);
         setSession(response.data);
         return response.data;
       })
       .catch((error) => {
+        if (epoch !== sessionEpoch) throw new axios.CanceledError("Session changed during refresh");
         // Only a rejected cookie ends the session; a network error keeps the
         // current state so an offline reader is not signed out.
         if (axios.isAxiosError(error) && error.response && [401, 403].includes(error.response.status)) {
@@ -119,8 +137,13 @@ const forgetPending = (signal: unknown) => {
   }
 };
 
+type AccountRequest = InternalAxiosRequestConfig & { _storageGeneration?: number; _retried?: boolean };
 apiClient.interceptors.request.use(
   (config) => {
+    const owned = config as AccountRequest;
+    if (owned._storageGeneration === undefined) owned._storageGeneration = storageGeneration();
+    if (owned._storageGeneration !== storageGeneration()) throw new axios.CanceledError("Reading account changed");
+    config.headers["Cache-Control"] = "no-cache, no-store";
     if (accessToken) {
       config.headers.Authorization = `Bearer ${accessToken}`;
     }
@@ -131,7 +154,9 @@ apiClient.interceptors.request.use(
     }
     return config;
   },
-  (error) => Promise.reject(error)
+  (error) => { throw error; },
+  // Bind identity/header before another session can replace it in a microtask.
+  { synchronous: true }
 );
 
 // Requests whose 401 means "wrong credentials", not "session expired".
@@ -140,11 +165,14 @@ const AUTH_FORM_REQUEST = /\/auth\/(login|signup|refresh|logout|password-reset)$
 apiClient.interceptors.response.use(
   (response) => {
     forgetPending(response.config.signal);
+    if ((response.config as AccountRequest)._storageGeneration !== storageGeneration()) throw new axios.CanceledError("Reading account changed during request");
+    requireHttpResponse(response);
     return response;
   },
   async (error) => {
-    const config = error.config as (InternalAxiosRequestConfig & { _retried?: boolean }) | undefined;
+    const config = error.config as AccountRequest | undefined;
     forgetPending(config?.signal);
+    if (config && config._storageGeneration !== storageGeneration()) return Promise.reject(new axios.CanceledError("Reading account changed during request"));
     if (
       config &&
       error.response?.status === 401 &&
@@ -157,10 +185,11 @@ apiClient.interceptors.response.use(
       config._retried = true;
       try {
         const session = await refreshSession();
-        if (session) {
+        if (session && config._storageGeneration === storageGeneration()) {
           config.headers.Authorization = `Bearer ${session.access_token}`;
           return apiClient(config);
         }
+        if (config._storageGeneration !== storageGeneration()) throw new axios.CanceledError("Refresh belongs to another account");
       } catch {
         // Fall through to the original error.
       }

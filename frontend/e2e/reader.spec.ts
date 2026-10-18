@@ -1,6 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import type { Page } from "@playwright/test";
 import { test, expect } from "./fixtures";
+import { authUser, installMockApi } from "./mockApi";
 
 // WP-D5/D6 gate: reader layout, bars, chapter drawer, text settings and shortcuts
 // (mocked API). axe must report no serious/critical issues in every reader theme.
@@ -55,14 +56,78 @@ async function openReader(page: Page, settings: Record<string, unknown> = {}, ap
   await mockReader(page);
   await page.evaluate(([value, theme]) => {
     localStorage.setItem("nexus-theme", theme as string);
-    localStorage.setItem("nexus-reader-typography", JSON.stringify({ v: 2, ...(value as object) }));
-    localStorage.removeItem("nexus-reader-layout");
-    localStorage.removeItem("nexus-reader-shortcuts");
+    const scoped = (key: string) => `nexus-account:${encodeURIComponent(location.origin)}:7:${key}`;
+    localStorage.setItem(scoped("nexus-reader-typography"), JSON.stringify({ v: 2, ...(value as object) }));
+    localStorage.removeItem(scoped("nexus-reader-layout"));
+    localStorage.removeItem(scoped("nexus-reader-shortcuts"));
   }, [settings, appTheme] as const);
   await page.goto(READER);
   await expect(page.getByRole("heading", { level: 1, name: "Interest Compounds" })).toBeVisible();
   await page.waitForTimeout(400);
 }
+
+test("reader preferences follow the account, preserve offline conflicts, and reset story overrides", async ({ signedInPage: first, browser }) => {
+  type Record = { scope: string; revision: number; values: { typography?: { fontSize?: number; theme?: string }; [key: string]: unknown } };
+  const preferences = new Map<string, Record>();
+  const operations = new Map<string, Record>();
+  const attach = async (page: Page) => {
+    await page.route(/\/reader\/preferences(?:\/stories\/\d+)?$/, async route => {
+      const path = new URL(route.request().url()).pathname;
+      const story = path.match(/\/stories\/(\d+)$/);
+      const scope = story ? `story:${story[1]}` : "global";
+      const current = preferences.get(scope) || { scope, revision: 0, values: {} };
+      if (route.request().method() !== "PUT") return route.fulfill({ json: current });
+      const request = route.request().postDataJSON();
+      const previous = operations.get(request.operation_id);
+      if (previous) return route.fulfill({ json: previous });
+      if (request.expected_revision !== current.revision) return route.fulfill({ status: 409, json: { detail: { message: "Settings changed", current } } });
+      const next = { scope, revision: current.revision + 1, values: request.values };
+      preferences.set(scope, next); operations.set(request.operation_id, next);
+      return route.fulfill({ json: next });
+    });
+  };
+  await attach(first);
+  await openReader(first);
+  await first.getByRole("button", { name: "Text settings" }).click();
+  await first.getByRole("button", { name: "Larger text" }).click();
+  await expect.poll(() => preferences.get("global")?.values.typography?.fontSize).toBe(20);
+  const secondContext = await browser.newContext();
+  try {
+    const second = await secondContext.newPage();
+    await installMockApi(second, { admin: true });
+    await attach(second);
+    await mockReader(second);
+    await second.goto("/login");
+    await second.getByLabel("Username").fill(authUser.username);
+    await second.getByLabel(/^Password/).fill(authUser.password);
+    await second.getByRole("button", { name: "Sign in" }).click();
+    await second.goto(READER);
+    await second.getByRole("button", { name: "Text settings" }).click();
+    await expect(second.getByLabel("Text size")).toHaveText("20");
+    await first.getByRole("switch", { name: "Only for this story" }).click();
+    await first.getByRole("radio", { name: "Sepia", exact: true }).click();
+    await expect.poll(() => preferences.get(`story:${NOVEL_ID}`)?.values.typography?.theme).toBe("sepia");
+    await second.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await expect(second.locator(".reader")).toHaveAttribute("data-reader-theme", "sepia");
+    await first.getByRole("switch", { name: "Only for this story" }).click();
+    await expect.poll(() => preferences.get(`story:${NOVEL_ID}`)?.values.typography).toBeNull();
+    await second.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await expect(second.getByRole("switch", { name: "Only for this story" })).not.toBeChecked();
+    await first.context().setOffline(true);
+    await first.getByRole("button", { name: "Larger text" }).click();
+    await expect(first.getByLabel("Text size")).toHaveText("21");
+    await second.getByRole("button", { name: "Larger text" }).click();
+    await second.getByRole("button", { name: "Larger text" }).click();
+    await expect.poll(() => preferences.get("global")?.values.typography?.fontSize).toBe(22);
+    await first.context().setOffline(false);
+    await first.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await expect(first.getByRole("button", { name: "Use account settings" })).toBeVisible();
+    await expect(first.getByLabel("Text size")).toHaveText("21");
+    await first.getByRole("button", { name: "Use account settings" }).click();
+    await expect(first.getByLabel("Text size")).toHaveText("22");
+    await expectAxeClean(first, "preference reconciliation");
+  } finally { await first.context().setOffline(false); await secondContext.close(); }
+});
 
 async function expectAxeClean(page: Page, label: string) {
   const result = await new AxeBuilder({ page }).withTags(TAGS).analyze();
@@ -206,4 +271,33 @@ test("author's note is labelled and collapsed by default", async ({ signedInPage
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
   await toggle.click();
   await expect(note.getByRole("button", { name: "Show less" })).toHaveAttribute("aria-expanded", "true");
+});
+
+test("continuous listening uses native audio events and pauses before generating missing audio", async ({signedInPage:page}) => {
+  await mockReader(page);
+  const wav = (seconds:number) => {
+    const frames=24000*seconds;const body=Buffer.alloc(44+frames*2);
+    body.write("RIFF");body.writeUInt32LE(body.length-8,4);body.write("WAVEfmt ",8);body.writeUInt32LE(16,16);body.writeUInt16LE(1,20);body.writeUInt16LE(1,22);body.writeUInt32LE(24000,24);body.writeUInt32LE(48000,28);body.writeUInt16LE(2,32);body.writeUInt16LE(16,34);body.write("data",36);body.writeUInt32LE(frames*2,40);
+    return body;
+  };
+  let generated=0;
+  await page.route(/\/audio\/jobs(?:\?.*)?$/,route=>{
+    if (route.request().method()==="POST") {generated++;return route.fulfill({status:500,json:{detail:"Generation must remain explicit"}});}
+    const chapter=Number(new URL(route.request().url()).searchParams.get("chapter_id"));
+    return route.fulfill({json: chapter===2003||chapter===2004 ? [{id:chapter,status:"completed",provider_id:"custom",provider_model:"fixture",provider_voice:"fixture",total_parts:1,completed_parts:1,audio_ready:true}] : []});
+  });
+  await page.route(/\/audio\/jobs\/\d+\/audio$/,route=>route.fulfill({contentType:"audio/wav",body:wav(1)}));
+  await page.evaluate(()=>{
+    const prefix=`nexus-account:${encodeURIComponent(location.origin)}:7:`;
+    localStorage.setItem(prefix+"nexus-reader-tts-engine","openai_compatible");
+    localStorage.setItem(prefix+"nexus-reader-tts-execution","server");
+    localStorage.setItem(prefix+"nexus-reader-audio-continuous","true");
+  });
+  await page.goto(READER);
+  await page.getByRole("button",{name:"Listen",exact:true}).click();
+  await page.getByRole("button",{name:"Play",exact:true}).click();
+  await expect(page).toHaveURL(/\/4$/,{timeout:20_000});
+  await expect(page).toHaveURL(/\/5$/,{timeout:20_000});
+  await expect(page.getByRole("alert").filter({hasText:"next chapter needs audio"})).toBeVisible();
+  expect(generated).toBe(0);
 });

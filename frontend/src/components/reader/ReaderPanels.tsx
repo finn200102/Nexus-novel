@@ -3,15 +3,12 @@ import { Bookmark, StickyNote, Trash2 } from "lucide-react";
 import { Button, Dialog, IconButton, Sheet, Switch, TextArea } from "../ui";
 import { READER_SHORTCUTS } from "../../hooks/useReaderShortcuts";
 
-export interface ReadingAnnotation {
-  id: number;
-  chapter_number: number;
-  annotation_type: "bookmark" | "note" | "highlight";
-  position: number;
-  percent: number;
-  quote?: string | null;
-  note?: string | null;
-}
+import type { ChapterRecapResponse, ReadingAnnotationResponse } from "../../generated/api";
+// Panels need presentation fields only; ownership IDs and audit dates stay in
+// the complete wire response returned by chapterService.
+export type ReadingAnnotation = Pick<ReadingAnnotationResponse,
+  "id" | "chapter_number" | "annotation_type" | "position" | "percent" | "quote" | "note" |
+  "block_id" | "text_offset" | "text_quote" | "quote_prefix" | "quote_suffix" | "locator_content_version" | "locator_variant"> & Partial<Pick<ReadingAnnotationResponse,"chapter_key"|"archived"|"identity_unresolved"|"original_chapter_number">>;
 
 /** "Add note" dialog (replaces window.prompt). */
 export function NoteDialog({ open, quote, onClose, onSave }: { open: boolean; quote: string; onClose: () => void; onSave: (note: string) => void }) {
@@ -38,28 +35,32 @@ export function NoteDialog({ open, quote, onClose, onSave }: { open: boolean; qu
 }
 
 /** Bookmarks and notes for this story; jump to one or delete it. */
-export function AnnotationsSheet({ open, onClose, annotations, chapterNumber, onJump, onDelete }: {
+export function AnnotationsSheet({ open, onClose, annotations, chapterNumber, chapterKey, onJump, onDelete, onViewVersion }: {
   open: boolean;
   onClose: () => void;
   annotations: ReadingAnnotation[];
   chapterNumber: number;
+  chapterKey?: string;
   onJump: (annotation: ReadingAnnotation) => void;
   onDelete: (id: number) => void;
+  onViewVersion?: (annotation: ReadingAnnotation) => void;
 }) {
-  const here = annotations.filter((a) => a.chapter_number === chapterNumber);
-  const elsewhere = annotations.filter((a) => a.chapter_number !== chapterNumber);
+  const belongsHere=(annotation:ReadingAnnotation)=>chapterKey ? annotation.chapter_key===chapterKey : annotation.chapter_number===chapterNumber;
+  const here = annotations.filter(belongsHere);
+  const elsewhere = annotations.filter(annotation=>!belongsHere(annotation));
   const row = (annotation: ReadingAnnotation) => {
     const text = annotation.note || annotation.quote || `At ${Math.round(annotation.percent)}%`;
     const kind = annotation.annotation_type === "bookmark" ? "Bookmark" : "Note";
     return (
       <li key={annotation.id} className="reader-annotations__row">
-        <button type="button" className="reader-annotations__jump" onClick={() => onJump(annotation)}>
+        <button type="button" className="reader-annotations__jump" disabled={annotation.identity_unresolved || annotation.chapter_number == null} onClick={() => onJump(annotation)}>
           {annotation.annotation_type === "bookmark" ? <Bookmark aria-hidden="true" size={16} /> : <StickyNote aria-hidden="true" size={16} />}
           <span>
             <span className="visually-hidden">{kind}: </span>{text}
-            <span className="reader-annotations__where">Chapter {annotation.chapter_number} · {Math.round(annotation.percent)}%</span>
+            <span className="reader-annotations__where">{annotation.chapter_number == null ? "Original chapter needs identity review" : `Chapter ${annotation.chapter_number}`} · {Math.round(annotation.percent)}%</span>
           </span>
         </button>
+        {annotation.locator_content_version && annotation.chapter_number != null && !annotation.identity_unresolved && onViewVersion && <Button variant="ghost" size="sm" onClick={() => onViewVersion(annotation)}>Saved text</Button>}
         <IconButton label={`Delete ${kind.toLowerCase()}: ${text.slice(0, 40)}`} icon={<Trash2 />} tooltip="none" size="sm" onClick={() => onDelete(annotation.id)} />
       </li>
     );
@@ -91,11 +92,7 @@ export function ShortcutsDialog({ open, onClose, enabled, onEnabled }: { open: b
   );
 }
 
-export interface RecapData {
-  summary: string;
-  spoiler_boundary_chapter: number;
-  chapters: { number: number; title: string }[];
-}
+export type RecapData = Pick<ChapterRecapResponse, "summary" | "spoiler_boundary_chapter" | "chapters">;
 
 /** Spoiler-safe recap plus reading stats and update cadence (until they move to the story page, D9). */
 export function RecapSheet({ open, onClose, recap, loading, history, hiatus }: {
@@ -111,9 +108,9 @@ export function RecapSheet({ open, onClose, recap, loading, history, hiatus }: {
       {loading && <p className="text-muted">Writing a recap…</p>}
       {recap && (
         <section className="reader-recap">
-          <h3>Up to chapter {recap.spoiler_boundary_chapter}</h3>
+          <h3>{recap.spoiler_boundary_chapter == null ? "No verified chapter evidence" : `Up to chapter ${recap.spoiler_boundary_chapter}`}</h3>
           <p>{recap.summary}</p>
-          {recap.chapters.length > 0 && <ul>{recap.chapters.slice(-5).map((item) => <li key={item.number}>{item.number}. {item.title}</li>)}</ul>}
+          {recap.spoiler_boundary_chapter != null && recap.chapters.length > 0 && <ul>{recap.chapters.slice(-5).map((item) => <li key={item.number}>{item.number}. {item.title}</li>)}</ul>}
         </section>
       )}
       {!loading && !recap && <p className="text-muted">No recap available right now.</p>}

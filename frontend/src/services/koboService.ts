@@ -1,3 +1,4 @@
+import type { KoboBookVersion as GeneratedBookVersion, KoboBookVersionPage as GeneratedBookVersionPage, KoboVersionConfirmation as GeneratedConfirmation, KoboVersionConfirmed } from "../generated/api";
 import apiClient from "./apiClient";
 
 export type KoboDevice = {
@@ -22,7 +23,15 @@ export type CreatedKoboDevice = KoboDevice & {
   endpoint_path: string;
 };
 
+export type KoboBookVersion = GeneratedBookVersion;
+export type KoboBookVersionPage = GeneratedBookVersionPage;
+export type KoboVersionConfirmation = GeneratedConfirmation;
+
 export const koboService = {
+  books: async (deviceId: number, offset = 0) =>
+    (await apiClient.get<KoboBookVersionPage>(`/kobo-devices/${deviceId}/books`, { params: { offset, limit: 50 } })).data,
+  confirmVersion: async (deviceId: number, entitlement: string, input: KoboVersionConfirmation) =>
+    (await apiClient.post<KoboVersionConfirmed>(`/kobo-devices/${deviceId}/books/${encodeURIComponent(entitlement)}/confirm-version`, input)).data,
   list: async () => (await apiClient.get<KoboDeviceList>("/kobo-devices")).data,
   create: async (label: string, shelfId: number | null) =>
     (await apiClient.post<CreatedKoboDevice>("/kobo-devices", { label, shelf_id: shelfId })).data,

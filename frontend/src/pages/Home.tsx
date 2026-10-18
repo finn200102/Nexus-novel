@@ -1,5 +1,5 @@
 import { openAddStory } from "../components/add/addStoryEvents";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { BarChart3, BookMarked, ChevronRight, Compass, Library as LibraryIcon } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useLibraryContext } from "../context/useLibraryContext";
@@ -13,7 +13,9 @@ import { displayTitle } from "../utils/displayTitle";
 import ContinueReading from "../components/reader/ContinueReading";
 import { readingStatsService, type StatsSummary } from "../services/readingStatsService";
 import { formatDuration } from "../components/stats/statsFormat";
-import { Button, Cover, EmptyState, Input, ListRow, PageHeader } from "../components/ui";
+import { Banner, Button, Cover, EmptyState, Input, ListRow, PageHeader } from "../components/ui";
+import { onboardingService } from "../services/onboardingService";
+import { storageGeneration } from "../services/accountStorage";
 import "../styles/home.css";
 
 const RECENT_LIMIT = 8;
@@ -48,11 +50,18 @@ const Home: React.FC = () => {
   const activeLibraryId = activeLibrary?.id;
   const [novels, setNovels] = useState<Novel[]>([]);
   const [loading, setLoading] = useState(false);
+  const [novelsLoaded, setNovelsLoaded] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [retry, setRetry] = useState(0);
+  const [demoBusy, setDemoBusy] = useState(false);
+  const [demoError, setDemoError] = useState("");
+  const demoRequest = useRef<AbortController | null>(null);
   const [pastedLink, setPastedLink] = useState("");
   const unread = useUnreadUpdates(activeLibraryId);
 
   useEffect(() => {
     let cancelled = false;
+    setNovelsLoaded(false); setLoadError("");
     const load = async () => {
       if (activeLibraryId === undefined) {
         setNovels([]);
@@ -61,17 +70,41 @@ const Home: React.FC = () => {
       setLoading(true);
       try {
         const data = await novelService.getAllNovels(activeLibraryId, "");
-        if (!cancelled) setNovels(Array.isArray(data) ? data : []);
+        if (!Array.isArray(data)) throw new Error("Invalid library response");
+        if (!cancelled) { setNovels(data); setNovelsLoaded(true); }
       } catch (error) {
         console.error("Failed to load home novels", error);
-        if (!cancelled) setNovels([]);
+        if (!cancelled) { setNovels([]); setLoadError("Couldn’t load your library. Your stories are still kept in Nexus."); }
       } finally {
         if (!cancelled) setLoading(false);
       }
     };
     load();
     return () => { cancelled = true; };
+  }, [activeLibraryId, retry]);
+
+  useEffect(() => {
+    setDemoBusy(false); setDemoError("");
+    return () => { demoRequest.current?.abort(); };
   }, [activeLibraryId]);
+
+  const tryDemo = async () => {
+    if (activeLibraryId === undefined || demoBusy) return;
+    const controller = new AbortController(), generation = storageGeneration();
+    demoRequest.current = controller;
+    setDemoBusy(true); setDemoError("");
+    try {
+      const result = await onboardingService.addDemo(activeLibraryId, controller.signal);
+      if (controller.signal.aborted || generation !== storageGeneration()) return;
+      const first = result.stories[0];
+      if (!first) throw new Error("No demo story returned");
+      navigate(`/library/${result.library_id}/novels/${first.novel_id}/${first.chapter_number}`);
+    } catch {
+      if (!controller.signal.aborted && generation === storageGeneration()) setDemoError("Couldn’t open the demo. Connect to Nexus and try again; retries won’t duplicate it.");
+    } finally {
+      if (!controller.signal.aborted && generation === storageGeneration()) setDemoBusy(false);
+    }
+  };
 
   const recentlyAdded = useMemo(
     () => [...novels].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at)).slice(0, RECENT_LIMIT),
@@ -110,11 +143,14 @@ const Home: React.FC = () => {
   };
 
   const hasStories = novels.length > 0;
-  const showEmpty = !loading && !librariesLoading && activeLibrary && !hasStories;
+  const showEmpty = novelsLoaded && !loading && !librariesLoading && activeLibrary && !hasStories;
 
   return (
     <div className="home">
       <PageHeader title="Home" description="Pick up where you left off, and see what is new." />
+      {(librariesLoading || (loading && !novelsLoaded)) && <p role="status">Loading your library…</p>}
+      {loadError && <Banner tone="warning" action={<Button onClick={() => setRetry(value => value + 1)}>Retry library</Button>}>{loadError}</Banner>}
+      {demoError && <Banner tone="warning">{demoError}</Banner>}
 
       {!activeLibrary && !librariesLoading && (
         <EmptyState
@@ -144,9 +180,13 @@ const Home: React.FC = () => {
                 />
                 <Button type="submit" disabled={!pastedLink.trim()}>Add story</Button>
               </form>
+              <Button variant="secondary" onClick={() => openAddStory({ tab: "import" })}>Import my library</Button>
               <Button variant="secondary" icon={<Compass size={16} aria-hidden="true" />} onClick={() => navigate("/discover")}>
                 Browse Discover
               </Button>
+              <Button variant="ghost" disabled={demoBusy} onClick={() => void tryDemo()}>{demoBusy ? "Opening demo…" : "Try a demo story"}</Button>
+              <p className="text-muted">The demo adds two short original stories to this library. No source crawling or AI processing.</p>
+              <Link to="/for-you">Set reading interests (optional)</Link>
             </div>
           }
         />

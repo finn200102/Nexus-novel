@@ -32,6 +32,10 @@ PUBLIC = {
     ("GET", "/opds/opensearch.xml"),
     # Authenticated by the random feed token in the path (no session).
     ("GET", "/feeds/{token_file}"),
+    # Story-scoped podcast credentials replace session auth for subscribed apps.
+    ("GET", "/podcasts/{token}/feed.xml"),
+    ("GET", "/podcasts/{token}/audio/{job_id}"),
+    ("GET", "/podcasts/{token}/audio/{job_id}.mp3"),
 }
 
 
@@ -57,3 +61,10 @@ def test_routes_reject_anonymous_requests(client):
 
 def test_public_list_has_no_stale_entries():
     assert PUBLIC - set(_routes()) == set()
+
+
+def test_private_api_responses_are_not_reusable_by_the_browser_http_cache(client, auth_headers):
+    response = client.get("/library/", headers=auth_headers)
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "private, no-store"
+    assert {"Authorization", "Cookie"}.issubset(set(response.headers["vary"].split(", ")))

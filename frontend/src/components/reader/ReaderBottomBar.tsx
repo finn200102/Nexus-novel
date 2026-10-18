@@ -5,6 +5,7 @@ import { Button, Progress } from "../ui";
 interface ReaderBottomBarProps {
   chapterNumber: number;
   totalChapters: number;
+  chapterOrdinal?: number | null;
   /** Chapter progress 0–100 (scroll position or page). */
   percent: number;
   minutesLeft: number | null;
@@ -25,10 +26,10 @@ const minutesLabel = (minutes: number | null) =>
 
 /** Reader bottom bar: chapter progress, position text and previous/next. */
 const ReaderBottomBar: React.FC<ReaderBottomBarProps> = ({
-  chapterNumber, totalChapters, percent, minutesLeft, paged, page, pageCount,
+  chapterNumber, totalChapters, chapterOrdinal, percent, minutesLeft, paged, page, pageCount,
   hasPrevious, hasNext, onPrevious, onNext, onPreviousPage, onNextPage,
 }) => {
-  const chapterText = `Ch. ${chapterNumber} of ${Math.max(totalChapters, chapterNumber)}`;
+  const chapterText = `Ch. ${chapterNumber}${chapterOrdinal != null ? ` · ${chapterOrdinal} of ${totalChapters}` : ""}`;
   const pageText = `Page ${page + 1} of ${pageCount}`;
   const status = paged ? `${pageText} · ${chapterText}` : [chapterText, minutesLabel(minutesLeft)].filter(Boolean).join(" · ");
   return (

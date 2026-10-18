@@ -1,0 +1,10 @@
+import { fireEvent, render, screen } from "@testing-library/react";
+import { beforeEach, expect, it, vi } from "vitest";
+import CanonicalVocabularyFilters from "./CanonicalVocabularyFilters";
+import { vocabularyService, type VocabularyTerm } from "../../services/vocabularyService";
+import { EMPTY_DISCOVERY_FILTERS } from "../../services/discoveryFilters";
+vi.mock("../../services/vocabularyService",async original=>({...await original<typeof import("../../services/vocabularyService")>(),vocabularyService:{readerTerms:vi.fn()}}));
+const term:VocabularyTerm={id:"uuid",kind:"character",display_name:"Alex",revision:"revision",scope:{story_key:"story"},scope_label:"The Guild · archive",active:true,created_at:"now",updated_at:"now"};
+beforeEach(()=>vi.clearAllMocks());
+it("resolves selected IDs with scope labels and removes exactly that criterion",async()=>{vi.mocked(vocabularyService.readerTerms).mockResolvedValue({items:[term],total:1,offset:0,limit:100,has_more:false});const change=vi.fn();render(<CanonicalVocabularyFilters filters={{...EMPTY_DISCOVERY_FILTERS,canonicalInclude:["uuid"]}} onChange={change}/>);expect(await screen.findByText("Include: Alex · character · The Guild · archive")).toBeInTheDocument();expect(vocabularyService.readerTerms).toHaveBeenCalledWith({ids:["uuid"],limit:100},expect.any(AbortSignal));fireEvent.click(screen.getByRole("button",{name:"Remove Alex"}));expect(change).toHaveBeenCalledWith(expect.objectContaining({canonicalInclude:[]}));});
+it("keeps unresolved IDs visible without silently broadening the query",async()=>{vi.mocked(vocabularyService.readerTerms).mockResolvedValue({items:[],total:0,offset:0,limit:100,has_more:false});const change=vi.fn();render(<CanonicalVocabularyFilters filters={{...EMPTY_DISCOVERY_FILTERS,canonicalExclude:["missing"]}} onChange={change}/>);expect(await screen.findByText("Exclude: Unresolved reviewed term (missing)")).toBeInTheDocument();expect(change).not.toHaveBeenCalled();});

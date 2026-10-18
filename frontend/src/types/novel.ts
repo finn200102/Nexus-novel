@@ -1,4 +1,5 @@
 export interface Novel {
+  chapter_manifest_review_required?: boolean;
   id: number;
   title: string;
   url: string;

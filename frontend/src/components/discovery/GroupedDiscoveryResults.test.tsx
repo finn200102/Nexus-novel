@@ -1,0 +1,13 @@
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
+import { beforeEach, expect, it, vi } from "vitest";
+import GroupedDiscoveryResults, { type GroupedWorkPage } from "./GroupedDiscoveryResults";
+import apiClient from "../../services/apiClient";
+import { EMPTY_DISCOVERY_FILTERS } from "../../services/discoveryFilters";
+import { activateAccountStorage } from "../../services/accountStorage";
+vi.mock("../../services/apiClient",()=>({default:{get:vi.fn()},getUserFacingError:(_err:unknown,fallback:string)=>fallback}));
+const novel={id:4,title:"Edition title",author:"Writer",novel_site:"archive"} as GroupedWorkPage["data"][0]["representative"];
+const result:GroupedWorkPage={data:[{group_key:"g1",reviewed:true,title:"Work title",representative:novel,editions:[novel,{...novel,id:5,title:"Another edition"}],matching_edition_count:2}],total:21,next_cursor:20,has_more:true};
+beforeEach(()=>{vi.resetAllMocks();activateAccountStorage(1);});
+it("sends all query criteria to grouped-before-page endpoint and explicitly opens each edition",async()=>{vi.mocked(apiClient.get).mockResolvedValueOnce({data:result}).mockResolvedValueOnce({data:{...result,data:[{...result.data[0],group_key:"g2",title:"Next grouped story"}],next_cursor:null,has_more:false}});render(<MemoryRouter><GroupedDiscoveryResults site="archive" q="moon" similarTo={9} filters={{...EMPTY_DISCOVERY_FILTERS,canonicalInclude:["term"],excludeTag:["spoilers"],sortBy:"title"}} refresh={0}/></MemoryRouter>);expect(await screen.findByRole("link",{name:"Another edition"})).toHaveAttribute("href","/story/5");expect(apiClient.get).toHaveBeenCalledWith("/discovery/works",{params:expect.objectContaining({site:"archive",q:"moon",similar_to:9,canonical_include:["term"],exclude_tag:["spoilers"],sort_by:"title",limit:20}),paramsSerializer:{indexes:null}});fireEvent.click(screen.getByRole("button",{name:"Load more works"}));await screen.findByRole("heading",{name:"Next grouped story"});expect(vi.mocked(apiClient.get).mock.calls[1][1]).toMatchObject({params:{cursor:20}});});
+it("does not expose late grouped results after account changes",async()=>{let finish!:(value:{data:GroupedWorkPage})=>void;vi.mocked(apiClient.get).mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;})).mockResolvedValue({data:{data:[],total:0,next_cursor:null,has_more:false}});render(<MemoryRouter><GroupedDiscoveryResults site="all" q="" similarTo={null} filters={EMPTY_DISCOVERY_FILTERS} refresh={0}/></MemoryRouter>);await waitFor(()=>expect(apiClient.get).toHaveBeenCalled());act(()=>activateAccountStorage(2));await act(async()=>finish({data:result}));expect(screen.queryByText("Work title")).toBeNull();});

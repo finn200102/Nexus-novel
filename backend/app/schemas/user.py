@@ -59,6 +59,7 @@ class User(UserBase):
 
 class LoginResponse(BaseModel):
     id: int
+    storage_id: str
     username: str
     message: str
     access_token: str

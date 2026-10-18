@@ -1,5 +1,6 @@
-import React from "react";
-import type { CanonicalWork } from "../../services/insightService";
+import React, { useState } from "react";
+import StorySourceMigration from "./StorySourceMigration";
+import StoryEditions from "./StoryEditions";
 import type { LibraryEntry } from "../../services/storyService";
 import type { Novel } from "../../types/novel";
 import { Button } from "../ui";
@@ -9,7 +10,6 @@ interface StoryDetailsProps {
   view: StoryView;
   novel: Novel | null;
   entries: LibraryEntry[];
-  editions: CanonicalWork | null;
   updating: boolean;
   onRefresh: () => void;
   onRescrape: () => void;
@@ -23,7 +23,8 @@ const SCRAPE_TEXT: Record<string, string> = {
 };
 
 /** Details tab: sources and editions in plain words, facts, IDs for support, update controls. */
-const StoryDetails: React.FC<StoryDetailsProps> = ({ view, novel, entries, editions, updating, onRefresh, onRescrape, onCheckStatus }) => {
+const StoryDetails: React.FC<StoryDetailsProps> = ({ view, novel, entries, updating, onRefresh, onRescrape, onCheckStatus }) => {
+  const [migrationOpen, setMigrationOpen] = useState(false);
   const site = siteLabel(view.site);
   const rows: Array<[string, React.ReactNode]> = [];
   const add = (label: string, value: React.ReactNode | null | undefined) => {
@@ -37,9 +38,6 @@ const StoryDetails: React.FC<StoryDetailsProps> = ({ view, novel, entries, editi
       {isExperimentalSite(view.site) && " (experimental support)"}
     </>
   ));
-  if (editions?.editions && editions.editions.length > 1) {
-    add("Editions", `${editions.editions.length} linked: ${editions.editions.map((edition) => [edition.edition_kind, edition.language].filter(Boolean).join(", ")).join(" · ")}`);
-  }
   add("Author", view.author);
   add("Status", statusLabel(view));
   add("First published", formatDate(view.published));
@@ -85,6 +83,8 @@ const StoryDetails: React.FC<StoryDetailsProps> = ({ view, novel, entries, editi
             )}
           </div>
         )}
+        {view.metadataId != null && <StoryEditions metadataId={view.metadataId} />}
+        {novel && <details className="story-source-migration-disclosure" onToggle={event => { if (event.target === event.currentTarget) setMigrationOpen(event.currentTarget.open); }}><summary>Continue with another source</summary>{migrationOpen && <StorySourceMigration novelId={novel.id} libraryId={novel.library_id} />}</details>}
       </div>
     </div>
   );

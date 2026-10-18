@@ -1,6 +1,7 @@
 from sqlalchemy import JSON, Boolean, Column, DateTime, Index, String, UniqueConstraint, text, true
 from sqlalchemy.orm import relationship
 from app.models.base import BaseModel
+from uuid import uuid4
 
 class User(BaseModel):
     __tablename__ = "users"
@@ -12,6 +13,7 @@ class User(BaseModel):
     )
 
     username = Column(String(100), nullable=False, index=True)
+    storage_id = Column(String(36), nullable=False, unique=True, default=lambda: str(uuid4()))
     # Empty for accounts that only sign in through single sign-on.
     password = Column(String(255), nullable=False, index=True)
     is_admin = Column(Boolean, nullable=False, default=False, server_default="0")

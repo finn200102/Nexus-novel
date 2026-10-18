@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import apiClient from "../../services/apiClient";
+import { onAccountStorageChange, storageGeneration } from "../../services/accountStorage";
 import { coverHue } from "./coverFallback";
 import { cx } from "./cx";
 
@@ -23,7 +25,22 @@ export interface CoverProps {
 /** Fixed 2:3 cover with a generated fallback (hue from the title hash, title in serif). */
 export function Cover({ src, title, author, size = 112, alt = "", className, priority }: CoverProps) {
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
-  const showImage = Boolean(src) && failedSrc !== src;
+  const [privateSrc, setPrivateSrc] = useState<string | null>(null);
+  useEffect(() => {
+    if (!src?.startsWith("nexus-cover:")) return;
+    let active = true;
+    let objectUrl: string | null = null;
+    const generation = storageGeneration();
+    const unsubscribe = onAccountStorageChange(() => { setPrivateSrc(null); if (objectUrl) URL.revokeObjectURL(objectUrl); });
+    void apiClient.get(`/reader/covers/${src.split(":")[1]}`, { responseType: "blob" }).then((response) => {
+      if (!active || generation !== storageGeneration()) return;
+      objectUrl = URL.createObjectURL(response.data);
+      setPrivateSrc(objectUrl);
+    }).catch(() => { if (active) setFailedSrc(src); });
+    return () => { active = false; unsubscribe(); if (objectUrl) URL.revokeObjectURL(objectUrl); setPrivateSrc(null); };
+  }, [src]);
+  const effectiveSrc = src?.startsWith("nexus-cover:") ? privateSrc : src;
+  const showImage = Boolean(effectiveSrc) && failedSrc !== src;
   const style = size === "fill" ? undefined : { width: `${size}px` };
   const tiny = size === 48;
   const showAuthor = size === "fill" || size >= 112;
@@ -33,7 +50,7 @@ export function Cover({ src, title, author, size = 112, alt = "", className, pri
       <img
         className={cx("ui-cover", className)}
         style={style}
-        src={src ?? undefined}
+        src={effectiveSrc ?? undefined}
         alt={alt}
         loading={priority ? "eager" : "lazy"}
         decoding="async"

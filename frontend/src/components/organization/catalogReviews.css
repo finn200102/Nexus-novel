@@ -1,0 +1,11 @@
+.catalog-review { min-width: 0; display: grid; gap: 1rem; }
+.catalog-review p { line-height: 1.6; }
+.catalog-review-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: 1rem; min-width: 0; }
+.catalog-review fieldset, .catalog-review-plan { min-width: 0; border: 1px solid var(--border); border-radius: 8px; padding: 1rem; }
+.catalog-review form, .catalog-review-actions { display: flex; flex-wrap: wrap; align-items: end; gap: .75rem; }
+.catalog-review form > :first-child { flex: 1 1 12rem; min-width: 0; }
+.catalog-review ul { list-style: none; padding: 0; margin: .75rem 0; }
+.catalog-review li { display: flex; flex-wrap: wrap; gap: .75rem; justify-content: space-between; padding-block: .75rem; border-bottom: 1px solid var(--border); }
+.catalog-review li > div { min-width: 0; flex: 1 1 14rem; overflow-wrap: anywhere; }
+.catalog-review small { display: block; color: var(--text-muted); }
+.catalog-review .ui-button, .catalog-review .ui-button__label { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }

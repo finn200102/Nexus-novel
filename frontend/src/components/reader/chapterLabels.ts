@@ -1,4 +1,6 @@
 export interface DrawerChapter {
+  completed_checkpoint?: boolean;
+  chapter_key?: string; manifest_epoch?: string; manifest_revision?: string;
   chapter_number: number;
   title: string;
   category?: string;

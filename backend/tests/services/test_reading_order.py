@@ -100,17 +100,19 @@ def test_side_chapters_are_skipped_unless_followed(db, reader, novel):
     assert next_unread_chapter(db, reader.id, novel).id == side.id
 
 
-def test_renumbered_chapter_keeps_place_by_site_chapter_id(db, reader, novel):
-    _chapter(db, novel, 1, site_id=101)
+def test_unreviewed_renumber_does_not_infer_completion_from_legacy_position(db, reader, novel):
+    first = _chapter(db, novel, 1, site_id=101)
     _chapter(db, novel, 2, site_id=102)
     five = _chapter(db, novel, 5, site_id=105)
     _progress(db, reader, novel, five)
     # The site renumbers chapter 5 to 7; the progress row still says 5.
     five.chapter_number = 7
     db.commit()
-    eight = _chapter(db, novel, 8, site_id=108)
+    _chapter(db, novel, 8, site_id=108)
 
-    assert next_unread_chapter(db, reader.id, novel).id == eight.id
+    # The identity trigger requires reconciliation after topology changes.
+    # The old unbound position supplies no completed checkpoint for earlier text.
+    assert next_unread_chapter(db, reader.id, novel).id == first.id
 
 
 def test_history_counts_when_progress_is_missing(db, reader, novel):
@@ -123,15 +125,15 @@ def test_history_counts_when_progress_is_missing(db, reader, novel):
     assert next_unread_chapter(db, reader.id, novel).id == three.id
 
 
-def test_deleted_chapter_is_skipped(db, reader, novel):
+def test_deleted_chapter_does_not_turn_unbound_current_position_into_completion(db, reader, novel):
     one = _chapter(db, novel, 1)
     two = _chapter(db, novel, 2)
-    three = _chapter(db, novel, 3)
+    _chapter(db, novel, 3)
     _progress(db, reader, novel, one)
     db.delete(two)
     db.commit()
 
-    assert next_unread_chapter(db, reader.id, novel).id == three.id
+    assert next_unread_chapter(db, reader.id, novel).id == one.id
 
 
 def test_caught_up_returns_none(db, reader, novel):

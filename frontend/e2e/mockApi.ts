@@ -108,6 +108,13 @@ const storyFixture = (path: string): unknown => {
     };
   }
   if (pathname.startsWith("/personal/library/")) return { novels: { 13: { rating: 5, user_tags: ["cozy"] } } };
+  if (pathname === "/chapter/reading-summary/11") return {novel_id:11,reading_run_key:null,revision:0,total_chapters:STORY_CHAPTERS.length,followed_total:3,completed_chapters:0,followed_completed_chapters:0,completion_basis:"recorded_checkpoints",completed_reading:false,current:{chapter_id:101,chapter_number:1,ordinal:1,followed_ordinal:1,percent:0},next_unread_chapter_id:101,next_unread_chapter_number:1,categories:["story","author_note"],categories_truncated:false};
+  if (pathname === "/chapter/reading-chapters/11") {
+    const params=new URLSearchParams(path.split("?")[1]||"");const offset=Number(params.get("offset")||0),limit=Number(params.get("limit")||100),q=(params.get("q")||"").trim().toLowerCase();
+    const rows=STORY_CHAPTERS.map((row,index)=>({...row,audio_status:"MISSING",created_at:"2026-10-16T00:00:00Z",updated_at:"2026-10-16T00:00:00Z",ordinal:index+1,followed_ordinal:row.category==="story"?index+1:null,followed:row.category==="story",completed_checkpoint:false,max_percent:null})).filter(row=>(params.get("category_scope")!=="followed"||row.followed)&&(!q||row.title.toLowerCase().includes(q)||String(row.chapter_number).includes(q)));
+    return {novel_id:11,reading_run_key:null,revision:0,total:rows.length,offset,limit,items:rows.slice(offset,offset+limit)};
+  }
+  if (pathname === "/chapter/novel/11/download-status") return {total:4,present:2,missing:2,processing:0,failed:0,processing_chapters:[],failed_chapters:[]};
   if (pathname === "/chapter/11") return STORY_CHAPTERS;
   if (pathname === "/chapter/progress/11") return { chapter_number: 1 };
   if (pathname === "/personal/novels/11") {
@@ -247,6 +254,12 @@ export async function installMockApi(page: Page | BrowserContext, options: MockA
       return;
     }
 
+    if (method === "GET" && (path === "/audio/pronunciation" || /^\/audio\/pronunciation\/stories\/\d+$/.test(path))) {
+      const storyId = path.match(/\/stories\/(\d+)$/)?.[1];
+      await json(route, {scope: storyId ? `pronunciation:${storyId}` : "pronunciation", revision: 0, rules: [], account_rules: [], inherit_account: Boolean(storyId), effective_rules: [], effective_version: null});
+      return;
+    }
+
     if (path === "/auth/logout-others" && method === "POST") {
       await json(route, { revoked_sessions: 2 });
       return;
@@ -333,6 +346,20 @@ export async function installMockApi(page: Page | BrowserContext, options: MockA
       await json(route, { hours: 24, sources: [{ site: "fanfiction", requests: 4, cache_hit_percent: 25, average_latency_ms: 1200, last_request_at: "2026-07-26T11:59:00Z", circuit_state: "half_open", last_error_category: "timeout", average_job_duration_seconds: 3, retention_days: 30 }] });
       return;
     }
+    if (path === "/library-views/options") {
+      await json(route, {libraries:[{id:1,name:"Reading Library"}],sources:[...new Set(LIBRARY_NOVELS.map(novel=>novel.novel_site))].map(id=>({id,label:id})),user_tags:["cozy"],libraries_truncated:false,sources_truncated:false,user_tags_truncated:false}); return;
+    }
+    if (path === "/library-views/preview" && method === "POST") {
+      const {definition,offset=0,limit=50}=request.postDataJSON();
+      const all=LIBRARY_NOVELS.filter(novel=>!definition.library_ids?.length||definition.library_ids.includes(novel.library_id));
+      let matches=all.filter(novel=>(!definition.q||`${novel.title} ${novel.author}`.toLowerCase().includes(definition.q.toLowerCase()))&&(!definition.source||novel.novel_site===definition.source)&&(!definition.user_tag||novel.id===13)&&(!definition.min_rating||novel.id===13));
+      const status_counts=Object.fromEntries(["reading","plan_to_read","on_hold","completed","dropped","ignored"].map(state=>[state,matches.filter(novel=>novel.follow_state===state).length]));
+      if(definition.follow_states?.length)matches=matches.filter(novel=>definition.follow_states.includes(novel.follow_state));
+      if(definition.sort_by==="title")matches.sort((a,b)=>a.title.localeCompare(b.title));
+      if(definition.sort_by==="chapters")matches.sort((a,b)=>(b.chapter_count||0)-(a.chapter_count||0));
+      await json(route,{items:matches.slice(offset,offset+limit).map(novel=>({...novel,library_name:"Reading Library",personal_rating:novel.id===13?5:null})),total:matches.length,library_total:all.length,status_counts,offset,limit});return;
+    }
+    if (path === "/smart-shelves" && method === "GET") { await json(route,[]);return; }
     if (path.startsWith("/shelves") && method === "GET") {
       await json(route, []);
       return;
@@ -350,7 +377,7 @@ export async function installMockApi(page: Page | BrowserContext, options: MockA
       return;
     }
     if (path === "/catalog-scrapes/capabilities") {
-      const capability = { site: "fanfiction", name: "FanFiction.net", adapter_version: 2, modes: ["top_rated", "newest", "most_reviewed", "most_favorited", "most_followed", "genre", "crossover", "search", "custom_urls"], filters: ["fandoms", "genres", "rating", "language", "status", "word_count", "statistics"], remote_filters: ["fandoms", "genres", "rating", "language", "status", "word_count", "statistics"], local_filters: ["min_words", "min_favorites", "min_follows", "min_reviews"], media: [{ value: "book", label: "Books" }, { value: "tv", label: "TV Shows" }], rate_limit: "1 request/sec", policy: "Fixture source" };
+      const capability = { site: "fanfiction", name: "FanFiction.net", adapter_version: 2, modes: ["top_rated", "newest", "most_reviewed", "most_favorited", "most_followed", "genre", "search", "custom_urls"], filters: ["fandoms", "crossover", "genres", "rating", "language", "status", "word_count", "statistics"], remote_filters: ["fandoms", "crossover", "genres", "rating", "language", "status", "word_count", "statistics"], local_filters: ["min_words", "min_favorites", "min_follows", "min_reviews"], media: [{ value: "book", label: "Books" }, { value: "tv", label: "TV Shows" }], rate_limit: "1 request/sec", policy: "Fixture source" };
       await json(route, { sources: [capability], default_site: "fanfiction", version: 2 });
       return;
     }

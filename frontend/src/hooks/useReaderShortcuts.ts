@@ -44,6 +44,7 @@ export function useReaderShortcuts(handlers: ReaderShortcutHandlers, enabled: bo
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (document.querySelector(".ui-modal-layer")) return;
       if (isShortcutBlocked(event.target)) return;
       const h = ref.current;
       if (event.key === "ArrowRight") { event.preventDefault(); h.next(); return; }

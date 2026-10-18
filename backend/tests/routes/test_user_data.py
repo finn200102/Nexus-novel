@@ -127,12 +127,14 @@ def test_export_is_versioned_and_keyed_by_source_url(client, db, test_user):
     assert response.headers["content-disposition"].startswith("attachment; filename=\"nexus-export-")
     document = response.json()
     assert document["format"] == "nexus-user-export"
-    assert document["version"] == 1
+    assert document["version"] == 2
     novel = document["libraries"][0]["novels"][0]
     assert novel["url"] == ROYAL_ROAD_URL
     assert novel["follow_state"] == "reading"
-    assert novel["progress"] == {"chapter_number": 2, "position": 120, "percent": 45.5}
-    assert novel["history"] == [
+    assert {key:value for key,value in novel["progress"].items() if key not in ("chapter_ref","furthest_chapter_ref")} == {"chapter_number": 2, "position": 120, "percent": 45.5,
+        "furthest_chapter_number": None, "furthest_percent": 0, "block_id": None, "text_offset": 0,
+        "text_quote": None, "quote_prefix": None, "quote_suffix": None, "locator_content_version": None, "locator_variant": None}
+    assert [{key:value for key,value in row.items() if key!="chapter_ref"} for row in novel["history"]] == [
         {"chapter_number": 1, "date": "2026-09-30", "max_percent": 100},
         {"chapter_number": 2, "date": "2026-10-01", "max_percent": 45},
     ]
@@ -167,11 +169,18 @@ def test_export_wipe_import_round_trip_restores_equal_content(client, db, test_u
 
     second = client.post("/me/import", json=exported, headers=_headers(test_user))
     assert second.status_code == 200, second.text
-    assert second.json()["summary"]["annotations_added"] == 1
-    assert second.json()["summary"]["annotations_deferred"] == 0
+    assert second.json()["summary"]["annotations_added"] == 0
+    assert second.json()["summary"]["annotations_deferred"] == 1
+    from tests.routes.test_user_data_reading_runs import review_import
+    review_import(client,db,test_user,second)
 
     again = client.get("/me/export", headers=_headers(test_user)).json()
-    assert _comparable(again) == _comparable(exported)
+    restored=again['libraries'][0]['novels'][0]
+    original=exported['libraries'][0]['novels'][0]
+    assert restored['annotations'][0]['note']==original['annotations'][0]['note']
+    assert restored['history'][0]['max_percent']==original['history'][0]['max_percent']
+    assert restored['progress']['percent']==original['progress']['percent']
+    assert restored['progress']['chapter_ref']!=original['progress']['chapter_ref']
 
 
 def test_import_twice_creates_no_duplicates(client, db, test_user, scrape):
@@ -231,7 +240,7 @@ def test_import_keeps_furthest_progress(client, db, test_user, scrape):
     response = client.post("/me/import", json=document, headers=_headers(test_user))
 
     assert response.status_code == 200
-    assert response.json()["libraries"][0]["novels"][0]["progress"] == "unchanged"
+    assert response.json()["libraries"][0]["novels"][0]["progress"] == "review_required"
     progress = db.query(ReadingProgress).filter(ReadingProgress.user_id == test_user.id).one()
     assert (progress.chapter_number, progress.percent) == (2, 45.5)
 
@@ -252,12 +261,12 @@ def test_import_keeps_local_saved_search_on_conflict(client, db, test_user, scra
 
 
 def test_import_rejects_unsupported_version(client, test_user, scrape):
-    document = {"format": "nexus-user-export", "version": 2, "libraries": []}
+    document = {"format": "nexus-user-export", "version": 3, "libraries": []}
 
     response = client.post("/me/import", json=document, headers=_headers(test_user))
 
     assert response.status_code == 422
-    assert "Unsupported export version 2" in response.json()["detail"]
+    assert "Unsupported export version 3" in response.json()["detail"]
 
 
 def test_import_rejects_foreign_format(client, test_user, scrape):

@@ -1,0 +1,14 @@
+.story-source-migration { display: grid; gap: var(--sp-4); min-width: 0; }
+.story-source-migration h2, .story-source-migration h3, .story-source-migration h4, .story-source-migration p { margin: 0; }
+.story-source-migration section, .story-source-migration form { display: grid; gap: var(--sp-3); min-width: 0; }
+.story-source-migration__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); }
+.story-source-migration__list { display: grid; gap: var(--sp-3); list-style: none; padding: 0; margin: 0; }
+.story-source-migration__list > li { display: grid; gap: var(--sp-2); padding: var(--sp-4); border: 1px solid var(--border); border-radius: var(--r-md); min-width: 0; }
+.story-source-migration p, .story-source-migration h3, .story-source-migration h4, .story-source-migration a { overflow-wrap: anywhere; }
+.story-source-migration label { display: grid; gap: var(--sp-2); min-width: 0; }
+.story-source-migration select { width: 100%; min-width: 0; max-width: 100%; padding: var(--sp-3); border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface); color: var(--text); font: inherit; }
+.story-source-migration .ui-button, .source-migration-dialog .ui-button { max-width: 100%; white-space: normal; line-height: 1.35; padding-block: var(--sp-2); }
+.story-source-migration .ui-button__label, .source-migration-dialog .ui-button__label { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+.source-migration-dialog p { overflow-wrap: anywhere; }
+.story-source-migration-disclosure { margin-top: var(--sp-5); }
+.story-source-migration-disclosure > summary { cursor: pointer; font-weight: 600; padding-block: var(--sp-3); }

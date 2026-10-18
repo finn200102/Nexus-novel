@@ -1,6 +1,8 @@
 import { DiscoveryFilters } from "../types/discovery";
 
 export const EMPTY_DISCOVERY_FILTERS: DiscoveryFilters = {
+  canonicalInclude: [],
+  canonicalExclude: [],
   tag: [],
   tagMode: "all",
   fandom: [],
@@ -29,11 +31,13 @@ export const EMPTY_DISCOVERY_FILTERS: DiscoveryFilters = {
 };
 
 type ListFilterKey = {
-  [K in keyof DiscoveryFilters]: DiscoveryFilters[K] extends string[] ? K : never;
-}[keyof DiscoveryFilters];
+  [K in keyof DiscoveryFilters]: NonNullable<DiscoveryFilters[K]> extends string[] ? K : never;
+}[keyof DiscoveryFilters] & keyof DiscoveryFilters;
 
 // Each list maps to a repeatable query parameter on the server.
 export const LIST_FILTER_PARAMS: [ListFilterKey, string][] = [
+  ["canonicalInclude", "canonical_include"],
+  ["canonicalExclude", "canonical_exclude"],
   ["tag", "tag"],
   ["fandom", "fandom"],
   ["genre", "genre"],
@@ -135,6 +139,8 @@ export interface DiscoveryFilterChip {
 }
 
 const LIST_LABELS: Partial<Record<keyof DiscoveryFilters, string>> = {
+  canonicalInclude: "Reviewed term",
+  canonicalExclude: "Hide reviewed term",
   tag: "Tag",
   fandom: "Fandom",
   genre: "Genre",

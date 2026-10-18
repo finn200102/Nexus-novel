@@ -1,7 +1,8 @@
-from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, UniqueConstraint, false
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, UniqueConstraint, false, Index
 from sqlalchemy.orm import relationship
 
 from app.models.base import BaseModel
+from uuid import uuid4
 
 
 class Shelf(BaseModel):
@@ -10,10 +11,12 @@ class Shelf(BaseModel):
     __tablename__ = "shelves"
     __table_args__ = (
         UniqueConstraint("user_id", "name", name="uq_shelves_user_name"),
+        Index('uq_shelves_identity_key', 'identity_key', unique=True),
     )
 
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     name = Column(String(120), nullable=False)
+    identity_key = Column(String(36), nullable=True, default=lambda: str(uuid4()))
     position = Column(Integer, nullable=False, default=0, server_default="0")
     # When shared, recipients see the owner's notes on the shelf's stories only if this is on.
     share_notes = Column(Boolean, nullable=False, default=False, server_default=false())

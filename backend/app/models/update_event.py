@@ -20,8 +20,8 @@ class NovelUpdateEvent(BaseModel):
     details = Column(JSON, nullable=False, default=dict, server_default="{}")
     read_at = Column(DateTime, nullable=True)
     notification_visible = Column(Boolean, nullable=False, default=True, server_default="1")
-    # Set once when the event is claimed for push/Apprise delivery; a claimed
-    # event is never sent again, even if its delivery later fails.
+    # Set atomically with durable per-destination delivery snapshots. Individual
+    # deliveries retain their own leases, retry state and completion receipts.
     notified_at = Column(DateTime, nullable=True)
 
     user = relationship("User")

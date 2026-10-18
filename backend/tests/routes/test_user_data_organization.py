@@ -50,7 +50,7 @@ def test_export_includes_optional_organization_keys(client, db, test_user):
 
     document = client.get("/me/export", headers=bearer_headers(test_user.id)).json()
 
-    assert document["version"] == 1
+    assert document["version"] == 2
     novel = document["libraries"][0]["novels"][0]
     assert novel["personal"] == {"notes": "Read the prologue twice", "rating": 4, "user_tags": ["cozy", "slow burn"]}
     assert document["shelves"] == [{"name": "Favourites", "position": 1, "novels": [{"library": "Reading", "url": ROYAL_ROAD_URL}]}]

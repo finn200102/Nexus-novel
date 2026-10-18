@@ -37,6 +37,32 @@ def make_app_password(client, auth_headers, scope: str) -> str:
     return response.json()["secret"]
 
 
+def test_browser_capture_is_private_sanitized_and_does_not_queue_source_work(client, db, reader, library, auth_headers):
+    from app.models.chapter import Chapter
+    from app.models.import_job import ImportJob
+    secret = make_app_password(client, auth_headers, "extension")
+    headers = basic(reader.username, secret)
+    payload = {"library_id": library.id, "url": STORY_URL, "title": "Loaded story",
+               "html": '<p>A <em>private</em> chapter.</p><script>bad()</script><img src="http://localhost/private.png">'}
+    response = client.post("/ext/capture", json=payload, headers=headers)
+    assert response.status_code == 201
+    chapter = db.query(Chapter).filter_by(novel_id=response.json()["novel_id"]).one()
+    rendered = "".join(block["html"] for block in chapter.document["blocks"])
+    assert "<em>private</em>" in rendered and "script" not in rendered and "localhost" not in rendered
+    assert db.query(ImportJob).count() == 0
+    again = client.post("/ext/capture", json=payload, headers=headers)
+    assert again.json()["novel_id"] == response.json()["novel_id"]
+    from app.models.chapter_version import ChapterVersion
+    original = db.query(ChapterVersion).one()
+    assert original.reason == "browser_capture" and "script" not in str(original.document)
+    changed = client.post("/ext/capture", json={**payload, "html": "<p>Revised browser text.</p>"}, headers=headers)
+    assert changed.json()["novel_id"] == response.json()["novel_id"]
+    assert db.query(ChapterVersion).count() == 1
+    db.refresh(chapter)
+    assert chapter.content == "Revised browser text." and "private" in original.content
+    assert client.post("/ext/capture", json=payload, headers=basic(reader.username, ACCOUNT_PASSWORD)).status_code == 401
+
+
 def test_extension_scope_can_be_created_and_listed_as_scope(client, auth_headers):
     secret = make_app_password(client, auth_headers, "extension")
     assert secret

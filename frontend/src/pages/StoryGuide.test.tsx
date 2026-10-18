@@ -1,7 +1,9 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { ToastProvider } from "../context/ToastContext";
+import { activateAccountStorage } from "../services/accountStorage";
+import { ToastContainer } from "../components/common/Toast";
 import StoryGuide from "./StoryGuide";
 import { insightService } from "../services/insightService";
 import type { GuideProjection, StoryGuide as StoryGuideSnapshot } from "../services/insightService";
@@ -182,10 +184,11 @@ const snapshot: StoryGuideSnapshot = {
   chapters: [],
 };
 
-const renderGuide = () =>
+const renderGuide = (query = "") =>
   render(
-    <MemoryRouter initialEntries={["/story-guide/42"]}>
+    <MemoryRouter initialEntries={[`/story-guide/42${query}`]}>
       <ToastProvider>
+        <ToastContainer />
         <Routes>
           <Route path="/story-guide/:metadataId" element={<StoryGuide />} />
         </Routes>
@@ -247,4 +250,82 @@ describe("StoryGuide richer chapter dossiers", () => {
     expect(within(dossier!).getByText(/The gate sealed behind her, leaving no road back\./)).toBeTruthy();
     expect(within(dossier!).getByText(/Who had drawn this impossible map\?/)).toBeTruthy();
   });
+  it.each([0, -2, -2147483648])("preserves signed reader boundary %s and never treats it as a chapter count", async (chapter) => {
+    vi.mocked(insightService.storyGuideProjection).mockResolvedValue({ ...dossierProjection, safe_through_chapter: chapter });
+    renderGuide(`?through_chapter=${chapter}`);
+    await screen.findByRole("heading", { name: "AI story guide" });
+    expect(insightService.storyGuideProjection).toHaveBeenCalledWith(42, chapter);
+    expect(screen.getByText("1 verified dossiers")).toBeTruthy();
+    expect(screen.queryByText(/% covered/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Prepare local chapter evidence" })).not.toBeDisabled();
+  });
+
+  it("shows no-evidence state without leaking content or queueing analysis for a null boundary", async () => {
+    vi.mocked(insightService.storyGuideProjection).mockResolvedValue({ ...dossierProjection, safe_through_chapter: null });
+    renderGuide();
+    await screen.findByText("No completed chapters have verified evidence yet.");
+    expect(screen.queryByRole("navigation", { name: /story guide sections/i })).toBeNull();
+    expect(screen.getByRole("button", { name: "Prepare local chapter evidence" })).toBeDisabled();
+    expect(screen.queryByText("Lyra Vale")).toBeNull();
+    expect(insightService.backfillStoryGuide).not.toHaveBeenCalled();
+  });
+
+  it("fails closed for an invalid URL boundary without fetching a wider guide", async () => {
+    renderGuide("?through_chapter=2147483648");
+    await screen.findByText(/chapter boundary in this link is invalid/);
+    expect(insightService.storyGuideProjection).not.toHaveBeenCalled();
+  });
+
+  it("shows server verification errors and never falls back to the legacy snapshot", async () => {
+    vi.mocked(insightService.storyGuideProjection).mockRejectedValue({ isAxiosError: true, response: { status: 409, data: { detail: "Reader evidence cannot be verified. Confirm the current chapter text." } } });
+    renderGuide();
+    await screen.findByText(/Reader evidence cannot be verified/);
+    expect(screen.queryByText("Lyra Vale")).toBeNull();
+  });
+
+  it("handles an empty entity article without exposing an unverified name or crashing", async () => {
+    vi.mocked(insightService.storyGuideEntityArticle).mockResolvedValue({ safe_through_chapter: null, entity: null, claims: [] });
+    renderGuide();
+    await screen.findByRole("heading", { name: "AI story guide" });
+    fireEvent.click(screen.getByRole("button", { name: /^Characters/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Open cited article" }));
+    await screen.findByText("This cited article is not available at your current reading position.");
+    expect(screen.queryByText("Cited entity article")).toBeNull();
+  });
+
+  it("discards another account's delayed guide response", async () => {
+    activateAccountStorage(801);
+    let resolve!: (value: GuideProjection) => void;
+    vi.mocked(insightService.storyGuideProjection).mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+    renderGuide();
+    await waitFor(() => expect(insightService.storyGuideProjection).toHaveBeenCalledTimes(1));
+    vi.mocked(insightService.storyGuideProjection).mockResolvedValue({ ...dossierProjection, safe_through_chapter: null });
+    act(() => activateAccountStorage(802));
+    await screen.findByText("No completed chapters have verified evidence yet.");
+    await act(async () => resolve(dossierProjection));
+    expect(screen.queryByRole("navigation", { name: /story guide sections/i })).toBeNull();
+    activateAccountStorage(null);
+  });
+
+  it("retains verified guide content while directing new AI work to private provider setup", async () => {
+    renderGuide();
+    await screen.findByRole("heading", { name: "AI story guide" });
+    expect(screen.getByRole("link", { name: "Private companion provider setup" })).toHaveAttribute("href", "/settings/providers");
+    expect(screen.queryByRole("button", { name: /rebuild/i })).toBeNull();
+    expect(screen.getByText(/Guide generation and new portraits are unavailable here/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /^Characters/ }));
+    expect(screen.getByRole("heading", { name: /^Lyra Vale$/ })).toBeTruthy();
+    expect(insightService.regenerateStoryGuide).not.toHaveBeenCalled();
+  });
+
+  it("shows actionable provider-permission failures from local evidence preparation without claiming success", async () => {
+    vi.mocked(insightService.backfillStoryGuide).mockRejectedValue({ isAxiosError: true, response: { status: 403, data: { detail: { code: "reader_provider_required", message: "Use a private provider with explicit story permission and a configured budget." } } } });
+    renderGuide();
+    await screen.findByRole("heading", { name: "AI story guide" });
+    fireEvent.click(screen.getByRole("button", { name: "Prepare local chapter evidence" }));
+    await screen.findByText("Use a private provider with explicit story permission and a configured budget.");
+    expect(screen.queryByText(/Queued .* for local evidence preparation/)).toBeNull();
+    expect(insightService.regenerateStoryGuide).not.toHaveBeenCalled();
+  });
+
 });

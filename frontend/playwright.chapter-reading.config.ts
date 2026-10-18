@@ -1,0 +1,3 @@
+import { defineConfig, devices } from "@playwright/test";
+import base from "./playwright.config";
+export default defineConfig({ ...base, testMatch:["**/chapter-reading.spec.ts","**/story-guide-boundary.spec.ts"],reporter:"line",workers:1,outputDir:"/tmp/nexus-chapter-reading-results",use:{...base.use,baseURL:"http://127.0.0.1:4198",channel:undefined,video:"off"},projects:[{name:"chromium",use:{...devices["Desktop Chrome"],channel:undefined}},{name:"firefox",use:{...devices["Desktop Firefox"],channel:undefined}},{name:"webkit",use:{...devices["Desktop Safari"],channel:undefined}}],webServer:{command:"node e2e/chapter-reading-vite-server.mjs",url:"http://127.0.0.1:4198",reuseExistingServer:false,timeout:30000} });

@@ -70,15 +70,18 @@ def _public_address(host: str) -> str:
 class _PublicOnlyBackend(httpcore.SyncBackend):
     """Connects only to public addresses, checked at connect time (DNS rebinding)."""
 
+    def __init__(self, force_public=False):
+        self.force_public = force_public
+
     def connect_tcp(self, host, port, timeout=None, local_address=None, socket_options=None):
-        if not settings.NOTIFY_ALLOW_PRIVATE_HOSTS:
+        if self.force_public or not settings.NOTIFY_ALLOW_PRIVATE_HOSTS:
             # TLS still verifies against the original name: httpcore passes
             # the origin host as server_hostname, not the address.
             host = _public_address(host)
         return super().connect_tcp(host, port, timeout=timeout, local_address=local_address, socket_options=socket_options)
 
 
-def public_http_transport() -> httpx.HTTPTransport:
+def public_http_transport(*, force_public=False) -> httpx.HTTPTransport:
     transport = httpx.HTTPTransport()
-    transport._pool._network_backend = _PublicOnlyBackend()  # pylint: disable=protected-access
+    transport._pool._network_backend = _PublicOnlyBackend(force_public=force_public)  # pylint: disable=protected-access
     return transport

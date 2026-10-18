@@ -13,10 +13,11 @@ import json
 import uuid
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status, Query
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.auth.dependencies import get_current_user
 from app.models.ereader import KoboDevice
@@ -25,6 +26,7 @@ from app.models.user import User
 from app.services import epub_service, kobo_service
 from config.database import get_db
 from config.settings import settings
+from app.schemas.ereader_identity import KoboVersionConfirmation,KoboBookVersionPage,KoboVersionConfirmed
 
 KOBO_STORE = "https://storeapi.kobo.com"
 # Headers worth sending to the store: the device's own store credentials and
@@ -88,6 +90,36 @@ def update_device(
 def revoke_device(device_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     kobo_service.revoke_device(db, user.id, device_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@devices_router.get('/{device_id}/books',response_model=KoboBookVersionPage)
+def device_books(response:Response,device_id:int,offset:int=Query(0,ge=0,le=2147483647),limit:int=Query(50,ge=1,le=100),
+                 db:Session=Depends(get_db),user:User=Depends(get_current_user)):
+    response.headers["Cache-Control"]="private, no-store"
+    return kobo_service.book_versions(db,user.id,device_id,offset=offset,limit=limit)
+
+
+@devices_router.get('/{device_id}/books/{entitlement}/versions/{fingerprint}/file')
+def historical_device_file(device_id:int,entitlement:str,fingerprint:str,db:Session=Depends(get_db),user:User=Depends(get_current_user)):
+    from app.models.ereader import EpubBuild,KoboSyncedBook
+    from app.services.ereader_identity_service import owner
+    device=kobo_service.get_device(db,user.id,device_id)
+    row=db.query(KoboSyncedBook).filter_by(device_id=device.id,entitlement_id=entitlement).first()
+    if row is None:raise HTTPException(404,'Book not found')
+    account,_=owner(db,user.id,row.novel_id)
+    build=db.query(EpubBuild).filter_by(novel_id=row.novel_id,fingerprint=fingerprint,owner_storage_id=account.storage_id).first()
+    if build is None:raise HTTPException(404,'Private book version not found')
+    try:path=epub_service.cached_path(build)
+    except FileNotFoundError:raise HTTPException(404,'Private book file unavailable') from None
+    db.commit()
+    return FileResponse(path,media_type='application/epub+zip',filename='saved-book.epub',headers={'Cache-Control':'private, no-store'})
+
+
+@devices_router.post('/{device_id}/books/{entitlement}/confirm-version',response_model=KoboVersionConfirmed)
+def confirm_device_book(response:Response,device_id:int,entitlement:str,value:KoboVersionConfirmation,
+                        db:Session=Depends(get_db),user:User=Depends(get_current_user)):
+    response.headers["Cache-Control"]="private, no-store"
+    return kobo_service.confirm_version(db,user.id,device_id,entitlement,**value.model_dump())
 
 
 # ---- the Kobo protocol --------------------------------------------------------------
@@ -269,71 +301,80 @@ async def _unknown_book(request: Request, ctx: KoboContext) -> Response:
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book not found")
 
 
-@router.get("/{token}/v1/library/{book_id}/metadata")
-async def book_metadata(
-    book_id: str, request: Request, ctx: KoboContext = Depends(kobo_context), db: Session = Depends(get_db)
-):
-    found = kobo_service.synced_book(db, ctx.device, book_id)
-    if found is None or found[0].removed:
-        return await _unknown_book(request, ctx)
-    row, novel = found
+def _local_book_call(db,device,book_id,action):
+    """Synchronous locks run in the thread pool; no transaction crosses proxy I/O."""
     try:
-        file = kobo_service.book_file(db, novel)
-    except epub_service.NoDownloadedChapters:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book not found")
-    return [kobo_service.book_metadata(kobo_service.kobo_base(request, ctx.token), row, novel, file)]
+        found=kobo_service.synced_book(db,device,book_id)
+        if found is None or found[0].removed:
+            db.rollback()
+            return None
+        result=action(*found)
+        db.commit()
+        return result
+    except Exception:
+        db.rollback()
+        raise
+
+
+@router.get("/{token}/v1/library/{book_id}/metadata")
+async def book_metadata(book_id:str,request:Request,ctx:KoboContext=Depends(kobo_context),db:Session=Depends(get_db)):
+    def local(row,novel):
+        try:file=kobo_service.book_file(db,novel)
+        except epub_service.NoDownloadedChapters:raise HTTPException(404,'Book not found') from None
+        return [kobo_service.book_metadata(kobo_service.kobo_base(request,ctx.token),row,novel,file)]
+    result=await run_in_threadpool(_local_book_call,db,ctx.device,book_id,local)
+    return result if result is not None else await _unknown_book(request,ctx)
 
 
 @router.get("/{token}/v1/library/{book_id}/state")
-async def get_state(book_id: str, request: Request, ctx: KoboContext = Depends(kobo_context), db: Session = Depends(get_db)):
-    found = kobo_service.synced_book(db, ctx.device, book_id)
-    if found is None:
-        return await _unknown_book(request, ctx)
-    return [kobo_service.reading_state(db, ctx.device, found[0])]
+async def get_state(book_id:str,request:Request,ctx:KoboContext=Depends(kobo_context),db:Session=Depends(get_db)):
+    result=await run_in_threadpool(_local_book_call,db,ctx.device,book_id,lambda row,novel:[kobo_service.reading_state(db,ctx.device,row)])
+    return result if result is not None else await _unknown_book(request,ctx)
 
 
 @router.put("/{token}/v1/library/{book_id}/state")
-async def put_state(book_id: str, request: Request, ctx: KoboContext = Depends(kobo_context), db: Session = Depends(get_db)):
-    found = kobo_service.synced_book(db, ctx.device, book_id)
-    if found is None:
-        return await _unknown_book(request, ctx)
+async def put_state(book_id:str,request:Request,ctx:KoboContext=Depends(kobo_context),db:Session=Depends(get_db)):
     try:
-        body = await request.json()
-        state = body["ReadingStates"][0]
-        if not isinstance(state, dict):
-            raise TypeError
-    except (ValueError, KeyError, IndexError, TypeError):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Malformed reading state")
-    result = kobo_service.apply_reading_state(db, ctx.device, found[0], state)
-    return {"RequestResult": "Success", "UpdateResults": [result]}
+        body=await request.json()
+        state=body['ReadingStates'][0]
+        if not isinstance(state,dict):raise TypeError
+    except (ValueError,KeyError,IndexError,TypeError):raise HTTPException(400,'Malformed reading state') from None
+    result=await run_in_threadpool(_local_book_call,db,ctx.device,book_id,lambda row,novel:kobo_service.apply_reading_state(db,ctx.device,row,state))
+    return {'RequestResult':'Success','UpdateResults':[result]} if result is not None else await _unknown_book(request,ctx)
 
 
 @router.delete("/{token}/v1/library/{book_id}")
-async def delete_book(book_id: str, request: Request, ctx: KoboContext = Depends(kobo_context), db: Session = Depends(get_db)):
-    """Removed on the device: take the story off the synced shelf so it does not come back."""
-    found = kobo_service.synced_book(db, ctx.device, book_id)
-    if found is None:
-        return await _unknown_book(request, ctx)
-    kobo_service.forget_book(db, ctx.device, found[0])
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+async def delete_book(book_id:str,request:Request,ctx:KoboContext=Depends(kobo_context),db:Session=Depends(get_db)):
+    def local(row,novel):
+        kobo_service.forget_book(db,ctx.device,row)
+        return True
+    result=await run_in_threadpool(_local_book_call,db,ctx.device,book_id,local)
+    return Response(status_code=204) if result is not None else await _unknown_book(request,ctx)
 
 
 @router.get("/{token}/download/{book_id}/{book_format}")
 def download(
-    book_id: str, book_format: str, ctx: KoboContext = Depends(kobo_context), db: Session = Depends(get_db)
+    book_id: str, book_format: str, v:str|None=Query(None,max_length=64), ctx: KoboContext = Depends(kobo_context), db: Session = Depends(get_db)
 ):
     found = kobo_service.synced_book(db, ctx.device, book_id)
     if found is None or found[0].removed or book_format not in ("kepub", "epub"):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book not found")
-    _, novel = found
-    try:
-        file = kobo_service.book_file(db, novel)
-    except epub_service.NoDownloadedChapters:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book not found")
-    path = file.path if book_format == "kepub" or file.kobo_format != "KEPUB" else file.built.path
+    row,novel=found
+    from app.models.ereader import EpubBuild
+    from app.services.ereader_identity_service import owner
+    user,novel=owner(db,ctx.user.id,novel.id)
+    build=db.query(EpubBuild).filter_by(novel_id=novel.id,fingerprint=row.fingerprint).first()
+    if not build or build.owner_storage_id!=user.storage_id or (v is not None and v not in (build.fingerprint,build.fingerprint[:12])):
+        raise HTTPException(409,'This download belongs to a different book version. Sync the device again.')
+    try:path=epub_service.cached_path(build)
+    except FileNotFoundError:raise HTTPException(404,'This book file is unavailable. Sync again.') from None
+    if book_format=='kepub':
+        converted=kobo_service.ensure_kepub(epub_service.BuiltEpub(build=build,path=path))
+        if converted:path=converted
+    db.commit()
     suffix = ".kepub.epub" if path.name.endswith(".kepub.epub") else ".epub"
     filename = f"{(novel.title or 'nexus-novel').replace(' ', '-').lower()}{suffix}"
-    return FileResponse(path, media_type="application/epub+zip", filename=filename)
+    return FileResponse(path, media_type="application/epub+zip", filename=filename,headers={"Cache-Control":"private, no-store"})
 
 
 @router.get("/{token}/{image_id}/{width}/{height}/{greyscale}/image.jpg")

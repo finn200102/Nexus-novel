@@ -16,6 +16,13 @@ export default defineConfig(({ mode }) => {
           target: backendTarget,
           changeOrigin: true,
           secure: false,
+          configure: proxy => {
+            proxy.on("proxyReq", (outgoing, request) => {
+              outgoing.setHeader("X-Forwarded-Prefix", "/api");
+              outgoing.setHeader("X-Forwarded-Host", request.headers.host || "localhost:5173");
+              outgoing.setHeader("X-Forwarded-Proto", "http");
+            });
+          },
           rewrite: (path) => path.replace(/^\/api/, ""),
         },
       },

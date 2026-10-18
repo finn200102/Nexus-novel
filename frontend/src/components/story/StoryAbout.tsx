@@ -3,8 +3,11 @@ import { Link, useNavigate } from "react-router-dom";
 import { ChevronDown } from "lucide-react";
 import { ReasonList } from "../organization/ReasonList";
 import type { InsightSignal, SimilarNovel, StoryGuide } from "../../services/insightService";
-import { Button, Card, Menu, Progress } from "../ui";
+import { Banner, Button, Card, Menu, Progress } from "../ui";
 import { discoverTagLink, type StoryView } from "./storyModel";
+
+import type { ChapterReadingSummary } from "../../services/chapterService";
+import { completedChaptersLabel, readingPlaceLabel } from "./chapterReadingLabels";
 
 type TermKind = "tag" | "genre" | "fandom";
 
@@ -17,11 +20,14 @@ interface StoryAboutProps {
   onEnrich: () => void;
   similar: SimilarNovel[];
   guide: StoryGuide | null;
-  guideCutoff: number;
+  guideCutoff: number | undefined;
   buildingGuide: boolean;
   onBuildGuide: () => void;
   onHide: (kind: TermKind | "author", value: string) => void;
-  progress: { read: number; total: number } | null;
+  progress: ChapterReadingSummary | null;
+  progressLoading?: boolean;
+  progressError?: string;
+  onRefreshProgress?: () => void;
   onSaveNext: () => void;
   savingOffline: boolean;
   offlineCount: number;
@@ -69,7 +75,7 @@ const StoryAbout: React.FC<StoryAboutProps> = (props) => {
   const [expanded, setExpanded] = useState(false);
   const long = (view.description?.length ?? 0) > LONG_SYNOPSIS;
   const running = analysisState === "queued" || analysisState === "running";
-  const guideLink = view.metadataId ? `/story/${view.metadataId}/guide?through_chapter=${guideCutoff}` : null;
+  const guideLink = view.metadataId ? `/story/${view.metadataId}/guide${guideCutoff === undefined ? "" : `?through_chapter=${guideCutoff}`}` : null;
 
   return (
     <div className="story-body">
@@ -125,7 +131,7 @@ const StoryAbout: React.FC<StoryAboutProps> = (props) => {
         {guide && !guide.unavailable && guideLink && (
           <Card className="story-card">
             <h2 className="story-section__title">Story guide</h2>
-            {guide.chapters_analyzed ? (
+            {guide.through_chapter != null && guide.chapters_analyzed ? (
               <>
                 <p className="story-hint">Characters, places and recaps through chapter {guide.through_chapter}. Later chapters are left out, so nothing is spoiled.</p>
                 {guide.characters?.length > 0 && (
@@ -135,10 +141,10 @@ const StoryAbout: React.FC<StoryAboutProps> = (props) => {
               </>
             ) : (
               <>
-                <p className="story-hint">Build a spoiler-free guide to characters, places and events from your downloaded chapters.</p>
+                <p className="story-hint">Prepare local evidence from downloaded chapters. For new AI answers, configure a private provider and use the story companion in the reader.</p>
                 <div className="story-row">
                   {inLibrary && (
-                    <Button size="sm" variant="secondary" loading={buildingGuide} onClick={onBuildGuide}>Build story guide</Button>
+                    <Button size="sm" variant="secondary" loading={buildingGuide} onClick={onBuildGuide}>Prepare local chapter evidence</Button>
                   )}
                   <Link className="story-link" to={guideLink}>Open story guide</Link>
                 </div>
@@ -149,11 +155,13 @@ const StoryAbout: React.FC<StoryAboutProps> = (props) => {
       </div>
 
       <aside className="story-aside" aria-label="Progress and similar stories">
-        {inLibrary && progress && (
+        {inLibrary && (
           <Card className="story-card">
             <h2 className="story-section__title">Your progress</h2>
-            <Progress label="Chapters read" value={progress.read} max={Math.max(progress.total, 1)} valueText={`${progress.read} of ${progress.total} read`} />
-            <p className="story-hint">{progress.read} of {progress.total} read · {props.offlineCount} saved offline</p>
+            {props.progressLoading && !progress && <p role="status">Loading chapter records…</p>}
+            {props.progressError && <Banner tone="warning">{props.progressError} {progress && "Showing the last verified counts."}</Banner>}
+            {progress && <><p className="story-hint">{readingPlaceLabel(progress)}</p><Progress label="Recorded completed chapters" value={progress.completed_chapters} max={Math.max(progress.total_chapters, 1)} valueText={completedChaptersLabel(progress)} /><p className="story-hint">{completedChaptersLabel(progress)} · {props.offlineCount} saved offline</p>{progress.completed_reading && <p className="story-hint">This reading is marked finished. Chapter records are shown separately.</p>}<p className="story-hint">Skipping ahead does not mark earlier chapters read.</p></>}
+            {props.onRefreshProgress && <Button size="sm" variant="ghost" disabled={props.progressLoading} onClick={props.onRefreshProgress}>Refresh chapter records</Button>}
             <Button size="sm" variant="secondary" disabled={props.savingOffline} onClick={props.onSaveNext}>Save next 10 offline</Button>
           </Card>
         )}

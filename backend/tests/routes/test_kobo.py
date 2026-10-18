@@ -250,13 +250,19 @@ def test_kepub_when_kepubify_is_available(client, db, setup, tmp_path, monkeypat
     assert list(tmp_path.rglob("*.kepub.epub"))
 
 
-def test_progress_round_trip_furthest_position_wins(client, db, setup, test_user):
+def test_progress_round_trip_furthest_position_wins(client, db, setup, test_user, auth_headers):
     device, novel = setup
     token = sync(client, device["token"]).headers[SYNC_TOKEN]
     book_id = db.query(KoboSyncedBook).one().entitlement_id
     state_url = f"/kobo/{device['token']}/v1/library/{book_id}/state"
 
-    # Device -> Nexus.
+    # The user explicitly verifies which generated version is installed.
+    version=client.get(f"/kobo-devices/{device['id']}/books",headers=auth_headers).json()['items'][0]
+    confirmed=client.post(f"/kobo-devices/{device['id']}/books/{book_id}/confirm-version",headers=auth_headers,json={
+        'expected_fingerprint':version['fingerprint'],'expected_manifest_epoch':version['manifest_epoch'],
+        'expected_manifest_revision':version['manifest_revision'],'reading_run_key':version['reading_run_key']})
+    assert confirmed.status_code==200
+    # Device -> Nexus (approximate, never content-read proof).
     put = client.put(state_url, json=device_state(book_id, source="OEBPS/chapter-2.xhtml", content=40, overall=45))
     assert put.status_code == 200
     body = put.json()

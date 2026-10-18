@@ -46,8 +46,16 @@ def delete_library(db: Session, library_id):
 
     library = db.query(Library).filter(Library.id == library_id).first()
     if library:
-        db.delete(library)
-        db.commit()
+        from app.services.story_audio_cleanup import stage_story_audio_removal,finish_story_audio_removal
+        try:
+            plans=[stage_story_audio_removal(db,novel) for novel in list(library.novels)]
+            db.delete(library)
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        for plan in plans:
+            finish_story_audio_removal(plan)
 
 
 def update_library(db: Session, library_id, library_data):

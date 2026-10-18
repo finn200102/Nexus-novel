@@ -7,10 +7,15 @@ from sqlalchemy import (
     ForeignKey,
     Enum,
     DateTime,
+    JSON,
+    Boolean,
+    Index,
+    text,
+    FetchedValue,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 from app.models.base import BaseModel
-from sqlalchemy import UniqueConstraint
 import enum
 
 
@@ -33,12 +38,19 @@ class Chapter(BaseModel):
 
     title = Column(String(255))
     content = Column(Text)
+    document = Column(JSON, nullable=True)
     chapter_number = Column(Integer, nullable=False)
     novel_id = Column(Integer, ForeignKey("novels.id"))
+    chapter_key = Column(String(36), nullable=True, server_default=FetchedValue())
+    metadata_manifest_key = Column(String(36), nullable=True)
+    metadata_chapter_key = Column(String(36), nullable=True)
+    archived = Column(Boolean, nullable=False, default=False, server_default="0")
+    archived_at = Column(DateTime, nullable=True)
     site_chapter_id = Column(BigInteger)
     source_url = Column(String(500))
     word_count = Column(Integer)
     novel = relationship("Novel", back_populates="chapters")
+    versions = relationship("ChapterVersion", back_populates="chapter", cascade="all, delete-orphan")
     content_status = Column(
         Enum(ContentStatus), default=ContentStatus.MISSING, nullable=False
     )
@@ -52,8 +64,18 @@ class Chapter(BaseModel):
     category = Column(String(32), default="story", server_default="story", nullable=False)
 
     __table_args__ = (
-        UniqueConstraint("novel_id", "chapter_number", name="uix_chapter_novel_number"),
+        UniqueConstraint("chapter_key", name="uq_chapter_lifecycle_key"),
+        Index("uq_active_chapter_novel_number", "novel_id", "chapter_number", unique=True,
+              sqlite_where=text("archived = 0"), postgresql_where=text("archived = false")),
     )
+
+    @property
+    def manifest_epoch(self):
+        return self.novel.manifest_state.manifest_epoch if self.novel and self.novel.manifest_state else None
+
+    @property
+    def manifest_revision(self):
+        return str(self.novel.manifest_state.revision) if self.novel and self.novel.manifest_state else None
 
     def __repr__(self):
         return f"<Chapter {self.title} - #{self.chapter_number}>"

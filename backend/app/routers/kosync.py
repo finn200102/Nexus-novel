@@ -11,6 +11,7 @@ overall percentage picks the chapter.
 """
 
 import re
+import json
 import time
 
 from datetime import UTC
@@ -20,7 +21,6 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.models.chapter import Chapter
 from app.models.ereader import EpubBuild, KosyncProgress
 from app.models.library import Library
 from app.models.novel import Novel
@@ -69,18 +69,14 @@ def put_progress(
     user: User = Depends(get_kosync_user),
 ):
     document = update.document.strip().lower()
-    build = (
-        db.query(EpubBuild)
-        .filter(or_(EpubBuild.partial_md5 == document, EpubBuild.partial_md5_lua == document))
-        .order_by(EpubBuild.id.desc())
-        .first()
-    )
-    novel = _owned_novel(db, user, build.novel_id) if build is not None else None
-    if build is None or novel is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unknown document. Download it from the OPDS catalog first.")
-
-    chapter_number = _chapter_number(build.spine or [], update)
-    chapter = db.query(Chapter).filter(Chapter.novel_id == novel.id, Chapter.chapter_number == chapter_number).first()
+    builds = _builds(db,user.id,document)
+    if not builds:
+        raise HTTPException(404,'Unknown document. Download it from the OPDS catalog first.')
+    build=builds[0] if len(builds)==1 else None
+    novel_ids={item.novel_id for item in builds}
+    if len(novel_ids)!=1:raise HTTPException(409,'This sampled document identifier matches several books. Download a current unambiguous copy.')
+    from app.services.ereader_identity_service import owner
+    _,novel=owner(db,user.id,next(iter(novel_ids)))
     timestamp = int(time.time())
 
     record = (
@@ -97,10 +93,16 @@ def put_progress(
     record.device = update.device[:100]
     record.device_id = update.device_id[:100]
 
-    if chapter is not None:
-        _store_reading_progress(db, user, novel.id, chapter, update.percentage)
+    from app.services.ereader_identity_service import inferred
+    index=_chapter_index(build.spine if build else [],update)
+    if build is None:record.progress_review_reason='book_document_ambiguous'
+    elif index is None:record.progress_review_reason='book_identity_unknown'
+    else:
+        record.progress_review_reason=inferred(db,user.id,build,index,update.percentage,
+            operation=json.dumps(['kosync',document,update.model_dump()],sort_keys=True))
     db.commit()
-    return {"document": document, "timestamp": timestamp}
+    return {"document":document,"timestamp":timestamp,"nexus_progress":'review_required' if record.progress_review_reason else 'inferred',
+        "review_reason":record.progress_review_reason}
 
 
 @router.get("/syncs/progress/{document}")
@@ -122,6 +124,8 @@ def get_progress(document: str, db: Session = Depends(get_db), user: User = Depe
         "percentage": record.percentage,
         "device": record.device,
         "device_id": record.device_id,
+        "nexus_progress":"review_required" if record.progress_review_reason else "inferred",
+        "review_reason":record.progress_review_reason,
         "timestamp": int(record.updated_at.replace(tzinfo=UTC).timestamp()) if record.updated_at else 0,
     }
 
@@ -137,30 +141,18 @@ def _owned_novel(db: Session, user: User, novel_id: int) -> Novel | None:
     )
 
 
-def _chapter_number(spine: list[int], update: KosyncProgressUpdate) -> int | None:
+def _chapter_index(spine: list[int], update: KosyncProgressUpdate) -> int | None:
     if not spine:
         return None
     match = FRAGMENT.search(update.progress or "")
     if match:
         index = int(match.group(1)) - 1
+        if not 0<=index<len(spine):return None
     else:
         index = int(update.percentage * len(spine))
     index = min(max(index, 0), len(spine) - 1)
-    return spine[index]
+    return index
 
-
-def _store_reading_progress(db: Session, user: User, novel_id: int, chapter: Chapter, fraction: float) -> None:
-    progress = db.query(ReadingProgress).filter(
-        ReadingProgress.user_id == user.id,
-        ReadingProgress.novel_id == novel_id,
-    ).first()
-    if progress is None:
-        progress = ReadingProgress(user_id=user.id, novel_id=novel_id)
-        db.add(progress)
-    progress.chapter_id = chapter.id
-    progress.chapter_number = chapter.chapter_number
-    progress.position = 0
-    progress.percent = min(max(fraction * 100, 0), 100)
 
 
 def _web_position(db: Session, user: User, document: str, record: KosyncProgress | None) -> dict | None:
@@ -170,26 +162,22 @@ def _web_position(db: Session, user: User, document: str, record: KosyncProgress
     wins; KOReader then offers to jump there. The position is the start of
     that chapter (DocFragment N+1 for spine index N).
     """
-    build = (
-        db.query(EpubBuild)
-        .filter(or_(EpubBuild.partial_md5 == document, EpubBuild.partial_md5_lua == document))
-        .order_by(EpubBuild.id.desc())
-        .first()
-    )
-    spine = list(build.spine or []) if build is not None else []
-    if not spine or _owned_novel(db, user, build.novel_id) is None:
-        return None
+    builds=_builds(db,user.id,document)
+    if len(builds)!=1:return None
+    build=builds[0]
+    spine=list(build.spine or [])
+    if not spine or _owned_novel(db,user,build.novel_id) is None:return None
     web = db.query(ReadingProgress).filter(
         ReadingProgress.user_id == user.id,
         ReadingProgress.novel_id == build.novel_id,
     ).first()
-    if web is None or web.chapter_number not in spine:
-        return None
-    web_index = spine.index(web.chapter_number)
+    from app.services.ereader_identity_service import progress_index
+    point=progress_index(db,user.id,build,web)
+    if point is None:return None
+    web_index=point[0]
     if record is not None:
-        device_chapter = _chapter_number(spine, record)
-        if device_chapter in spine and spine.index(device_chapter) >= web_index:
-            return None
+        device_index=_chapter_index(spine,record)
+        if device_index is not None and device_index>=web_index:return None
     return {
         "document": document,
         "progress": f"/body/DocFragment[{web_index + 1}]/body",
@@ -198,3 +186,9 @@ def _web_position(db: Session, user: User, document: str, record: KosyncProgress
         "device_id": "nexus-web",
         "timestamp": int(time.time()),
     }
+
+
+
+def _builds(db,user_id,document):
+    return db.query(EpubBuild).join(Novel,Novel.id==EpubBuild.novel_id).join(Library,Library.id==Novel.library_id).filter(
+        Library.user_id==user_id,or_(EpubBuild.partial_md5==document,EpubBuild.partial_md5_lua==document)).order_by(EpubBuild.id).limit(2).all()

@@ -32,6 +32,9 @@ export interface PaginatedResponse<T> {
 }
 
 export interface DiscoveryFilters {
+  /** Reviewed canonical identities; omitted by legacy clients. */
+  canonicalInclude?: string[];
+  canonicalExclude?: string[];
   tag: string[];
   tagMode: string;
   fandom: string[];

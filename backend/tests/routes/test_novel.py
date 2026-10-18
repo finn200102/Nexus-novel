@@ -310,8 +310,6 @@ def test_metadata_refresh_event_creates_user_event_and_download_job(client_with_
     response, headers, _, url, library = add_novel_resources(client_with_auth, db)
     assert response.status_code == status.HTTP_201_CREATED
     novel = get_novel_by_url(db, url).first()
-    novel.metadata_id = 77
-    db.commit()
     response = client_with_auth.patch(
         f"/novel/{novel.id}/follow?library_id={library.id}",
         json={
@@ -323,6 +321,8 @@ def test_metadata_refresh_event_creates_user_event_and_download_job(client_with_
         headers=headers,
     )
     assert response.status_code == status.HTTP_200_OK
+    from tests.routes.metadata_event_fixture import peer
+    snapshot,proof=peer(db,novel,monkeypatch,[{'chapter_number': 11, 'chapter_id': 11, 'title': 'Eleven'}, {'chapter_number': 12, 'chapter_id': 12, 'title': 'Twelve'}, {'chapter_number': 13, 'chapter_id': 13, 'title': 'Thirteen'}])
     monkeypatch.setenv("NEXUS_NOVEL_WEBHOOK_SECRET", "test-secret")
     response = client_with_auth.post(
         "/novel/internal/metadata-events",
@@ -330,7 +330,8 @@ def test_metadata_refresh_event_creates_user_event_and_download_job(client_with_
         json={
             "event": "source_refresh_completed",
             "job_id": "job-1",
-            "metadata_novel_id": 77,
+            "metadata_novel_id": novel.metadata_id,
+            "manifest_proof": proof,
             "source_id": 9,
             "site": "royalroad",
             "new_chapter_numbers": [11, 12, 13],
@@ -358,18 +359,19 @@ def test_metadata_refresh_event_duplicate_is_noop(client_with_auth, db, monkeypa
     response, headers, _, url, library = add_novel_resources(client_with_auth, db)
     assert response.status_code == status.HTTP_201_CREATED
     novel = get_novel_by_url(db, url).first()
-    novel.metadata_id = 78
-    db.commit()
     client_with_auth.patch(
         f"/novel/{novel.id}/follow?library_id={library.id}",
         json={"follow_state": "reading", "download_policy": "next_chapter"},
         headers=headers,
     )
+    from tests.routes.metadata_event_fixture import peer
+    snapshot,proof=peer(db,novel,monkeypatch,[{'chapter_number': 21, 'chapter_id': 21, 'title': 'Twenty-one'}])
     monkeypatch.setenv("NEXUS_NOVEL_WEBHOOK_SECRET", "test-secret")
     payload = {
         "event": "source_refresh_completed",
         "job_id": "job-duplicate",
-        "metadata_novel_id": 78,
+        "metadata_novel_id": novel.metadata_id,
+            "manifest_proof": proof,
         "source_id": 9,
         "site": "royalroad",
         "new_chapter_numbers": [21],
@@ -378,9 +380,10 @@ def test_metadata_refresh_event_duplicate_is_noop(client_with_auth, db, monkeypa
     first = client_with_auth.post("/novel/internal/metadata-events", headers={"X-Nexus-Webhook-Secret": "test-secret"}, json=payload)
     second = client_with_auth.post("/novel/internal/metadata-events", headers={"X-Nexus-Webhook-Secret": "test-secret"}, json=payload)
 
-    assert first.json() == {"accepted": True, "created_events": 1, "queued_downloads": 1}
-    assert second.json() == {"accepted": True, "created_events": 0, "queued_downloads": 0}
-    assert db.query(MetadataWebhookDelivery).count() == 1
+    assert first.json() == {"accepted": True, "created_events": 1, "queued_downloads": 1, "state":"applied", "review_required":0}
+    assert second.json() == {"accepted": True, "created_events": 0, "queued_downloads": 0, "state":"duplicate"}
+    assert db.query(MetadataWebhookDelivery).count() == 2
+    assert db.query(MetadataWebhookDelivery).filter(MetadataWebhookDelivery.delivery_key.like("manifest-wakeup:%")).count()==1
     assert db.query(NovelUpdateEvent).filter(NovelUpdateEvent.novel_id == novel.id).count() == 1
     assert db.query(ChapterDownloadJob).filter(ChapterDownloadJob.novel_id == novel.id).count() == 2
 
@@ -392,8 +395,8 @@ def test_metadata_refresh_event_ignores_unfollowed_novel(client_with_auth, db, m
     response, headers, _, url, library = add_novel_resources(client_with_auth, db)
     assert response.status_code == status.HTTP_201_CREATED
     novel = get_novel_by_url(db, url).first()
-    novel.metadata_id = 79
-    db.commit()
+    from tests.routes.metadata_event_fixture import peer
+    snapshot,proof=peer(db,novel,monkeypatch,[{'chapter_number': 31, 'chapter_id': 31}])
     monkeypatch.setenv("NEXUS_NOVEL_WEBHOOK_SECRET", "test-secret")
 
     response = client_with_auth.post(
@@ -402,14 +405,15 @@ def test_metadata_refresh_event_ignores_unfollowed_novel(client_with_auth, db, m
         json={
             "event": "source_refresh_completed",
             "job_id": "unfollowed-job",
-            "metadata_novel_id": 79,
+            "metadata_novel_id": novel.metadata_id,
+            "manifest_proof": proof,
             "source_id": 9,
             "site": "royalroad",
             "new_chapter_numbers": [31],
         },
     )
 
-    assert response.json() == {"accepted": True, "created_events": 0, "queued_downloads": 0}
+    assert response.json() == {"accepted": True, "created_events": 0, "queued_downloads": 0, "state":"applied", "review_required":0}
     assert db.query(NovelUpdateEvent).filter(NovelUpdateEvent.novel_id == novel.id).count() == 0
     assert db.query(ChapterDownloadJob).filter(ChapterDownloadJob.novel_id == novel.id).count() == 0
 
@@ -421,14 +425,14 @@ def test_metadata_refresh_event_does_not_download_on_hold(client_with_auth, db, 
     response, headers, _, url, library = add_novel_resources(client_with_auth, db)
     assert response.status_code == status.HTTP_201_CREATED
     novel = get_novel_by_url(db, url).first()
-    novel.metadata_id = 80
-    db.commit()
     client_with_auth.patch(
         f"/novel/{novel.id}/follow?library_id={library.id}",
         json={"follow_state": "on_hold", "download_policy": "next_n", "download_count": 2},
         headers=headers,
     )
     existing_jobs = db.query(ChapterDownloadJob).filter(ChapterDownloadJob.novel_id == novel.id).count()
+    from tests.routes.metadata_event_fixture import peer
+    snapshot,proof=peer(db,novel,monkeypatch,[{'chapter_number': 41, 'chapter_id': 41}, {'chapter_number': 42, 'chapter_id': 42}])
     monkeypatch.setenv("NEXUS_NOVEL_WEBHOOK_SECRET", "test-secret")
 
     response = client_with_auth.post(
@@ -437,14 +441,15 @@ def test_metadata_refresh_event_does_not_download_on_hold(client_with_auth, db, 
         json={
             "event": "source_refresh_completed",
             "job_id": "on-hold-job",
-            "metadata_novel_id": 80,
+            "metadata_novel_id": novel.metadata_id,
+            "manifest_proof": proof,
             "source_id": 9,
             "site": "royalroad",
             "new_chapter_numbers": [41, 42],
         },
     )
 
-    assert response.json() == {"accepted": True, "created_events": 0, "queued_downloads": 0}
+    assert response.json() == {"accepted": True, "created_events": 0, "queued_downloads": 0, "state":"applied", "review_required":0}
     assert db.query(NovelUpdateEvent).filter(NovelUpdateEvent.novel_id == novel.id).count() == 0
     assert db.query(ChapterDownloadJob).filter(ChapterDownloadJob.novel_id == novel.id).count() == existing_jobs
 
@@ -471,7 +476,8 @@ def test_metadata_refresh_event_requires_secret_before_claiming(client_with_auth
 
 def test_metadata_webhook_delivery_claim_is_unique_across_sessions(db):
     from app.models.metadata_webhook_delivery import MetadataWebhookDelivery
-    from app.routers.novel import claim_metadata_webhook_delivery, MetadataRefreshEvent
+    from app.routers.novel import MetadataRefreshEvent
+    from app.services.metadata_event_ingestion import claim as claim_metadata_webhook_delivery
     from sqlalchemy.orm import sessionmaker
 
     event = MetadataRefreshEvent(
@@ -498,7 +504,8 @@ def test_metadata_webhook_delivery_claim_is_unique_across_sessions(db):
 
 def test_metadata_webhook_allows_failure_then_success_for_same_source_job(db):
     from app.models.metadata_webhook_delivery import MetadataWebhookDelivery
-    from app.routers.novel import MetadataRefreshEvent, claim_metadata_webhook_delivery
+    from app.routers.novel import MetadataRefreshEvent
+    from app.services.metadata_event_ingestion import claim as claim_metadata_webhook_delivery
 
     failed = MetadataRefreshEvent(
         event="source_refresh_failed",
@@ -580,3 +587,19 @@ def test_background_metadata_calls_run_on_the_owning_event_loop():
         loop.call_soon_threadsafe(loop.stop)
         thread.join(timeout=5)
         loop.close()
+
+
+
+def test_metadata_refresh_event_fixture_preserves_imported_source_namespace_and_uuid(client_with_auth,db,monkeypatch):
+    from app.models import Chapter
+    from app.models.chapter_manifest import ChapterManifestState
+    from tests.routes.metadata_event_fixture import peer
+    response,_,_,url,_=add_novel_resources(client_with_auth,db)
+    assert response.status_code==201
+    novel=get_novel_by_url(db,url).one();state=db.get(ChapterManifestState,novel.id)
+    key=state.metadata_manifest_key
+    before={chapter.chapter_number:chapter.metadata_chapter_key for chapter in db.query(Chapter).filter_by(novel_id=novel.id)}
+    snapshot,proof=peer(db,novel,monkeypatch,[{'chapter_number':11,'chapter_id':11,'title':'Eleven'}])
+    assert snapshot.source['source_url']==novel.source_url==url
+    assert snapshot.manifest_key==key and all(item['chapter_key']==before[item['chapter_number']] for item in snapshot.items if item['chapter_number'] in before)
+    assert len(snapshot.items)==11 and proof['chapters']==[{'chapter_number':11,'chapter_key':snapshot.items[-1]['chapter_key']}]

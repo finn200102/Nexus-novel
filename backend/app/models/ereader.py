@@ -44,6 +44,11 @@ class EpubBuild(BaseModel):
     file_name = Column(String(255), nullable=False)
     # Chapter numbers in spine order; spine index N is KOReader's DocFragment[N+1].
     spine = Column(JSON, nullable=False, default=list)
+    spine_identity = Column(JSON, nullable=True)
+    source_snapshot = Column(JSON, nullable=True)
+    owner_storage_id = Column(String(36), nullable=True)
+    manifest_epoch = Column(String(36), nullable=True)
+    reading_run_key = Column(String(36), nullable=True)
 
 
 class KosyncProgress(BaseModel):
@@ -60,6 +65,7 @@ class KosyncProgress(BaseModel):
     percentage = Column(Float, nullable=False, default=0, server_default="0")
     device = Column(String(100), nullable=False, default="", server_default="")
     device_id = Column(String(100), nullable=False, default="", server_default="")
+    progress_review_reason = Column(String(80), nullable=True)
 
 
 class KoboDevice(BaseModel):
@@ -103,3 +109,7 @@ class KoboSyncedBook(BaseModel):
     content_percent = Column(Float, nullable=True)
     status = Column(String(20), nullable=True)
     bookmark_at = Column(DateTime, nullable=True)
+    bookmark_fingerprint = Column(String(64), nullable=True)
+    confirmed_fingerprint = Column(String(64), nullable=True)
+    confirmed_reading_run_key = Column(String(36), nullable=True)
+    progress_review_reason = Column(String(80), nullable=True)

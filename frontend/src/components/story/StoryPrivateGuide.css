@@ -1,0 +1,14 @@
+.story-private-guide { display:grid; gap:var(--sp-4); min-width:0; }
+.story-private-guide section, .story-private-guide form { display:grid; gap:var(--sp-3); min-width:0; border:1px solid var(--border); border-radius:var(--r-md); padding:var(--sp-4); }
+.story-private-guide h2, .story-private-guide h3, .story-private-guide p {margin:0;overflow-wrap:anywhere;}
+.story-private-guide__actions {display:flex;flex-wrap:wrap;gap:var(--sp-3);}
+.story-private-guide .ui-button {max-width:100%;white-space:normal;height:auto;min-height:var(--control-md);}
+.story-private-guide .ui-button__label {min-width:0;overflow-wrap:anywhere;}
+.story-private-guide progress {width:min(100%,26rem);}
+.story-private-guide img {max-width:100%;height:auto;}
+.story-private-guide blockquote {margin-inline:0;border-inline-start:3px solid var(--border);padding-inline-start:var(--sp-3);overflow-wrap:anywhere;}
+.story-private-guide ul {padding-inline-start:var(--sp-5);}
+.story-private-guide__review {display:grid;gap:var(--sp-3);overflow-wrap:anywhere;}
+/* WebKit otherwise keeps a native select's longest option as its flex minimum. */
+.story-private-guide .ui-select, .story-private-guide .ui-input {min-width:0;max-width:100%;text-overflow:ellipsis;}
+.story-private-guide .ui-select {overflow:hidden;}

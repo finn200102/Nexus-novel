@@ -1,16 +1,18 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ToastContext } from "../../context/ToastContextObject";
 import { AddStorySheet } from "./AddStorySheet";
 import { parseLinks, STORY_ADDED } from "./addStoryEvents";
 import { novelService } from "../../services/novelService";
 import { renderWithToasts } from "../organization/testUtils";
 
-vi.mock("../../context/useLibraryContext", () => ({
-  useLibraryContext: () => ({
+const libraryState = vi.hoisted(() => ({
     activeLibraryId: 1,
     libraries: [{ id: 1, name: "Main" }, { id: 2, name: "Shared" }],
-  }),
+}));
+vi.mock("../../context/useLibraryContext", () => ({
+  useLibraryContext: () => libraryState,
 }));
 vi.mock("../../services/novelService", () => ({ novelService: { addNovel: vi.fn(), addNovels: vi.fn() } }));
 vi.mock("../../services/liveSearchService", () => ({ liveSearchService: { jobs: vi.fn().mockResolvedValue([]) } }));
@@ -22,7 +24,24 @@ describe("parseLinks", () => {
 });
 
 describe("AddStorySheet", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    libraryState.activeLibraryId = 1;
+    libraryState.libraries = [{ id: 1, name: "Main" }, { id: 2, name: "Shared" }];
+  });
+
+  it("fills the destination when libraries arrive after the sheet opens", async () => {
+    libraryState.activeLibraryId = 0;
+    libraryState.libraries = [];
+    const request = { url: "https://example.org/story" };
+    const onClose = vi.fn();
+    const view = renderWithToasts(<AddStorySheet open onClose={onClose} request={request} />);
+    libraryState.activeLibraryId = 9;
+    libraryState.libraries = [{ id: 9, name: "Loaded library" }];
+    view.rerender(<ToastContext.Provider value={{ toasts: [], addToast: view.addToast, removeToast: vi.fn() }}><AddStorySheet open onClose={onClose} request={request} /></ToastContext.Provider>);
+    await userEvent.setup().click(screen.getByRole("button", { name: "Add to library" }));
+    await waitFor(() => expect(novelService.addNovel).toHaveBeenCalledWith(9, request.url));
+  });
 
   it("prefills the link and library and adds one story", async () => {
     const user = userEvent.setup();

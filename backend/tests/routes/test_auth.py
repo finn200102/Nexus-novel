@@ -62,6 +62,9 @@ def test_first_signup_becomes_admin_and_gets_a_session(client, db):
     body = response.json()
     assert body["username"] == "testuser"
     assert body["is_admin"] is True
+    from uuid import UUID
+    assert str(UUID(body["storage_id"])) == body["storage_id"]
+    assert get_user_by_username(db, "testuser").first().storage_id == body["storage_id"]
     assert body["expires_in"] == 15 * 60
     assert verify_token(body["access_token"])["user_id"] == body["id"]
     assert client.cookies.get(REFRESH_COOKIE)
@@ -195,13 +198,14 @@ def test_access_token_without_a_session_is_rejected(client, db, test_user):
 
 
 def test_refresh_rotates_the_cookie(client, db):
-    signup(client, "testuser")
+    first_identity = signup(client, "testuser").json()["storage_id"]
     first_cookie = client.cookies.get(REFRESH_COOKIE)
 
     response = client.post("/auth/refresh")
 
     assert response.status_code == status.HTTP_200_OK
     assert response.json()["username"] == "testuser"
+    assert response.json()["storage_id"] == first_identity
     second_cookie = client.cookies.get(REFRESH_COOKIE)
     assert second_cookie and second_cookie != first_cookie
     assert client.get("/auth/me", headers=bearer(response)).status_code == status.HTTP_200_OK

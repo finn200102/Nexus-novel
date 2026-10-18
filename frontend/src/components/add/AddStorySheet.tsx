@@ -42,6 +42,16 @@ export function AddStorySheet({ open, onClose, request }: AddStorySheetProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, request]);
 
+  useEffect(() => {
+    if (!open || libraries.length === 0) return;
+    // The sheet may open while the account's libraries are still loading.
+    // Keep an existing choice; fill the destination once libraries arrive.
+    const preferred = [request.libraryId, activeLibraryId, libraries[0].id]
+      .find(candidate => libraries.some(library => library.id === candidate));
+    setLibraryId(current => current != null && libraries.some(library => library.id === current)
+      ? current : preferred ?? null);
+  }, [open, libraries, activeLibraryId, request.libraryId]);
+
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const urls = parseLinks(links);

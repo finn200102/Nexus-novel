@@ -46,6 +46,11 @@ router = APIRouter(
 
 
 def _signed_in(db: Session, user: User, request: Request, response: Response, message: str) -> dict:
+    from app.models.library import Library
+    db.query(User).filter_by(id=user.id).with_for_update().one()
+    if db.query(Library.id).filter(Library.user_id == user.id).first() is None:
+        db.add(Library(user_id=user.id, name="My library"))
+        db.flush()
     session, refresh_token = start_session(db, user, request)
     db.commit()
     set_refresh_cookie(response, request, refresh_token)

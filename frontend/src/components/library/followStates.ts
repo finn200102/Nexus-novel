@@ -10,7 +10,7 @@ export const FOLLOW_STATE_LABELS: Record<Novel["follow_state"], string> = {
 };
 
 /** Where a library card leads: the story page for the copy, or the old reader path if no catalog id. */
-export function storyHref(novel: Novel, libraryId: number): string {
+export function storyHref(novel: Pick<Novel,"id"> & Partial<Pick<Novel,"metadata_id">>, libraryId: number): string {
   return novel.metadata_id != null
     ? `/story/${novel.metadata_id}?copy=${novel.id}`
     : `/library/${libraryId}/novels/${novel.id}`;

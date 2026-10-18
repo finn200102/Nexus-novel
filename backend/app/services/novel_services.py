@@ -71,8 +71,15 @@ def delete_novel(db: Session, novel_id):
 
     novel = db.query(Novel).filter(Novel.id == novel_id).first()
     if novel:
-        db.delete(novel)
-        db.commit()
+        from app.services.story_audio_cleanup import stage_story_audio_removal,finish_story_audio_removal
+        try:
+            plan=stage_story_audio_removal(db,novel)
+            db.delete(novel)
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        finish_story_audio_removal(plan)
 
 
 def update_novel(db: Session, novel_id, novel_data):

@@ -1,13 +1,19 @@
 import React, { useEffect, useState } from "react";
-import { Check, Link2, RefreshCw, RotateCw, Send, ShieldCheck, X } from "lucide-react";
+import { Link2, RefreshCw, Send, ShieldCheck } from "lucide-react";
 import { adminIntegrationService, MergeReview, WebhookDelivery, WebhookSubscription } from "../services/adminIntegrationService";
 import { getUserFacingError } from "../services/apiClient";
 import { useToast } from "../context/useToast";
 import "../styles/integrations.css";
+import VocabularyReviews from "../components/organization/VocabularyReviews";
+import SourceLifecycleReviews from "../components/organization/SourceLifecycleReviews";
+import EditionReviews from "../components/organization/EditionReviews";
 
 const DEFAULT_EVENTS = ["import.completed", "source_refreshed", "chapter.found", "download.completed", "download.failed", "source_returned_from_hiatus", "metadata.merge", "source.degraded", "source.recovered", "job.state_changed"];
 
 const Integrations: React.FC = () => {
+  const [vocabularyOpen, setVocabularyOpen] = useState(false);
+  const [sourceReviewOpen, setSourceReviewOpen] = useState(false);
+  const [editionOpen, setEditionOpen] = useState(false);
   const { addToast } = useToast();
   const [reviews, setReviews] = useState<MergeReview[]>([]);
   const [webhooks, setWebhooks] = useState<WebhookSubscription[]>([]);
@@ -26,10 +32,6 @@ const Integrations: React.FC = () => {
   };
   useEffect(() => { void load(); }, []);
 
-  const decide = async (review: MergeReview, action: "approve" | "reject" | "revert") => {
-    try { await adminIntegrationService.decideMerge(review.id, action); addToast(`Merge review ${action}d`, "success"); await load(); }
-    catch (err) { addToast(getUserFacingError(err, "Could not update merge review"), "error"); }
-  };
   const createWebhook = async (event: React.FormEvent) => {
     event.preventDefault();
     const eventTypes = form.event_types.split(",").map((value) => value.trim()).filter(Boolean);
@@ -48,11 +50,14 @@ const Integrations: React.FC = () => {
   };
 
   return <div className="integrations-page">
-    <header className="integrations-page__header"><div><h2>Duplicates and webhooks</h2><p>Check possible duplicate stories and manage webhooks that send events to other apps.</p></div><button className="operations-refresh" onClick={() => void load()} disabled={loading}><RefreshCw size={16} className={loading ? "is-spinning" : ""} /> Refresh</button></header>
+    <header className="integrations-page__header"><div><h2>Catalog review and webhooks</h2><p>Review catalog vocabulary and edition links, and manage webhooks that send events to other apps.</p></div><button className="operations-refresh" onClick={() => void load()} disabled={loading}><RefreshCw size={16} className={loading ? "is-spinning" : ""} /> Refresh</button></header>
     {error && <div className="integrations-alert"><ShieldCheck size={18} /> {error}</div>}
+    <details className="integrations-panel" onToggle={event => { if (event.currentTarget === event.target) setVocabularyOpen(event.currentTarget.open); }}><summary>Reviewed vocabulary aliases</summary>{vocabularyOpen && <VocabularyReviews />}</details>
+    <details className="integrations-panel" onToggle={event => { if (event.currentTarget === event.target) setEditionOpen(event.currentTarget.open); }}><summary>Reviewed edition links</summary>{editionOpen && <EditionReviews />}</details>
+    <details className="integrations-panel" onToggle={event => { if (event.currentTarget === event.target) setSourceReviewOpen(event.currentTarget.open); }}><summary>Reviewed source chapter lifecycles</summary>{sourceReviewOpen && <SourceLifecycleReviews />}</details>
     <section className="integrations-grid">
-      <article className="integrations-panel"><header><div><h2>Merge review</h2><p>Nothing merges silently. Each decision is auditable and reversible.</p></div><span>{reviews.length} open</span></header>
-        {loading ? <p className="integrations-muted">Loading merge review…</p> : reviews.length === 0 ? <p className="integrations-muted">No merge candidates need review.</p> : <div className="integrations-list">{reviews.map((review) => <div className="integration-row" key={review.id}><div><strong>{review.source.site} → {review.target_title}</strong><small>{Math.round(review.confidence * 100)}% confidence · {review.match_reasons.join(" · ") || "No explanation supplied"}</small>{review.conflicts.length > 0 && <small className="integration-warning">Conflicts: {review.conflicts.join(", ")}</small>}</div><div className="integration-actions">{review.status === "pending" ? <><button className="operations-action" onClick={() => void decide(review, "approve")}><Check size={14} /> Approve</button><button className="operations-action operations-action--quiet" onClick={() => void decide(review, "reject")}><X size={14} /> Reject</button></> : review.status === "approved" ? <button className="operations-action operations-action--quiet" onClick={() => void decide(review, "revert")}><RotateCw size={14} /> Revert</button> : <span className="integration-status">{review.status}</span>}</div></div>)}</div>}
+      <article className="integrations-panel"><header><div><h2>Legacy duplicate history</h2><p>These older suggestions are read-only and do not establish reviewed edition links. Use the edition review workflow for new decisions.</p></div><span>{reviews.length} records</span></header>
+        {loading ? <p className="integrations-muted">Loading legacy duplicate records…</p> : reviews.length === 0 ? <p className="integrations-muted">No legacy duplicate records.</p> : <div className="integrations-list">{reviews.map((review) => <div className="integration-row" key={review.id}><div><strong>{review.source.site} → {review.target_title}</strong><small>{Math.round(review.confidence * 100)}% confidence · {review.match_reasons.join(" · ") || "No explanation supplied"}</small>{review.conflicts.length > 0 && <small className="integration-warning">Conflicts: {review.conflicts.join(", ")}</small>}</div><div className="integration-actions"><span className="integration-status">{review.status}</span></div></div>)}</div>}
       </article>
       <article className="integrations-panel"><header><div><h2>Webhook subscriptions</h2><p>Nexus signs every delivery and disables a target after repeated failures.</p></div><span>{webhooks.filter((hook) => hook.enabled).length} active</span></header>
         <form className="integration-form" onSubmit={createWebhook}><input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Subscription name" /><input required type="url" value={form.target_url} onChange={(e) => setForm({ ...form, target_url: e.target.value })} placeholder="https://example.net/nexus" /><input required minLength={16} type="password" value={form.secret} onChange={(e) => setForm({ ...form, secret: e.target.value })} placeholder="Signing secret (16+ characters)" /><input required value={form.event_types} onChange={(e) => setForm({ ...form, event_types: e.target.value })} placeholder="Comma-separated events" /><button className="operations-action"><Link2 size={14} /> Add signed webhook</button></form>

@@ -1,0 +1,20 @@
+.source-lifecycle-review, .source-lifecycle-review fieldset, .source-lifecycle-review nav { min-width: 0; max-width: 100%; }
+.source-lifecycle-review p, .source-lifecycle-review strong, .source-lifecycle-review small { overflow-wrap: anywhere; }
+.source-lifecycle-review .ui-select-wrap, .source-lifecycle-review select { min-width: 0; width: 100%; max-width: 100%; }
+.source-lifecycle-review .ui-dialog__body { overflow-wrap: anywhere; }
+.source-lifecycle-review .ui-select { width: 0; flex: 1 1 0; }
+@media (max-width: 700px) {
+  .source-lifecycle-review .catalog-review-columns { grid-template-columns: minmax(0, 1fr); }
+  .source-lifecycle-review li > div { width: 100%; }
+}
+/* WebKit otherwise includes the selected option's full intrinsic text in page
+   scroll geometry. The native picker still exposes the complete option text. */
+.source-lifecycle-review .ui-select { text-overflow: ellipsis; }
+/* Keep the native closed picker responsible for its text viewport. WebKit's
+   appearance:none select leaks option text into ancestor scroll geometry. */
+.source-lifecycle-review .ui-select { appearance: auto; }
+.source-lifecycle-review .ui-select-wrap__chevron { display: none; }
+/* Constrain only the closed picker text viewport; all complete labels remain
+   available in its native options and the adjacent preserved-original list. */
+.source-lifecycle-review .ui-select-wrap { overflow: hidden; }
+.source-lifecycle-review .ui-select:focus-visible { outline-offset: -3px; }

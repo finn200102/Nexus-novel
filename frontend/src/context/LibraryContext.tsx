@@ -9,6 +9,7 @@ import { hasAccessToken } from "../services/apiClient";
 import { Library } from "../types/library";
 import { useAuth } from "./AuthContext";
 import { LibraryContext, LibraryContextValue } from "./LibraryContextObject";
+import { accountStorage, accountIdentity, activeStorageAccount, type AccountIdentity, storageGeneration } from "../services/accountStorage";
 
 const STORAGE_KEY = "nexus.activeLibrary";
 
@@ -16,7 +17,7 @@ const getStoredLibraryId = (): number | null => {
   if (typeof window === "undefined") {
     return null;
   }
-  const storedValue = window.localStorage.getItem(STORAGE_KEY);
+  const storedValue = accountStorage.getItem(STORAGE_KEY);
   const parsed = storedValue ? Number(storedValue) : null;
   return Number.isFinite(parsed) ? parsed : null;
 };
@@ -24,7 +25,9 @@ const getStoredLibraryId = (): number | null => {
 export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, user, offlineUser } = useAuth();
+  const identity = accountIdentity(user ?? offlineUser);
+  const [libraryOwner, setLibraryOwner] = useState<AccountIdentity | null>(null);
   const [libraries, setLibraries] = useState<Library[]>([]);
   const [activeLibraryId, setActiveLibraryId] = useState<number | null>(
     () => getStoredLibraryId()
@@ -48,23 +51,29 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   const refreshLibraries = useCallback(async () => {
+    const generation = storageGeneration();
+    const owner = activeStorageAccount();
     if (!hasAccessToken()) {
       setLibraries([]);
+      setLibraryOwner(owner);
       setIsLoading(false);
       return;
     }
     setIsLoading(true);
     try {
       const response = await libraryService.getLibraries();
+      if (generation !== storageGeneration()) return;
       const normalized: Library[] = Array.isArray(response) ? response : [];
       setLibraries(normalized);
+      setLibraryOwner(owner);
       ensureActiveLibrary(normalized);
       setError(null);
     } catch (err) {
+      if (generation !== storageGeneration()) return;
       console.error("Failed to load libraries", err);
       setError("Unable to load libraries");
     } finally {
-      setIsLoading(false);
+      if (generation === storageGeneration()) setIsLoading(false);
     }
   }, [ensureActiveLibrary]);
 
@@ -75,6 +84,7 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({
 
     if (!isAuthenticated) {
       setLibraries([]);
+      setLibraryOwner(null);
       setActiveLibraryId(null);
       setError(null);
       setIsLoading(false);
@@ -82,26 +92,28 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({
     }
 
     void refreshLibraries();
-  }, [authLoading, isAuthenticated, refreshLibraries]);
+  }, [authLoading, isAuthenticated, identity, refreshLibraries]);
 
   useEffect(() => {
-    if (typeof window === "undefined") {
+    if (typeof window === "undefined" || libraryOwner !== identity || !hasAccessToken()) {
       return;
     }
     if (activeLibraryId !== null) {
-      window.localStorage.setItem(STORAGE_KEY, String(activeLibraryId));
+      accountStorage.setItem(STORAGE_KEY, String(activeLibraryId));
     } else {
-      window.localStorage.removeItem(STORAGE_KEY);
+      accountStorage.removeItem(STORAGE_KEY);
     }
-  }, [activeLibraryId]);
+  }, [activeLibraryId, libraryOwner, identity]);
 
   const selectLibrary = useCallback((libraryId: number) => {
     setActiveLibraryId(libraryId);
   }, []);
 
   const createLibrary = useCallback(async (name: string) => {
+    const generation = storageGeneration();
     try {
       const newLibrary = await libraryService.createLibrary(name);
+      if (generation !== storageGeneration()) return null;
       if (newLibrary) {
         setLibraries((prev) => [newLibrary, ...prev]);
         setActiveLibraryId(newLibrary.id);
@@ -114,12 +126,16 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({
   }, []);
 
   const renameLibrary = useCallback(async (libraryId: number, name: string) => {
+    const generation = storageGeneration();
     await libraryService.renameLibrary(libraryId, name);
+    if (generation !== storageGeneration()) return;
     setLibraries((prev) => prev.map((library) => (library.id === libraryId ? { ...library, name } : library)));
   }, []);
 
   const deleteLibrary = useCallback(async (libraryId: number) => {
+    const generation = storageGeneration();
     await libraryService.deletelibrary(libraryId);
+    if (generation !== storageGeneration()) return;
     setLibraries((prev) => {
       const next = prev.filter((library) => library.id !== libraryId);
       setActiveLibraryId((current) => (current === libraryId ? next[0]?.id ?? null : current));
@@ -134,10 +150,10 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const value = useMemo<LibraryContextValue>(
     () => ({
-      libraries,
-      activeLibrary,
-      activeLibraryId,
-      isLoading,
+      libraries: libraryOwner === identity ? libraries : [],
+      activeLibrary: libraryOwner === identity ? activeLibrary : null,
+      activeLibraryId: libraryOwner === identity ? activeLibraryId : null,
+      isLoading: libraryOwner !== identity || isLoading,
       error,
       refreshLibraries,
       selectLibrary,
@@ -147,6 +163,8 @@ export const LibraryProvider: React.FC<{ children: React.ReactNode }> = ({
     }),
     [
       libraries,
+      libraryOwner,
+      identity,
       activeLibrary,
       activeLibraryId,
       isLoading,

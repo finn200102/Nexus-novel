@@ -16,6 +16,7 @@ test.describe("Nexus real-stack chapter downloads", () => {
   test.skip(!realStack, "Set NEXUS_E2E_MODE=real to run against the configured API.");
 
   test("imports a deterministic FFN fixture and reaches a visible terminal chapter state", async ({ page }) => {
+    test.setTimeout(240_000);
     test.skip(
       !username || !password,
       "Real-stack mode requires NEXUS_E2E_USER and NEXUS_E2E_PASSWORD.",
@@ -31,16 +32,16 @@ test.describe("Nexus real-stack chapter downloads", () => {
     await page.goto("/login");
     await page.getByLabel("Username").fill(username!);
     await page.getByLabel(/^Password/).fill(password!);
+    // Observe the home request caused by sign-in. Navigating again while it
+    // completes can discard its response body in Chromium.
+    const librariesResponsePromise = page.waitForResponse(
+      (response) => response.request().method() === "GET" && /\/library\/?$/.test(response.url()),
+    );
     await page.getByRole("button", { name: "Sign in" }).click();
     await expect(page).not.toHaveURL(/\/login(?:$|\?)/);
 
     // The home page loads the authenticated user's libraries. Reuse that response
     // so the test does not manufacture or mutate a library just for its fixture.
-    const librariesResponsePromise = page.waitForResponse(
-      (response) =>
-        response.request().method() === "GET" && /\/library\/?$/.test(response.url()),
-    );
-    await page.goto("/");
     const librariesResponse = await librariesResponsePromise;
     expect(librariesResponse.ok(), await librariesResponse.text()).toBeTruthy();
     const libraries = (await librariesResponse.json()) as Array<{ id: number }>;
@@ -48,8 +49,8 @@ test.describe("Nexus real-stack chapter downloads", () => {
     const libraryId = libraries[0].id;
 
     await page.goto(`/library/${libraryId}`);
-    await page.getByRole("button", { name: "Add novel" }).click();
-    await page.getByLabel("Novel URL").fill(fixtureUrl);
+    await page.getByRole("button", { name: "Add story", exact: true }).click();
+    await page.getByLabel("Story link", { exact: true }).fill(fixtureUrl);
 
     const importResponsePromise = page.waitForResponse(
       (response) => response.request().method() === "POST" && /\/novel\/?$/.test(response.url()),
@@ -71,6 +72,7 @@ test.describe("Nexus real-stack chapter downloads", () => {
       .poll(
         async () => {
           await page.reload();
+          await rows.first().waitFor({ state: "visible", timeout: 4_000 }).catch(() => undefined);
           return (await rows.count()) > 0 ? "READY" : "NO_CHAPTER";
         },
         { timeout: 120_000, intervals: [2_000, 4_000, 8_000] },
@@ -96,14 +98,29 @@ test.describe("Nexus real-stack chapter downloads", () => {
       .poll(
         async () => {
           await page.reload();
+          await target.waitFor({ state: "visible", timeout: 4_000 }).catch(() => undefined);
           return (await target.getAttribute("data-status")) || "UNKNOWN";
         },
         { timeout: 180_000, intervals: [2_000, 4_000, 8_000] },
       )
-      .toSatisfy((status: string) => terminalStatuses.has(status));
+      .toMatch(/^(PRESENT|FAILED)$/);
 
     const finalStatus = await target.getAttribute("data-status");
     expect(terminalStatuses.has(finalStatus || ""), `Unexpected final chapter status: ${finalStatus}`).toBeTruthy();
+    expect(finalStatus, "The deterministic permitted source fixture must produce readable content.").toBe("PRESENT");
     expect(downloadResponses.some((response) => response.status >= 500), downloadResponses.map((response) => `${response.status} ${response.url}`).join("\n")).toBeFalsy();
+    await page.goto(`/library/${libraryId}/novels/${novel.id}/${targetChapter}`);
+    await expect(page.locator(".reader__content")).toHaveAttribute("aria-busy", "false");
+    await expect(page.getByText(/1 illustration could not be saved for offline reading/)).toBeVisible();
+    await page.getByRole("button", { name: "Open illustration: Fixture island map" }).click();
+    const viewer = page.getByRole("dialog", { name: "Chapter illustration" });
+    await expect(viewer).toBeVisible();
+    await expect.poll(() => viewer.getByRole("img").evaluate(image => (image as HTMLImageElement).naturalWidth)).toBe(1);
+    await page.keyboard.press("Escape");
+    await page.goto("/offline");
+    const offlineStory = page.getByRole("region", { name: /^Offline files for / }).first();
+    await offlineStory.locator("summary").click();
+    await expect(offlineStory.getByText("Saved", { exact: true })).toBeVisible();
+    await expect(offlineStory.getByText("1 of 2 saved · incomplete · 1 missing", { exact: true })).toBeVisible();
   });
 });

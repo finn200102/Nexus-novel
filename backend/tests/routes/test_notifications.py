@@ -166,3 +166,28 @@ def test_delivery_rechecks_the_destination(monkeypatch):
 
     with pytest.raises(BlockedDestination):
         notification_delivery.send_apprise("json://127.0.0.1:9/", "t", "b")
+
+
+def test_channel_enable_does_not_retroactively_deliver_old_events(client,auth_headers,db,monkeypatch):
+    from app.models.update_event import NovelUpdateEvent
+    from app.models.notification_delivery import NotificationDelivery
+    from app.services.notification_delivery import snapshot_due_notifications,deliver_due_notifications
+    from tests import auth_helpers
+    user_id=auth_helpers.current_db.query(User).first().id
+    event=NovelUpdateEvent(user_id=user_id,novel_id=None,event_type='author_new_work',message='Old update',details={'title':'Old'},notification_visible=True)
+    db.add(event);db.commit()
+    created=client.post('/notifications/channels',headers=auth_headers,json={'url':'ntfy://ntfy.sh/lifecycle-fixture','label':'Private','enabled':False})
+    assert created.status_code==201,created.text
+    channel_id=created.json()['id']
+    enabled=client.patch(f'/notifications/channels/{channel_id}',headers=auth_headers,json={'enabled':True})
+    assert enabled.status_code==200,enabled.text
+    calls=[];monkeypatch.setattr('app.services.notification_delivery.send_apprise',lambda *args:calls.append(args) or True)
+    deliver_due_notifications(db)
+    assert calls==[] and db.query(NotificationDelivery).count()==0
+    newer=NovelUpdateEvent(user_id=user_id,novel_id=None,event_type='author_new_work',message='New update',details={'title':'New'},notification_visible=True)
+    db.add(newer);db.commit();snapshot_due_notifications(db)
+    row=db.query(NotificationDelivery).one()
+    client.patch(f'/notifications/channels/{channel_id}',headers=auth_headers,json={'enabled':False})
+    client.patch(f'/notifications/channels/{channel_id}',headers=auth_headers,json={'enabled':True})
+    deliver_due_notifications(db);db.refresh(row)
+    assert calls==[] and row.status=='cancelled'

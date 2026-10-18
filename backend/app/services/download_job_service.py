@@ -1,9 +1,12 @@
 from datetime import UTC, datetime, timedelta
+from fastapi import HTTPException
 
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from app.models.chapter import Chapter, ContentStatus
 from app.models.download_job import ChapterDownloadJob
+from app.services.job_lease import claim
 
 ACTIVE_STATUSES = ("queued", "processing", "retry_wait")
 
@@ -35,33 +38,34 @@ def queue_missing_chapters(db: Session, *, user_id: int, library_id: int, novel_
         max_attempts=3,
         next_attempt_at=datetime.now(UTC),
     ) for chapter in chapters]
-    db.add_all(jobs)
-    db.flush()
-    return jobs
+    created = []
+    for job in jobs:
+        try:
+            with db.begin_nested():
+                db.add(job)
+                db.flush()
+            created.append(job)
+        except IntegrityError:
+            # Another request already queued this chapter. The database's
+            # active-job constraint is authoritative, not the initial read.
+            duplicate = db.query(ChapterDownloadJob.id).filter(
+                ChapterDownloadJob.user_id == user_id,
+                ChapterDownloadJob.chapter_id == job.chapter_id,
+                ChapterDownloadJob.status.in_(["queued", "processing", "retry_wait"]),
+            ).first()
+            if duplicate:
+                continue
+            raise
+    return created
 
 
 def claim_job(db: Session, job_id: int, *, worker_id: str | None = None) -> ChapterDownloadJob | None:
-    # SQLAlchemy's DateTime columns are stored without timezone information in
-    # the existing PostgreSQL schema. Normalize the comparison value so queued
-    # jobs do not fail before the downloader gets a chance to run.
-    now = datetime.now(UTC).replace(tzinfo=None)
-    job = db.query(ChapterDownloadJob).filter(ChapterDownloadJob.id == job_id).first()
-    if not job or job.status not in {"queued", "retry_wait"}:
-        return None
-    if job.next_attempt_at and job.next_attempt_at > now:
-        return None
-    job.status = "processing"
-    job.attempt_count = (job.attempt_count or 0) + 1
-    job.last_attempt_at = now
-    job.started_at = job.started_at or now
-    job.next_attempt_at = None
-    job.error = None
-    db.commit()
-    db.refresh(job)
-    return job
+    return claim(db, ChapterDownloadJob, job_id, worker_id=worker_id)
 
 
 def complete_job(db: Session, job: ChapterDownloadJob) -> None:
+    job.lease_owner = None
+    job.lease_expires_at = None
     job.status = "completed"
     job.finished_at = datetime.now(UTC)
     job.next_attempt_at = None
@@ -78,6 +82,8 @@ def fail_or_retry_job(
     error_code: str = "DOWNLOAD_FAILED",
     retryable: bool = True,
 ) -> None:
+    job.lease_owner = None
+    job.lease_expires_at = None
     now = datetime.now(UTC)
     job.error = error[:2000]
     job.error_code = error_code
@@ -92,7 +98,29 @@ def fail_or_retry_job(
     db.commit()
 
 
+def fresh_owned_job(db,job):
+    from app.models.user import User
+    from app.services.chapter_identity_service import sqlite_transaction
+    job_id,user_id=job.id,job.user_id
+    sqlite_transaction(db,write=True)
+    db.query(User.id).filter_by(id=user_id).with_for_update().first()
+    current=db.query(ChapterDownloadJob).filter_by(id=job_id,user_id=user_id).populate_existing().with_for_update().first()
+    if current is None:raise HTTPException(404,'Download job not found')
+    return current
+
+
 def cancel_job(db: Session, job: ChapterDownloadJob, reason: str = "Cancelled by user") -> None:
+    job=fresh_owned_job(db,job)
+    if job.status not in ACTIVE_STATUSES:raise HTTPException(409,'Download job is no longer active')
+    from app.services.chapter_download_identity_service import capture,matches
+    chapter=db.query(Chapter).filter_by(id=job.chapter_id,novel_id=job.novel_id).populate_existing().with_for_update().first()
+    if chapter is not None and chapter.content_status==ContentStatus.PROCESSING:
+        current=capture(db,chapter,user_id=job.user_id,library_id=job.library_id)
+        if matches(current,job.chapter_identity):
+            chapter.content_status=ContentStatus.MISSING
+            chapter.download_started_at=None;chapter.download_finished_at=None;chapter.download_error=None
+    job.lease_owner = None
+    job.lease_expires_at = None
     now = datetime.now(UTC)
     job.status = "cancelled"
     job.cancelled_at = now
@@ -103,6 +131,15 @@ def cancel_job(db: Session, job: ChapterDownloadJob, reason: str = "Cancelled by
 
 
 def retry_job(db: Session, job: ChapterDownloadJob) -> None:
+    job=fresh_owned_job(db,job)
+    if job.status not in {'failed','cancelled','retry_wait'}:raise HTTPException(409,'Only failed or cancelled downloads can be retried')
+    from app.services.chapter_download_identity_service import capture,matches
+    chapter=db.query(Chapter).filter_by(id=job.chapter_id,novel_id=job.novel_id).populate_existing().with_for_update().first()
+    current=capture(db,chapter,user_id=job.user_id,library_id=job.library_id) if chapter is not None else None
+    if current is None or not matches(current,job.chapter_identity) or not current.get('metadata_manifest_key') or not current.get('metadata_chapter_key') or not isinstance(current.get('metadata_source'),dict):
+        raise HTTPException(409,detail={'code':'chapter_review_required','message':'Review the source binding and select the current chapter for a new download. This older job cannot be rebound by retry.','review_path':f'/chapter/novel/{job.novel_id}/manifest-state'})
+    job.lease_owner = None
+    job.lease_expires_at = None
     # A manual retry is a new retry cycle.  Keeping the old counter caused a
     # previously exhausted job to jump directly to impossible states such as
     # "attempt 4/3" and fail without receiving its renewed retry budget.

@@ -210,6 +210,12 @@ def test_metadata_webhook_auto_download_queues_window(client, db, test_user, tes
     _personal(db, test_user, serial, auto_download=True, keep_ahead=2)
     monkeypatch.setenv("NEXUS_NOVEL_WEBHOOK_SECRET", "test-secret")
 
+    from tests.routes.metadata_event_fixture import peer
+    snapshot,proof=peer(db,serial,monkeypatch,[
+        {'chapter_number':4,'chapter_id':104,'title':'Four','category':'story'},
+        {'chapter_number':5,'chapter_id':105,'title':'Five','category':'side'},
+        {'chapter_number':6,'chapter_id':106,'title':'Six','category':'story'},
+    ])
     response = client.post(
         "/novel/internal/metadata-events",
         headers={"X-Nexus-Webhook-Secret": "test-secret"},
@@ -220,6 +226,7 @@ def test_metadata_webhook_auto_download_queues_window(client, db, test_user, tes
             "source_id": 9,
             "site": "royalroad",
             "new_chapter_numbers": [4, 5, 6],
+            "manifest_proof":proof,
             "chapters": [
                 {"chapter_number": 4, "chapter_id": 4, "title": "Four", "category": "story"},
                 {"chapter_number": 5, "chapter_id": 5, "title": "Five", "category": "side"},
@@ -232,6 +239,7 @@ def test_metadata_webhook_auto_download_queues_window(client, db, test_user, tes
     assert response.json()["queued_downloads"] == 2
     queued = sorted(job.chapter.chapter_number for job in db.query(ChapterDownloadJob).all())
     assert queued == [4, 6]
+    assert all(job.chapter_identity["metadata_manifest_key"]==snapshot.manifest_key for job in db.query(ChapterDownloadJob))
 
 
 def test_personal_auto_download_settings_round_trip(client, db, test_user, test_library):
@@ -251,8 +259,9 @@ def test_personal_auto_download_settings_round_trip(client, db, test_user, test_
     assert client.put(url, json={"keep_ahead": 500}, headers=headers).status_code == 422
 
 
-def test_novel_detail_resync_updates_existing_chapter_category(client, db, test_user, test_library, monkeypatch):
+def test_novel_detail_keeps_existing_chapters_readable_when_source_changes_need_review(client, db, test_user, test_library, monkeypatch):
     from app.services import metadata_client
+    from uuid import uuid4
 
     headers = bearer_headers(test_user.id)
     serial = _novel(db, test_library, metadata_id=7)
@@ -262,24 +271,37 @@ def test_novel_detail_resync_updates_existing_chapter_category(client, db, test_
     async def fake_metadata(metadata_id):
         return {"title": "Serial"}
 
-    async def fake_chapters(metadata_id, limit=1000):
-        return [{"chapter_number": 1, "category": "story"}, {"chapter_number": 2, "category": "story"}]
+    async def fake_manifest(metadata_id):
+        return metadata_client.ChapterManifestSnapshot(novel_id=metadata_id, manifest_key=str(uuid4()),
+            revision='1', fingerprint='a' * 64, identity_kind='stable_source_id', total=2,
+            source={'site': 'royalroad', 'story_id': 77, 'source_url': serial.url}, items=[
+                {'id': number, 'chapter_key': str(uuid4()), 'chapter_number': number, 'chapter_id': 100 + number,
+                 'category': 'story', 'identity_kind': 'stable_source_id', 'title': f'Chapter {number}',
+                 'url': f'https://synthetic.invalid/{number}', 'word_count': 100}
+                for number in (1, 2)])
 
     monkeypatch.setattr(metadata_client, "get_novel_metadata", fake_metadata)
-    monkeypatch.setattr(metadata_client, "get_chapters_from_metadata", fake_chapters)
+    monkeypatch.setattr(metadata_client, "get_chapter_manifest", fake_manifest)
 
-    assert client.get(f"/novel/{serial.id}?library_id={test_library.id}", headers=headers).status_code == 200
+    response = client.get(f"/novel/{serial.id}?library_id={test_library.id}", headers=headers)
+    assert response.status_code == 200
+    assert response.json()['chapter_manifest_review_required'] is True
     db.refresh(second)
-    assert second.category == "story"
+    assert second.category == "side"
+    assert db.query(Chapter).filter_by(novel_id=serial.id).count() == 2
 
 
-def test_metadata_webhook_resync_updates_existing_chapter_category(client, db, test_user, test_library, monkeypatch):
+def test_metadata_webhook_category_drift_preserves_original_for_review(client, db, test_user, test_library, monkeypatch):
     serial = _novel(db, test_library, metadata_id=78)
     existing = _chapter(db, serial, 1, category="side")
+    existing.content="Preserved downloaded side chapter."
+    existing.content_status=ContentStatus.PRESENT
     db.add(UserNovelFollow(user_id=test_user.id, novel_id=serial.id, state="reading"))
     db.commit()
     monkeypatch.setenv("NEXUS_NOVEL_WEBHOOK_SECRET", "test-secret")
 
+    from tests.routes.metadata_event_fixture import peer
+    snapshot,proof=peer(db,serial,monkeypatch,[{'chapter_number':1,'chapter_id':101,'title':'One','category':'story'}])
     response = client.post(
         "/novel/internal/metadata-events",
         headers={"X-Nexus-Webhook-Secret": "test-secret"},
@@ -290,13 +312,23 @@ def test_metadata_webhook_resync_updates_existing_chapter_category(client, db, t
             "source_id": 9,
             "site": "royalroad",
             "new_chapter_numbers": [1],
+            "manifest_proof":proof,
             "chapters": [{"chapter_number": 1, "chapter_id": 1, "title": "One", "category": "story"}],
         },
     )
 
     assert response.status_code == 200
     db.refresh(existing)
-    assert existing.category == "story"
+    assert existing.category == "side" and existing.content=="Preserved downloaded side chapter."
+    assert existing.content_status==ContentStatus.PRESENT
+    assert response.json()['state']=='review_required'
+    assert db.query(ChapterDownloadJob).count()==0
+    review=db.query(NovelUpdateEvent).one()
+    assert review.event_type=='source_manifest_review_required' and review.details['code']=='chapter_review_required'
+    duplicate=client.post('/novel/internal/metadata-events',headers={'X-Nexus-Webhook-Secret':'test-secret'},json={
+        'event':'source_refresh_completed','job_id':'job-cat','metadata_novel_id':78,'source_id':9,'site':'royalroad','manifest_proof':proof})
+    assert duplicate.status_code==200 and duplicate.json()['state']=='duplicate'
+    assert db.query(NovelUpdateEvent).count()==1
 
 
 def test_inbox_count_endpoint_and_operations_match_inbox_rows(client, db, test_user, test_library):

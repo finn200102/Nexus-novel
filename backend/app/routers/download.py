@@ -4,7 +4,6 @@ from sqlalchemy.orm import Session
 from config.database import SessionLocal, get_db
 from app.auth.dependencies import get_current_user
 from app.models.download_job import ChapterDownloadJob
-from app.models.chapter import Chapter, ContentStatus
 from app.models.library import Library
 from app.models.novel import Novel
 from app.models.user import User
@@ -62,12 +61,6 @@ def cancel_download_job(job_id: int, action: DownloadJobAction | None = None, db
     job = _owned_job(db, job_id, current_user)
     if job.status not in ACTIVE_STATUSES:
         raise HTTPException(status_code=409, detail="Download job is not active")
-    chapter = db.query(Chapter).filter(Chapter.id == job.chapter_id).first()
-    if chapter and chapter.content_status == ContentStatus.PROCESSING:
-        chapter.content_status = ContentStatus.MISSING
-        chapter.download_started_at = None
-        chapter.download_finished_at = None
-        chapter.download_error = None
     cancel_job(db, job, (action.reason if action else None) or "Cancelled by user")
     db.refresh(job)
     return job

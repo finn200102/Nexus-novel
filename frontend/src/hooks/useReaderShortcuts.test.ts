@@ -54,4 +54,13 @@ describe("useReaderShortcuts", () => {
     expect(h.bookmark).not.toHaveBeenCalled();
     expect(h.next).not.toHaveBeenCalled();
   });
+  it("keeps background shortcuts inactive when modal controls leave focus on body", () => {
+    const h = handlers(); renderHook(() => useReaderShortcuts(h, true));
+    const layer = document.createElement("div"); layer.className = "ui-modal-layer";
+    document.body.append(layer);
+    press("ArrowRight", document.body); press("j", document.body); press("b", document.body);
+    expect(h.next).not.toHaveBeenCalled(); expect(h.bookmark).not.toHaveBeenCalled();
+    layer.remove(); press("ArrowRight", document.body);
+    expect(h.next).toHaveBeenCalledTimes(1);
+  });
 });

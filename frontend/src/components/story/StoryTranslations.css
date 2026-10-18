@@ -1,0 +1,14 @@
+.story-translations { display: grid; gap: var(--sp-4); min-width: 0; }
+.story-translations h2, .story-translations h3, .story-translations p { margin: 0; }
+.story-translations__variants { display: grid; list-style: none; padding: 0; margin: 0; gap: var(--sp-3); }
+.story-translations__variants > li, .story-translations > section { display: grid; min-width: 0; gap: var(--sp-3); padding: var(--sp-4); border: 1px solid var(--border); border-radius: var(--r-md); }
+.story-translations__actions { display: flex; gap: var(--sp-3); align-items: center; flex-wrap: wrap; }
+.story-translations p, .story-translations code { overflow-wrap: anywhere; }
+.story-translations progress { width: min(100%, 24rem); accent-color: var(--accent); }
+
+.story-translation-creation, .story-translation-creation__review { display: grid; gap: var(--sp-3); min-width: 0; padding-block: var(--sp-3); }
+.story-translations summary { cursor: pointer; }
+.story-translation-creation > .ui-field { max-width: 36rem; }
+.story-translation-creation__review { padding: var(--sp-4); border: 1px solid var(--border); border-radius: var(--r-md); }
+.story-translations .ui-button { max-width: 100%; height: auto; min-height: var(--control-md); white-space: normal; line-height: 1.35; padding-block: var(--sp-2); }
+.story-translations .ui-button__label { min-width: 0; overflow-wrap: anywhere; }

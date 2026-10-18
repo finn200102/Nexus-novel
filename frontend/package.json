@@ -18,7 +18,9 @@
     "test:e2e:debug": "playwright test --debug",
     "test:e2e:docker": "playwright test --config=playwright.docker.config.ts",
     "test:e2e:docker:full": "sh scripts/docker-acceptance.sh",
-    "check:contrast": "node scripts/contrast-check.mjs"
+    "check:contrast": "node scripts/contrast-check.mjs",
+    "generate:api": "uv run --project ../backend --locked python ../backend/scripts/generate_api_types.py",
+    "check:api": "uv run --project ../backend --locked python ../backend/scripts/generate_api_types.py --check"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",
@@ -28,22 +30,23 @@
     "@fontsource/source-serif-4": "^5.3.0",
     "axios": "^1.8.3",
     "lucide-react": "^1.25.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
+    "react": "~19.2.0",
+    "react-dom": "~19.2.0",
     "react-router-dom": "^7.3.0"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
     "@eslint/js": "^9.21.0",
     "@playwright/test": "^1.52.0",
-    "@tailwindcss/vite": "^4.0.14",
+    "@tailwindcss/vite": "^4.3.3",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.2.0",
     "@testing-library/user-event": "^14.6.1",
-    "@types/node": "^25.5.0",
-    "@types/react": "^19.0.10",
-    "@types/react-dom": "^19.0.4",
-    "@vitejs/plugin-react-swc": "^3.8.0",
+    "@types/node": "^24.19.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react-swc": "^4.3.3",
+    "@vitest/ui": "^5.0.4",
     "autoprefixer": "^10.4.21",
     "eslint": "^9.21.0",
     "eslint-plugin-react-hooks": "^5.1.0",
@@ -53,9 +56,9 @@
     "jsdom": "^26.0.0",
     "postcss": "^8.5.3",
     "tailwindcss": "^4.0.14",
-    "typescript": "~5.7.2",
-    "typescript-eslint": "^8.24.1",
-    "vite": "^6.2.0",
-    "vitest": "^3.0.9"
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.71.2",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.4"
   }
 }

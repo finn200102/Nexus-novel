@@ -1,6 +1,7 @@
 // src/services/libraryService.ts
 import apiClient from "./apiClient";
 import axios from "axios";
+import { logRequestFailure } from "./requestDiagnostics";
 
 export const libraryService = {
   async getLibraries() {
@@ -69,14 +70,6 @@ export const libraryService = {
   },
 
   handleError(error: unknown, message: string) {
-    console.error(message + ":", error);
-
-    if (axios.isAxiosError(error)) {
-      console.error("Response status:", error.response?.status);
-      console.error("Response data:", error.response?.data);
-      console.error("Request URL:", error.config?.url);
-      console.error("Request method:", error.config?.method);
-      console.error("Request headers:", error.config?.headers);
-    }
+    logRequestFailure(error,message);
   },
 };

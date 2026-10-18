@@ -2,12 +2,18 @@ import { test, expect } from "./fixtures";
 import { installMockApi } from "./mockApi";
 
 test.describe("catalog and operations resilience", () => {
-  test("previews a crossover, creates a job, and exposes progress", async ({ signedInPage }) => {
+  test("combines top rated and crossover, creates a job, and exposes progress", async ({ signedInPage }) => {
     await signedInPage.goto("/scrape-jobs");
-    await signedInPage.getByRole("button", { name: /^crossover$/i }).click();
+    await expect(signedInPage.getByRole("button", { name: /^crossover$/i })).toHaveCount(0);
+    await signedInPage.getByRole("button", { name: /^top rated$/i }).click();
+    await signedInPage.getByRole("checkbox", { name: /crossovers only/i }).check();
+    const request = signedInPage.waitForRequest(request => request.url().endsWith("/catalog-scrapes/preview") && request.method() === "POST");
     await signedInPage.getByRole("combobox", { name: "Fandom A" }).fill("Game of Thrones");
     await signedInPage.getByRole("combobox", { name: "Fandom B" }).fill("Harry Potter");
     await signedInPage.getByRole("button", { name: /preview results/i }).click();
+    const body = (await request).postDataJSON();
+    expect(body.query.mode).toBe("top_rated");
+    expect(body.query.crossover).toBe(true);
     await expect(signedInPage.getByText("A Fixture Story")).toBeVisible();
     await expect(signedInPage.getByText(/1 ready to import/)).toBeVisible();
     await signedInPage.getByRole("button", { name: /create job from preview/i }).click();

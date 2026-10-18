@@ -1,0 +1,9 @@
+.story-reading-history { display: grid; gap: var(--sp-4); min-width: 0; }
+.story-reading-history h2, .story-reading-history h3, .story-reading-history h4, .story-reading-history p { margin: 0; }
+.story-reading-history > section { display: grid; gap: var(--sp-3); min-width: 0; }
+.story-reading-history__actions { display: flex; gap: var(--sp-3); flex-wrap: wrap; align-items: center; }
+.story-reading-history__list { list-style: none; padding: 0; margin: 0; display: grid; gap: var(--sp-3); }
+.story-reading-history__list > li { display: grid; gap: var(--sp-2); padding: var(--sp-4); border: 1px solid var(--border); border-radius: var(--r-md); min-width: 0; }
+.story-reading-history p { overflow-wrap: anywhere; }
+.story-reading-history .ui-button { max-width: 100%; white-space: normal; line-height: 1.35; padding-block: var(--sp-2); }
+.story-reading-history .ui-button__label { min-width: 0; overflow-wrap: anywhere; }

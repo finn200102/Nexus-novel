@@ -1,0 +1,3 @@
+import { defineConfig, devices } from "@playwright/test";
+import base from "./playwright.config";
+export default defineConfig({...base,testMatch:"**/smart-shelves.spec.ts",workers:1,reporter:"line",outputDir:"/tmp/nexus-smart-shelves-results",use:{...base.use,baseURL:"http://127.0.0.1:4200",channel:undefined,video:"off"},projects:[{name:"chromium",use:{...devices["Desktop Chrome"],channel:undefined}},{name:"firefox",use:{...devices["Desktop Firefox"],channel:undefined}},{name:"webkit",use:{...devices["Desktop Safari"],channel:undefined}}],webServer:{command:"node e2e/smart-shelves-vite-server.mjs",url:"http://127.0.0.1:4200",reuseExistingServer:false,timeout:30000}});

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
@@ -10,10 +12,71 @@ from app.services import metadata_client
 router = APIRouter(prefix="/admin/integrations", tags=["admin-integrations"])
 
 
+class PluginPackage(BaseModel):
+    data_base64: str = Field(max_length=11_000_000)
+    enable: bool = True
+
+
+class PluginAction(BaseModel):
+    action: Literal["enable", "disable", "rollback", "test"]
+    digest: str | None = Field(None, pattern=r"^[a-f0-9]{64}$")
+
+
+class PluginDiagnostic(BaseModel):
+    url: str = Field(max_length=2000)
+    operation: Literal["metadata", "manifest", "chapter"] = "metadata"
+
+
+class RegistrySelection(BaseModel):
+    digest: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
+@router.get("/plugins/registry")
+async def plugin_registry(_: User = Depends(require_admin)):
+    return await metadata_admin("GET", "/plugins/registry")
+
+
+@router.post("/plugins/registry/{plugin_id}/{version}/preview")
+async def registry_preview(plugin_id: str, version: str, payload: RegistrySelection, _: User = Depends(require_admin)):
+    return await metadata_admin("POST", f"/plugins/registry/{plugin_id}/{version}/preview", payload.model_dump())
+
+
+@router.get("/plugins")
+async def plugins(_: User = Depends(require_admin)):
+    return await metadata_admin("GET", "/plugins")
+
+
+@router.post("/plugins/{operation}")
+async def plugin_package(operation: Literal["preview", "install"], payload: PluginPackage, _: User = Depends(require_admin)):
+    return await metadata_admin("POST", f"/plugins/{operation}", payload.model_dump())
+
+
+@router.get("/plugins/{plugin_id}/versions")
+async def plugin_versions(plugin_id: str, _: User = Depends(require_admin)):
+    return await metadata_admin("GET", f"/plugins/{plugin_id}/versions")
+
+
+@router.post("/plugins/{plugin_id}/actions")
+async def plugin_action(plugin_id: str, payload: PluginAction, _: User = Depends(require_admin)):
+    return await metadata_admin("POST", f"/plugins/{plugin_id}/actions", payload.model_dump())
+
+
+@router.post("/plugins/{plugin_id}/diagnostic")
+async def plugin_diagnostic(plugin_id: str, payload: PluginDiagnostic, _: User = Depends(require_admin)):
+    return await metadata_admin("POST", f"/plugins/{plugin_id}/diagnostic", payload.model_dump())
+
+
 async def metadata_admin(method: str, path: str, payload: dict | None = None, params: dict | None = None):
     try:
         return await metadata_client.admin_request(method, path, json=payload, params=params)
     except RuntimeError as exc:
+        if isinstance(exc.__cause__, httpx.HTTPStatusError):
+            response = exc.__cause__.response
+            try:
+                detail = response.json().get("detail", "Administrator operation failed")
+            except (ValueError, AttributeError):
+                detail = "Administrator operation failed"
+            raise HTTPException(status_code=response.status_code, detail=detail) from exc
         raise HTTPException(status_code=503, detail="Nexus Server administrator service is unavailable") from exc
 
 
@@ -56,7 +119,8 @@ async def get_merge_review(review_id: int, _: User = Depends(require_admin)):
 async def decide_merge_review(review_id: int, action: str, payload: MergeDecision, _: User = Depends(require_admin)):
     if action not in {"approve", "reject", "revert"}:
         raise HTTPException(status_code=404, detail="Unknown merge-review action")
-    return await metadata_admin("POST", f"/merge-review/{review_id}/{action}", payload.model_dump())
+    raise HTTPException(409, detail={'code':'reviewed_workflow_required',
+        'message':'Legacy source-link reviews are read-only. Use reviewed edition grouping or the separate source migration preview.'})
 
 
 @router.get("/webhooks")

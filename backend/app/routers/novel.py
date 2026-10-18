@@ -12,33 +12,28 @@ from ..schemas.novel import (
     NovelUpdate,
     NovelUpdateEvent as NovelUpdateEventSchema,
 )
-from app.models.chapter import ContentStatus
 from app.models.user import User
 from app.models.novel import Novel
-from app.models.chapter import Chapter
 from app.models.follow import UserNovelFollow
 from app.models.update_event import NovelUpdateEvent
-from app.models.download_job import ChapterDownloadJob
 from app.models.metadata_webhook_delivery import MetadataWebhookDelivery
+from app.schemas.metadata_event_proof import MetadataEventManifestProof
 from app.services.creator_follow_service import NEW_WORK_EVENTS, handle_new_work_event
 from app.services.auto_download_service import queue_auto_downloads
 import app.services.novel_services as novel_services
 import app.services.library_organization_service as organization
-from app.services.chapter_services import (
-    create_chapter,
-    get_chapters_by_novel_id,
-)
 from app.services.library_services import get_library_by_id
 from app.services.reading_order import attach_next_unread
 from app.auth.dependencies import get_current_user
 from app.services import content_limit_service, metadata_client
+from app.services.source_refresh_guard import await_source, capture_source, revalidate_source, refresh_fields
+from app.services.chapter_manifest_service import ingest_metadata_snapshot
 from app.services.download_job_service import queue_missing_chapters
 from app.logging_config import get_logger
 from app.services.novel_title import clean_title
 import asyncio
 import hmac
 import os
-import shutil
 from urllib.parse import urlparse
 from datetime import UTC, datetime
 from pydantic import BaseModel, Field
@@ -99,13 +94,6 @@ def get_or_create_follow(db: Session, user_id: int, novel: Novel) -> UserNovelFo
     db.add(follow)
     db.flush()
     return follow
-
-
-def sync_chapter_category(chapter: Chapter, category: str | None) -> None:
-    """Re-sync an existing chapter's category from metadata; new chapters get it at creation."""
-    value = category or "story"
-    if chapter.category != value:
-        chapter.category = value
 
 
 def create_update_event(
@@ -190,8 +178,12 @@ class MetadataRefreshEvent(BaseModel):
     metadata_novel_id: int
     source_id: int
     site: str
-    new_chapter_numbers: list[int] = Field(default_factory=list)
-    chapters: list[MetadataChapterEvent] = Field(default_factory=list)
+    new_chapter_numbers: list[int] = Field(default_factory=list, max_length=1000)
+    chapters: list[MetadataChapterEvent] = Field(default_factory=list, max_length=1000)
+    manifest_proof: MetadataEventManifestProof | None = None
+    changed_chapter_count: int | None = Field(None, ge=0, le=1_000_000)
+    chunk_index: int | None = Field(None, ge=0, le=1_000_000)
+    chunk_count: int | None = Field(None, ge=1, le=1_000_000)
     message: str | None = None
     hiatus: dict | None = None
     # author_new_work / series_new_work: the followed target and the new work.
@@ -224,7 +216,7 @@ def claim_metadata_webhook_delivery(db: Session, event: MetadataRefreshEvent) ->
 
 
 @router.post("/internal/metadata-events")
-def receive_metadata_event(
+async def receive_metadata_event(
     event: MetadataRefreshEvent,
     db: Session = Depends(get_db),
     webhook_secret: str | None = Header(default=None, alias="X-Nexus-Webhook-Secret"),
@@ -234,6 +226,9 @@ def receive_metadata_event(
         (webhook_secret or "").encode(), expected_secret.encode()
     ):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid webhook secret")
+    if event.event == 'source_refresh_completed':
+        from app.services.metadata_event_ingestion import receive_completed
+        return await receive_completed(db, event)
     if not claim_metadata_webhook_delivery(db, event):
         return {"accepted": True, "created_events": 0, "queued_downloads": 0}
     if event.event in NEW_WORK_EVENTS:
@@ -273,7 +268,7 @@ def receive_metadata_event(
                 user_id=follow.user_id,
                 novel_id=novel.id,
                 event_type="resumed",
-                chapter_count=len(event.new_chapter_numbers),
+                chapter_count=event.changed_chapter_count if event.changed_chapter_count is not None else len(event.new_chapter_numbers),
                 first_chapter_number=min(event.new_chapter_numbers) if event.new_chapter_numbers else None,
                 last_chapter_number=max(event.new_chapter_numbers) if event.new_chapter_numbers else None,
                 message=event.message or "This story returned after a long update gap.",
@@ -283,78 +278,7 @@ def receive_metadata_event(
             created_events += 1
         db.commit()
         return {"accepted": True, "created_events": created_events, "queued_downloads": 0}
-    if event.event != "source_refresh_completed" or not event.new_chapter_numbers:
-        return {"accepted": True, "created_events": 0, "queued_downloads": 0}
-
-    novels = db.query(Novel).filter(Novel.metadata_id == event.metadata_novel_id).all()
-    created_events = 0
-    queued_downloads = 0
-    for novel in novels:
-        if not novel.library:
-            continue
-        follow = get_existing_follow(db, novel.library.user_id, novel)
-        if not follow:
-            continue
-        if follow.state in {"on_hold", "completed", "dropped", "ignored"}:
-            continue
-        chapters_by_number = {chapter.chapter_number: chapter for chapter in event.chapters}
-        chapter_rows = {}
-        for number in event.new_chapter_numbers:
-            chapter = db.query(Chapter).filter(Chapter.novel_id == novel.id, Chapter.chapter_number == number).first()
-            source = chapters_by_number.get(number)
-            if chapter and source and source.category:
-                sync_chapter_category(chapter, source.category)
-            if not chapter:
-                chapter = Chapter(
-                    novel_id=novel.id,
-                    chapter_number=number,
-                    title=source.title if source else f"Chapter {number}",
-                    site_chapter_id=source.chapter_id if source else None,
-                    source_url=source.url if source else None,
-                    word_count=source.word_count if source else None,
-                    content_status=ContentStatus.MISSING,
-                    category=(source.category if source and source.category else "story"),
-                )
-                db.add(chapter)
-                db.flush()
-            chapter_rows[number] = chapter
-        update = create_update_event(
-            db,
-            novel,
-            event_type="new_chapters",
-            chapter_numbers=event.new_chapter_numbers,
-            message=f"{len(event.new_chapter_numbers)} new chapter(s) available",
-        )
-        if update:
-            update.details = {**(update.details or {}), "source_job_id": str(event.job_id), "source_id": event.source_id, "site": event.site}
-        created_events += 1
-        if follow.download_policy == "next_chapter":
-            requested = 1
-        elif follow.download_policy == "next_n":
-            requested = max(follow.download_count or 0, 0)
-        else:
-            requested = 0
-        if requested:
-            active_jobs = {
-                job.chapter_id
-                for job in db.query(ChapterDownloadJob)
-                .filter(
-                    ChapterDownloadJob.user_id == novel.library.user_id,
-                    ChapterDownloadJob.novel_id == novel.id,
-                    ChapterDownloadJob.status.in_({"queued", "processing"}),
-                )
-                .all()
-            }
-            for chapter in sorted(chapter_rows.values(), key=lambda row: row.chapter_number)[:requested]:
-                if chapter.id in active_jobs:
-                    continue
-                db.add(ChapterDownloadJob(user_id=novel.library.user_id, library_id=novel.library.id, novel_id=novel.id, chapter_id=chapter.id))
-                queued_downloads += 1
-        queued_downloads += queue_auto_downloads(
-            db, user_id=novel.library.user_id, library_id=novel.library.id, novel=novel
-        )
-    db.commit()
-    return {"accepted": True, "created_events": created_events, "queued_downloads": queued_downloads}
+    return {"accepted": True, "created_events": 0, "queued_downloads": 0}
 
 
 def _run_metadata_call(coro, loop: asyncio.AbstractEventLoop | None):
@@ -377,6 +301,7 @@ def scrape_novel_background(
 ):
     """Background task to scrape and update novel metadata."""
     db = db_session_factory()
+    authority = None
     try:
         logger.info(
             "Starting background scrape",
@@ -385,9 +310,16 @@ def scrape_novel_background(
         )
 
         try:
+            novel = db.query(Novel).filter_by(id=novel_id).first()
+            if novel is None:
+                return
+            if novel.metadata_id != metadata_id:
+                raise HTTPException(409, 'The linked source changed before this import started')
+            authority = capture_source(db, novel.library.user_id, novel)
             scraped_data = _run_metadata_call(
                 metadata_client.wait_for_scrape_complete(metadata_id), loop
             )
+            novel = revalidate_source(db, authority)
             if scraped_data.get("status") == "error":
                 # "description" is the story blurb, not an error: never surface it.
                 error_message = scraped_data.get("last_error") or scraped_data.get("error")
@@ -421,22 +353,15 @@ def scrape_novel_background(
                 "scrape_error": None,
             }
 
-            novel_services.update_novel(db, novel_id, novel_data)
+            novel = novel_services.update_novel(db, novel_id, refresh_fields(db, novel, scraped_data, novel_data))
 
-            chapters_data = _run_metadata_call(
-                metadata_client.get_chapters_from_metadata(metadata_id), loop
+            authority = capture_source(db, novel.library.user_id, novel)
+            snapshot = _run_metadata_call(
+                metadata_client.get_chapter_manifest(metadata_id), loop
             )
-            for chapter_meta in chapters_data:
-                chapter_data = {
-                    "novel_id": novel_id,
-                    "chapter_number": chapter_meta.get("chapter_number"),
-                    "title": chapter_meta.get("title"),
-                    "site_chapter_id": chapter_meta.get("chapter_id"),
-                    "word_count": chapter_meta.get("word_count"),
-                    "content_status": ContentStatus.MISSING,
-                    "category": chapter_meta.get("category") or "story",
-                }
-                create_chapter(db, chapter_data)
+            novel = revalidate_source(db, authority)
+            ingest_metadata_snapshot(db, novel, snapshot)
+            db.commit()
 
             logger.info(
                 "Background scrape completed",
@@ -450,6 +375,13 @@ def scrape_novel_background(
                 novel_id=novel_id,
                 error=str(e),
             )
+            db.rollback()
+            if authority is None:
+                return
+            try:
+                revalidate_source(db, authority)
+            except HTTPException:
+                return
             novel_services.update_novel(
                 db, novel_id, {"scrape_status": "failed", "scrape_error": str(e)}
             )
@@ -476,7 +408,21 @@ def scrape_within_limits(
             return
         if novel.scrape_status != "completed":
             return
-        allowed = _run_metadata_call(content_limit_service.story_allowed(user, novel.metadata_id), loop)
+        if novel.metadata_id != metadata_id:
+            return
+        limits = content_limit_service.describe(user)
+        from types import SimpleNamespace
+        profile = SimpleNamespace(**limits)
+        selected_metadata_id = novel.metadata_id
+        authority = capture_source(db, user_id, novel)
+        allowed = _run_metadata_call(content_limit_service.story_allowed(profile, selected_metadata_id), loop)
+        try:
+            novel = revalidate_source(db, authority)
+        except HTTPException:
+            return
+        user = db.query(User).filter_by(id=user_id).populate_existing().first()
+        if content_limit_service.describe(user) != limits:
+            return
         if not allowed:
             logger.info("Story outside content limits removed", novel_id=novel_id, user_id=user_id)
             db.delete(novel)
@@ -522,6 +468,8 @@ def accepted_src(url):
 
 
 def get_site_name_from_url(url):
+    if not isinstance(url, str) or not url:
+        return None
     if "royalroad" in url:
         return "royalroad"
     if "fanfiction" in url:
@@ -671,7 +619,8 @@ async def refresh_novel_metadata(
                 detail="Could not determine site from URL",
             )
 
-        scrape_result = await metadata_client.scrape_novel_by_url(novel.url, site_name)
+        scrape_result, novel = await await_source(db, current_user.id, novel,
+            metadata_client.scrape_novel_by_url, novel.url, site_name)
 
         if not scrape_result or not scrape_result.get("success"):
             raise HTTPException(
@@ -689,7 +638,10 @@ async def refresh_novel_metadata(
         novel_services.update_novel(db, novel_id, {"metadata_id": metadata_id})
 
     try:
-        refreshed_data = await metadata_client.refresh_novel_metadata(metadata_id)
+        refreshed_data, novel = await await_source(db, current_user.id, novel,
+            metadata_client.refresh_novel_metadata, metadata_id)
+    except HTTPException:
+        raise
     except httpx.HTTPStatusError as exc:
         raise HTTPException(
             status_code=exc.response.status_code,
@@ -728,30 +680,11 @@ async def refresh_novel_metadata(
         "site_story_id": story_id,
     }
 
-    updated_novel = novel_services.update_novel(db, novel_id, novel_data)
+    updated_novel = novel_services.update_novel(db, novel_id, refresh_fields(db, novel, refreshed_data, novel_data))
 
-    chapters_data = await metadata_client.get_chapters_from_metadata(metadata_id)
-    existing_chapters = {
-        ch.chapter_number: ch for ch in get_chapters_by_novel_id(db, novel_id).all()
-    }
-    new_chapter_numbers = []
-
-    for chapter_meta in chapters_data:
-        chapter_num = chapter_meta.get("chapter_number")
-        if chapter_num in existing_chapters:
-            sync_chapter_category(existing_chapters[chapter_num], chapter_meta.get("category"))
-        else:
-            new_chapter_numbers.append(chapter_num)
-            chapter_data = {
-                "novel_id": novel_id,
-                "chapter_number": chapter_num,
-                "title": chapter_meta.get("title"),
-                "site_chapter_id": chapter_meta.get("chapter_id"),
-                "word_count": chapter_meta.get("word_count"),
-                "content_status": ContentStatus.MISSING,
-                "category": chapter_meta.get("category") or "story",
-            }
-            create_chapter(db, chapter_data)
+    snapshot, novel = await await_source(db, current_user.id, novel,
+        metadata_client.get_chapter_manifest, metadata_id)
+    new_chapter_numbers = [chapter.chapter_number for chapter in ingest_metadata_snapshot(db, novel, snapshot)]
 
     create_update_event(
         db,
@@ -801,7 +734,8 @@ async def rescrape_novel(
                 detail="Could not determine site from URL",
             )
 
-        scrape_result = await metadata_client.scrape_novel_by_url(novel.url, site_name)
+        scrape_result, novel = await await_source(db, current_user.id, novel,
+            metadata_client.scrape_novel_by_url, novel.url, site_name)
         if not scrape_result or not scrape_result.get("success"):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -837,17 +771,15 @@ async def rescrape_novel(
     else:
         try:
             metadata_id_int = int(metadata_id)
-            refreshed_data = await metadata_client.refresh_novel_metadata(
-                metadata_id_int
-            )
+            refreshed_data, novel = await await_source(db, current_user.id, novel,
+                metadata_client.refresh_novel_metadata, metadata_id_int)
 
             story_id = refreshed_data.get("story_id")
 
             if not story_id:
                 metadata_client.invalidate_novel_cache(metadata_id_int)
-                chapters_data = await metadata_client.get_chapters_from_metadata(
-                    metadata_id_int
-                )
+                chapters_data, novel = await await_source(db, current_user.id, novel,
+                    metadata_client.get_chapters_from_metadata, metadata_id_int)
                 if chapters_data and len(chapters_data) > 0:
                     story_id = chapters_data[0].get("story_id")
 
@@ -875,7 +807,9 @@ async def rescrape_novel(
                 "story_id": story_id,
                 "site_story_id": story_id,
             }
-            novel_services.update_novel(db, novel_id, novel_data)
+            novel_services.update_novel(db, novel_id, refresh_fields(db, novel, refreshed_data, novel_data))
+        except HTTPException:
+            raise
         except Exception as exc:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
@@ -899,6 +833,9 @@ def update_follow_state(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Novel not found")
 
     follow = get_or_create_follow(db, current_user.id, novel)
+    from app.services.feedback_service import record_event, FOLLOW_STATE_EVENTS
+    if follow.state != update.follow_state and update.follow_state in FOLLOW_STATE_EVENTS:
+        record_event(db, user_id=current_user.id, novel_id=novel.id, kind=FOLLOW_STATE_EVENTS[update.follow_state])
     follow.state = update.follow_state
     follow.followed_at = follow.followed_at or datetime.now(UTC)
     follow.download_policy = update.download_policy
@@ -1049,7 +986,8 @@ async def get_novels(
         if novel.metadata_id and not novel.title:
             try:
                 metadata_client.invalidate_novel_cache(novel.metadata_id)
-                metadata = await metadata_client.get_novel_metadata(novel.metadata_id)
+                metadata, novel = await await_source(db, current_user.id, novel,
+                    metadata_client.get_novel_metadata, novel.metadata_id)
                 if metadata and metadata.get("title"):
                     novel_data = {
                         "title": clean_title(metadata.get("title"), metadata.get("source_url") or novel.url),
@@ -1069,7 +1007,9 @@ async def get_novels(
                         "updated_date": metadata.get("updated_date"),
                         "chapter_count": metadata.get("chapter_count"),
                     }
-                    novel_services.update_novel(db, novel.id, novel_data)
+                    novel_services.update_novel(db, novel.id, refresh_fields(db, novel, metadata, novel_data))
+            except HTTPException:
+                raise
             except Exception as e:
                 logger.warning(
                     "Error fetching metadata for novel",
@@ -1102,7 +1042,8 @@ async def get_novel_by_id(
     if novel.metadata_id:
         try:
             metadata_client.invalidate_novel_cache(novel.metadata_id)
-            metadata = await metadata_client.get_novel_metadata(novel.metadata_id)
+            metadata, novel = await await_source(db, current_user.id, novel,
+                metadata_client.get_novel_metadata, novel.metadata_id)
             if metadata and metadata.get("title"):
                 novel_data = {
                     "title": clean_title(metadata.get("title"), metadata.get("source_url") or novel.url),
@@ -1126,30 +1067,25 @@ async def get_novel_by_id(
                     "analyzed_chapter_count": metadata.get("analyzed_chapter_count"),
                     "parsed_at": metadata.get("parsed_at"),
                 }
-                novel = novel_services.update_novel(db, novel_id, novel_data)
+                novel = novel_services.update_novel(db, novel_id, refresh_fields(db, novel, metadata, novel_data))
 
-                chapters_data = await metadata_client.get_chapters_from_metadata(
-                    novel.metadata_id
-                )
-                existing_chapters = {ch.chapter_number: ch for ch in novel.chapters}
-                for chapter_meta in chapters_data:
-                    chapter_num = chapter_meta.get("chapter_number")
-                    if chapter_num in existing_chapters:
-                        sync_chapter_category(existing_chapters[chapter_num], chapter_meta.get("category"))
-                    else:
-                        chapter_data = {
-                            "novel_id": novel_id,
-                            "chapter_number": chapter_num,
-                            "title": chapter_meta.get("title"),
-                            "site_chapter_id": chapter_meta.get("chapter_id"),
-                            "word_count": chapter_meta.get("word_count"),
-                            "content_status": ContentStatus.MISSING,
-                            "category": chapter_meta.get("category") or "story",
-                        }
-                        create_chapter(db, chapter_data)
+                snapshot, novel = await await_source(db, current_user.id, novel,
+                    metadata_client.get_chapter_manifest, novel.metadata_id)
+                ingest_metadata_snapshot(db, novel, snapshot)
+                novel.chapter_manifest_review_required = False
 
                 db.commit()
                 db.refresh(novel)
+        except HTTPException as exc:
+            if not isinstance(exc.detail, dict) or exc.detail.get('code') != 'chapter_review_required':
+                raise
+            db.rollback()
+            from app.models import Library
+            novel = db.query(Novel).join(Library, Library.id == Novel.library_id).filter(
+                Novel.id == novel_id, Novel.library_id == library_id, Library.user_id == current_user.id).populate_existing().first()
+            if novel is None:
+                raise HTTPException(404, 'Story not found')
+            novel.chapter_manifest_review_required = True
         except Exception as e:
             logger.warning(
                 "Error fetching metadata",
@@ -1178,17 +1114,6 @@ def delete_novel_by_id(
         )
 
     check_library(db, library_id, current_user)
-    base_dir = os.path.realpath(
-        os.path.join(os.environ.get("DOWNLOAD_PATH", "/data/downloads"), str(current_user.username), str(library_id))
-    )
-    # Titles come from source sites; keep the folder strictly inside base_dir.
-    novel_path = os.path.realpath(os.path.join(base_dir, novel.title or ""))
-
-    if os.path.dirname(novel_path) == base_dir and os.path.isdir(novel_path):
-        shutil.rmtree(novel_path)
-    else:
-        logger.debug("Directory does not exist", path=novel_path)
-
     novel_services.delete_novel(db, novel.id)
     return novel
 

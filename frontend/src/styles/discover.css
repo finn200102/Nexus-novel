@@ -18,10 +18,13 @@
 .discover-more__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-3); }
 .discover-more__footer { display: flex; justify-content: space-between; gap: var(--sp-2); }
 
-.discover-saved { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+.discover-saved { display: grid; gap: var(--sp-2); min-width: 0; }
 .discover-saved__heading { margin: 0; font-size: var(--fs-sm); color: var(--text-2); font-weight: 600; }
-.discover-saved__list { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
-.discover-saved__list li { display: inline-flex; align-items: center; gap: var(--sp-1); }
+.discover-saved__list { display: grid; gap: var(--sp-3); margin: 0; padding: 0; list-style: none; }
+.discover-saved__list li { display: grid; gap: var(--sp-2); min-width: 0; overflow-wrap: anywhere; }
+.discover-saved__list p { margin: var(--sp-1) 0; color: var(--text-2); font-size: var(--fs-sm); }
+.discover-saved__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+.discover-saved-dialog .ui-dialog__body { display: grid; gap: var(--sp-3); overflow-wrap: anywhere; }
 
 .discover-results { display: grid; gap: var(--sp-3); }
 .discover-results__head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-1) var(--sp-3); }

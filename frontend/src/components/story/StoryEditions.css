@@ -1,0 +1,7 @@
+.story-editions { margin-block: 1.5rem; min-width: 0; }
+.story-editions p { color: var(--text-muted); line-height: 1.6; }
+.story-editions ul { list-style: none; padding: 0; display: grid; gap: .75rem; }
+.story-editions li { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .75rem; padding: 1rem; border: 1px solid var(--border); border-radius: var(--r-md); overflow-wrap: anywhere; }
+.story-editions li > div { flex: 1 1 15rem; min-width: 0; }
+.story-editions small { display: block; margin-top: .25rem; color: var(--text-muted); }
+.story-editions a { min-height: 44px; display: inline-flex; align-items: center; }

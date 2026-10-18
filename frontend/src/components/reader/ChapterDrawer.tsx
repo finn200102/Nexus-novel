@@ -18,7 +18,7 @@ interface ChapterDrawerProps {
   novelId: number;
   chapters: DrawerChapter[];
   currentChapter: number;
-  /** Last chapter with saved progress; later chapters get an unread dot. */
+  /** Compatibility locator only; completion markers use explicit checkpoints. */
   lastReadChapter?: number | null;
   loading?: boolean;
   error?: string | null;
@@ -29,14 +29,14 @@ const DEFAULT_CATEGORIES = ["story"];
 
 /**
  * Chapters panel (left drawer on desktop, bottom sheet on phones): search, full titles,
- * unread dot, saved-offline icon, current chapter scrolled into view. Categories the reader
+ * recorded checkpoint status, saved-offline icon, current chapter scrolled into view. Categories the reader
  * doesn't follow (side stories, indexes …) sit behind a toggle.
  */
-const ChapterDrawer: React.FC<ChapterDrawerProps> = ({ open, onClose, novelId, chapters, currentChapter, lastReadChapter, loading, error, onSelect }) => {
+const ChapterDrawer: React.FC<ChapterDrawerProps> = ({ open, onClose, novelId, chapters, currentChapter, loading, error, onSelect }) => {
   const [followed, setFollowed] = useState<string[]>(DEFAULT_CATEGORIES);
   const [showOther, setShowOther] = useState(false);
   const [query, setQuery] = useState("");
-  const [offline, setOffline] = useState<Set<number>>(new Set());
+  const [offline, setOffline] = useState<Set<string>>(new Set());
   const searchRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
 
@@ -50,7 +50,7 @@ const ChapterDrawer: React.FC<ChapterDrawerProps> = ({ open, onClose, novelId, c
       })
       .catch(() => undefined);
     offlineReaderStore.listForNovel(novelId)
-      .then((items) => { if (!cancelled) setOffline(new Set(items.map((item) => item.chapter_number))); })
+      .then((items) => { if (!cancelled) setOffline(new Set(items.flatMap((item) => item.chapter_key ? [item.chapter_key] : []))); })
       .catch(() => undefined);
     return () => { cancelled = true; };
   }, [open, novelId]);
@@ -107,8 +107,8 @@ const ChapterDrawer: React.FC<ChapterDrawerProps> = ({ open, onClose, novelId, c
             <ul>
               {items.map((chapter) => {
                 const current = chapter.chapter_number === currentChapter;
-                const unread = !current && lastReadChapter != null && chapter.chapter_number > lastReadChapter;
-                const saved = offline.has(chapter.chapter_number);
+                const unrecorded = !current && chapter.completed_checkpoint === false;
+                const saved = !!chapter.chapter_key && offline.has(chapter.chapter_key);
                 return (
                   <li key={chapter.chapter_number}>
                     <button
@@ -120,7 +120,7 @@ const ChapterDrawer: React.FC<ChapterDrawerProps> = ({ open, onClose, novelId, c
                       <span className="reader-chapters__label">{entryLabel(chapter)}</span>
                       <span className="reader-chapters__title">{chapter.title || "Untitled"}</span>
                       <span className="reader-chapters__meta">
-                        {unread && <span className="reader-chapters__dot" title="Unread"><span className="visually-hidden">Unread</span></span>}
+                        {unrecorded && <span className="reader-chapters__dot" title="No completed checkpoint"><span className="visually-hidden">No completed checkpoint</span></span>}
                         {saved && <HardDriveDownload aria-label="Saved offline" role="img" size={16} />}
                         {current && <span className="visually-hidden">(current chapter)</span>}
                       </span>

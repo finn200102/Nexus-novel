@@ -12,7 +12,7 @@ export function SettingsIndex() {
   usePageTitle("Settings");
   const [desktop] = useState(isDesktop);
   if (desktop) return <Navigate replace to="/settings/account" />;
-  return <PageHeader title="Settings" description="Your account, appearance, notifications, e-readers, hidden content and data." />;
+  return <PageHeader title="Settings" description="Your account, appearance, narrator voices, notifications, e-readers, hidden content and data." />;
 }
 
 /** Desktop: section list beside the content. Phone: list first, then one section at a time (CSS switches on data-view). */

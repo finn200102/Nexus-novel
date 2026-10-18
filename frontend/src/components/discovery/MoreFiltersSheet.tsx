@@ -1,10 +1,11 @@
 import { Button, Input, SegmentedControl, Select, Sheet, Switch } from "../ui";
+import CanonicalVocabularyFilters from "./CanonicalVocabularyFilters";
 import { ChipInput } from "../common/ChipInput";
 import type { DiscoveryFilters } from "../../types/discovery";
 
 const LANGUAGE_SUGGESTIONS = ["English", "French", "German", "Spanish", "Italian", "Portuguese", "Russian", "Chinese", "Japanese", "Korean"];
 
-type ListKey = { [K in keyof DiscoveryFilters]: DiscoveryFilters[K] extends string[] ? K : never }[keyof DiscoveryFilters];
+type ListKey = { [K in keyof DiscoveryFilters]: NonNullable<DiscoveryFilters[K]> extends string[] ? K : never }[keyof DiscoveryFilters] & keyof DiscoveryFilters;
 type ScalarKey = Exclude<keyof DiscoveryFilters, ListKey>;
 
 interface MoreFiltersSheetProps {
@@ -41,6 +42,7 @@ export function MoreFiltersSheet({ open, onClose, filters, onChange, onApply, on
       }
     >
       <div className="discover-more__body">
+        <CanonicalVocabularyFilters filters={filters} onChange={onChange} />
         <section aria-labelledby="discover-more-content" className="discover-more__group">
           <h3 id="discover-more-content">Content</h3>
           <ChipInput label="Fandom or series" values={filters.fandom} onChange={(values) => setList("fandom", values)} onDraftChange={onFandomDraftChange} suggestions={fandomSuggestions} placeholder="Type a fandom, then Enter" />

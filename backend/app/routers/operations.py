@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from config.database import get_db
 from app.auth.dependencies import get_current_user, require_admin
@@ -17,6 +18,8 @@ from app.models.update_event import NovelUpdateEvent
 from app.models.user import User
 from app.services.activity_service import unread_story_count
 from app.schemas.operations import OperationCounts, OperationsSummary, ServiceStatus
+from app.services import metadata_client
+from .catalog_scrape import CatalogAdministrator, administrator as schedule_administrator, reauthorize
 
 router = APIRouter(prefix="/operations", tags=["operations"])
 
@@ -181,46 +184,64 @@ def summary(
     )
 
 
+_SCHEDULE_PRIVATE = {"Cache-Control":"private, no-store"}
+_AO3_REFRESH_ERRORS = frozenset({
+    "AO3 refreshes require an explicit reader action; recurring refreshes are unavailable",
+    "AO3 refreshes require an explicit reader action",
+})
+
+
+async def _schedule_proxy(admin: CatalogAdministrator, method: str, path: str, **kwargs):
+    # Release the auth read snapshot before I/O and fence the response with a
+    # fresh session/account/admin check, including upstream error responses.
+    await run_in_threadpool(reauthorize, admin)
+    try:
+        response = await metadata_client._request(method,path,admin=True,timeout=httpx.Timeout(10.0,connect=2.0),**kwargs)
+        result = response.json() if response.content else {"success":True}
+    except Exception as exc:
+        await run_in_threadpool(reauthorize, admin)
+        cause = exc.__cause__
+        if isinstance(cause,httpx.HTTPStatusError):
+            status = cause.response.status_code
+            try:
+                payload = cause.response.json()
+                detail = payload.get("detail") if isinstance(payload,dict) else None
+            except ValueError:
+                detail = None
+            if status==400 and isinstance(detail,str) and detail in _AO3_REFRESH_ERRORS:
+                error={"code":"user_initiated_refresh_required","message":"AO3 refreshes require an explicit reader action. Recurring refresh schedules and background schedule runs are unavailable."}
+            else:
+                error={"code":"refresh_schedule_rejected","message":{400:"These refresh schedule settings are not allowed. Review the source policy and schedule limits.",403:"The metadata service could not authorize this administrator action.",404:"This refresh schedule is no longer available.",409:"The refresh schedule changed. Refresh the list before trying again.",422:"Review the refresh interval, batch size, and source."}.get(status,"The refresh schedule service could not complete this action.")}
+            raise HTTPException(status if 400<=status<600 else 502,detail=error,headers=_SCHEDULE_PRIVATE) from exc
+        timeout = isinstance(cause,httpx.TimeoutException) or isinstance(exc,httpx.TimeoutException)
+        raise HTTPException(504 if timeout else 503,detail={"code":"refresh_schedule_timeout" if timeout else "refresh_schedule_unavailable","message":"The refresh schedule service did not respond in time. Refresh its status before retrying." if timeout else "The refresh schedule service is unavailable. Existing schedules are retained."},headers=_SCHEDULE_PRIVATE) from exc
+    await run_in_threadpool(reauthorize, admin)
+    return result
+
+
 @router.get("/schedules")
-def list_refresh_schedules(current_user: User = Depends(require_admin)):
-    return _metadata_proxy("GET", "/api/refresh-schedules/")
+async def list_refresh_schedules(admin: CatalogAdministrator = Depends(schedule_administrator)):
+    return await _schedule_proxy(admin,"GET","/api/refresh-schedules/")
 
 
-@router.post("/schedules", status_code=201)
-def create_refresh_schedule(
-    request: RefreshScheduleCreate,
-    current_user: User = Depends(require_admin),
-):
-    return _metadata_proxy("POST", "/api/refresh-schedules/", json=request.model_dump())
+@router.post("/schedules",status_code=201)
+async def create_refresh_schedule(request: RefreshScheduleCreate,admin: CatalogAdministrator = Depends(schedule_administrator)):
+    return await _schedule_proxy(admin,"POST","/api/refresh-schedules/",json=request.model_dump())
 
 
 @router.patch("/schedules/{schedule_id}")
-def update_refresh_schedule(
-    schedule_id: str,
-    request: RefreshScheduleUpdate,
-    current_user: User = Depends(require_admin),
-):
-    return _metadata_proxy(
-        "PATCH",
-        f"/api/refresh-schedules/{schedule_id}",
-        json=request.model_dump(exclude_none=True),
-    )
+async def update_refresh_schedule(schedule_id: str,request: RefreshScheduleUpdate,admin: CatalogAdministrator = Depends(schedule_administrator)):
+    return await _schedule_proxy(admin,"PATCH",f"/api/refresh-schedules/{schedule_id}",json=request.model_dump(exclude_none=True))
 
 
 @router.post("/schedules/{schedule_id}/run")
-def run_refresh_schedule(
-    schedule_id: str,
-    current_user: User = Depends(require_admin),
-):
-    return _metadata_proxy("POST", f"/api/refresh-schedules/{schedule_id}/run")
+async def run_refresh_schedule(schedule_id: str,admin: CatalogAdministrator = Depends(schedule_administrator)):
+    return await _schedule_proxy(admin,"POST",f"/api/refresh-schedules/{schedule_id}/run")
 
 
 @router.delete("/schedules/{schedule_id}")
-def delete_refresh_schedule(
-    schedule_id: str,
-    current_user: User = Depends(require_admin),
-):
-    return _metadata_proxy("DELETE", f"/api/refresh-schedules/{schedule_id}")
+async def delete_refresh_schedule(schedule_id: str,admin: CatalogAdministrator = Depends(schedule_administrator)):
+    return await _schedule_proxy(admin,"DELETE",f"/api/refresh-schedules/{schedule_id}")
 
 
 @router.get("/metadata-jobs")

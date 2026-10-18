@@ -16,6 +16,7 @@ novel_id_var: ContextVar[Optional[int]] = ContextVar("novel_id", default=None)
 # Credentials that travel in the URL: Kobo device tokens and personal feed
 # tokens in the path, one-time links (password reset and similar) in ?token=.
 _SECRET_PATTERNS = (
+    (re.compile(r"(/podcasts/)[^/?#\s]+"), r"\1***"),
     (re.compile(r"(/kobo/)[^/?#\s]+"), r"\1***"),
     (re.compile(r"(/feeds/)[^/?#\s]+?(\.atom)"), r"\1***\2"),
     (re.compile(r"(/feeds/)[^/?#\s.]+"), r"\1***"),

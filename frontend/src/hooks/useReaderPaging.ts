@@ -69,10 +69,17 @@ export function useReaderPaging({ contentRef, paged, layoutKey, onPreviousChapte
       setPage(now);
     };
     el?.addEventListener("scroll", onScroll, { passive: true });
+    const onImageSettled = (event: Event) => { if (event.target instanceof HTMLImageElement) measure(); };
+    el?.addEventListener("load", onImageSettled, true);
+    el?.addEventListener("error", onImageSettled, true);
+    document.fonts?.addEventListener("loadingdone", measure);
     window.addEventListener("resize", measure);
     return () => {
       window.cancelAnimationFrame(frame);
       el?.removeEventListener("scroll", onScroll);
+      el?.removeEventListener("load", onImageSettled, true);
+      el?.removeEventListener("error", onImageSettled, true);
+      document.fonts?.removeEventListener("loadingdone", measure);
       window.removeEventListener("resize", measure);
     };
   }, [paged, layoutKey, measure, contentRef]);
@@ -111,6 +118,7 @@ export function useReaderPaging({ contentRef, paged, layoutKey, onPreviousChapte
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== " " || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (document.querySelector(".ui-modal-layer")) return;
       if (isTypingTarget(event.target)) return;
       event.preventDefault();
       advance(event.shiftKey ? -1 : 1);

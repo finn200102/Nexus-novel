@@ -209,9 +209,21 @@ def test_live_search_drops_limited_results(client, db):
         {"metadata_id": 2, "url": "https://x/2", "title": "Grim", "content_rating": "explicit"},
         {"metadata_id": 4, "url": "https://x/4", "title": "Mystery"},
     ]}
-    with patch("app.services.metadata_client.live_listing", AsyncMock(return_value=answer)):
-        results = client.get("/discovery/live?q=x&include_local=false&sites=royalroad", headers=bearer_headers(kid.id)).json()["results"]
-        browse = client.get("/discovery/live/browse?site=royalroad&feed=best", headers=bearer_headers(kid.id)).json()["results"]
+    capability = {"source_id": "royalroad", "site": "royalroad", "name": "Royal Road",
+                  "kind": "builtin", "search": True, "browse_feeds": ["best-rated"],
+                  "user_lists": [], "plugin_id": None, "version": None,
+                  "digest": None, "limitations": []}
+    capabilities = {"search": ["royalroad"], "browse": {"royalroad": ["best-rated"]},
+                    "user_lists": {}, "sources": [capability], "sources_limited": False}
+    with patch("app.services.metadata_client.live_listing", AsyncMock(return_value=answer)), \
+            patch("app.services.metadata_client.live_capabilities", AsyncMock(return_value=capabilities)), \
+            patch("app.services.metadata_client._request", AsyncMock(side_effect=AssertionError("Household unit tests cannot contact a service"))):
+        response = client.get("/discovery/live?q=x&include_local=false&sites=royalroad", headers=bearer_headers(kid.id))
+        assert response.status_code == 200, response.text
+        results = response.json()["results"]
+        response = client.get("/discovery/live/browse?site=royalroad&feed=best-rated", headers=bearer_headers(kid.id))
+        assert response.status_code == 200, response.text
+        browse = response.json()["results"]
     assert [row["title"] for row in results] == ["Mystery"]
     assert [row["title"] for row in browse] == ["Mystery"]
 

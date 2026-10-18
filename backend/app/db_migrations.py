@@ -122,6 +122,17 @@ def legacy_compat(connection: Connection) -> None:
 
     if "novels" in tables:
         _add_missing_columns(connection, "novels", {
+            # Early create_all installations may predate these nullable base
+            # facts as well as the later metadata fields. Baseline stamping
+            # creates missing tables; it does not alter an existing novels table.
+            "author_id": "INTEGER",
+            "site_story_id": "BIGINT",
+            "site": "VARCHAR(255)",
+            "description": "TEXT",
+            "cover_image": "VARCHAR(255)",
+            "file_path": "VARCHAR(255)",
+            "num_chapters": "INTEGER",
+            "genre_id": "INTEGER",
             "metadata_id": "INTEGER",
             "author": "VARCHAR(255)",
             "author_site_id": "BIGINT",

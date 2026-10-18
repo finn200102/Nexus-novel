@@ -1,3 +1,4 @@
+import { accountStorage } from "../../services/accountStorage";
 // Reader preferences: global defaults plus optional per-story overrides.
 // Version 2 (WP-D6) stores typography as one JSON record and migrates the 1.0 keys
 // (font scale, line height, pixel width, Night/Dusk/Paper) without losing the user's choices.
@@ -75,7 +76,7 @@ export const novelSettingsKey = (novelId: number) => `nexus-reader-novel-${novel
 
 const safeGet = (key: string): string | null => {
   try {
-    return localStorage.getItem(key);
+    return accountStorage.getItem(key);
   } catch {
     return null;
   }
@@ -83,7 +84,7 @@ const safeGet = (key: string): string | null => {
 
 const safeSet = (key: string, value: string) => {
   try {
-    localStorage.setItem(key, value);
+    accountStorage.setItem(key, value);
   } catch {
     // Storage can be blocked (private mode); the reader still works in memory.
   }
@@ -91,7 +92,7 @@ const safeSet = (key: string, value: string) => {
 
 const safeRemove = (key: string) => {
   try {
-    localStorage.removeItem(key);
+    accountStorage.removeItem(key);
   } catch {
     // ignore
   }
@@ -128,7 +129,7 @@ const positive = (raw: unknown): number | undefined => {
 };
 
 /** Validates a v2 record (or a partial one); unknown or invalid fields are dropped. */
-function sanitize(raw: Record<string, unknown>): Partial<ReaderTypography> {
+export function sanitizeTypography(raw: Record<string, unknown>): Partial<ReaderTypography> {
   const out: Partial<ReaderTypography> = {};
   const theme = migrateTheme(raw.theme);
   if (theme) out.theme = theme;
@@ -174,7 +175,7 @@ const parse = (raw: string | null): Record<string, unknown> | null => {
 
 export function readGlobalTypography(): ReaderTypography {
   const stored = parse(safeGet(GLOBAL_KEY));
-  if (stored) return { ...READER_DEFAULTS, ...sanitize(stored) };
+  if (stored) return { ...READER_DEFAULTS, ...sanitizeTypography(stored) };
   // First run after the update: carry the 1.0 keys over once.
   const legacy = migrateLegacy({
     fontScale: safeGet(LEGACY_KEYS.fontScale),
@@ -196,7 +197,7 @@ export function writeGlobalTypography(value: ReaderTypography) {
 export function readStoryOverride(novelId: number): Partial<ReaderTypography> | null {
   const parsed = parse(safeGet(novelSettingsKey(novelId)));
   if (!parsed) return null;
-  const override = parsed.v === 2 ? sanitize(parsed) : migrateLegacy(parsed);
+  const override = parsed.v === 2 ? sanitizeTypography(parsed) : migrateLegacy(parsed);
   return Object.keys(override).length ? override : null;
 }
 
@@ -220,16 +221,22 @@ export function readAuthorNotesMode(): AuthorNotesMode {
   return oneOf(safeGet("nexus-reader-author-notes"), AUTHOR_NOTES_MODES, "collapsed");
 }
 
-export function writeAuthorNotesMode(mode: AuthorNotesMode) {
+const patchAccountPreference = (patch: Record<string, unknown>) => {
+  window.dispatchEvent(new CustomEvent("nexus-reader-preference-local-patch", { detail: { patch } }));
+};
+
+export function writeAuthorNotesMode(mode: AuthorNotesMode, sync = true) {
   safeSet("nexus-reader-author-notes", mode);
+  if (sync) patchAccountPreference({ authorNotes: mode });
 }
 
 export function readLayout(): ReaderLayout {
   return oneOf(safeGet("nexus-reader-layout"), LAYOUTS, "scroll");
 }
 
-export function writeLayout(layout: ReaderLayout) {
+export function writeLayout(layout: ReaderLayout, sync = true) {
   safeSet("nexus-reader-layout", layout);
+  if (sync) patchAccountPreference({ layout });
 }
 
 /** Single-key shortcuts (WCAG 2.1.4): on by default, can be switched off. */
@@ -237,8 +244,9 @@ export function readShortcutsEnabled(): boolean {
   return safeGet(SHORTCUTS_KEY) !== "off";
 }
 
-export function writeShortcutsEnabled(enabled: boolean) {
+export function writeShortcutsEnabled(enabled: boolean, sync = true) {
   safeSet(SHORTCUTS_KEY, enabled ? "on" : "off");
+  if (sync) patchAccountPreference({ shortcuts: enabled });
   try {
     window.dispatchEvent(new CustomEvent("nexus-reader-shortcuts", { detail: enabled }));
   } catch {

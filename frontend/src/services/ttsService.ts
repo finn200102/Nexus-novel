@@ -135,7 +135,7 @@ export const splitTextForSynthesis = (text: string, maximumCharacters = 1_100): 
  * their bytes creates an invalid multi-file stream which some browsers report
  * as a silent chapter. Decode them first and save one canonical WAV instead.
  */
-export const mergeAudioSegments = async (segments: Blob[]): Promise<Blob> => {
+export const mergeAudioSegments = async (segments: Blob[], onDurations?: (durations: number[]) => void): Promise<Blob> => {
   if (!segments.length) throw new Error("No generated audio segments were available.");
   const AudioContextConstructor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!AudioContextConstructor || !window.OfflineAudioContext) {
@@ -157,7 +157,9 @@ export const mergeAudioSegments = async (segments: Blob[]): Promise<Blob> => {
       offset += audio.duration;
     }
     const rendered = await offline.startRendering();
-    return new Blob([encodeWav(rendered)], { type: "audio/wav" });
+    const output = new Blob([encodeWav(rendered)], { type: "audio/wav" });
+    onDurations?.(decoded.map(audio => audio.duration));
+    return output;
   } finally {
     await context.close();
   }

@@ -1,0 +1,8 @@
+.catalog-plugin-jobs { display: grid; gap: var(--sp-4); padding: var(--sp-5); margin-block: var(--sp-4); min-width: 0; }
+.catalog-plugin-jobs fieldset { display: grid; gap: var(--sp-3); min-width: 0; border: 1px solid var(--border); border-radius: var(--r-md); padding: var(--sp-4); }
+.catalog-plugin-jobs p, .catalog-plugin-jobs dd, .catalog-plugin-jobs a { overflow-wrap: anywhere; }
+.catalog-plugin-jobs dl { display: grid; grid-template-columns: minmax(0, 8rem) minmax(0,1fr); gap: var(--sp-2); }
+.catalog-plugin-jobs dd { margin: 0; }
+.catalog-plugin-jobs__saved, .catalog-plugin-jobs__preview { padding: var(--sp-4); border: 1px solid var(--border); border-radius: var(--r-md); min-width: 0; }
+.catalog-plugin-jobs__actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.catalog-plugin-jobs .ui-button, .catalog-plugin-jobs .ui-button__label { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }

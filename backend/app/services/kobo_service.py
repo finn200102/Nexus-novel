@@ -36,7 +36,6 @@ from app.models.reading_progress import ReadingProgress
 from app.models.shelf import Shelf, ShelfNovel
 from app.models.user import User
 from app.services import epub_service
-from app.services.reading_progress_service import save_reading_progress
 from config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -346,12 +345,14 @@ def book_metadata(base: str, row: KoboSyncedBook, novel: Novel, file: BookFile) 
 
 # ---- reading state ------------------------------------------------------------
 
+def _build(db,row):
+    if not row.fingerprint:return None
+    return db.query(EpubBuild).filter_by(novel_id=row.novel_id,fingerprint=row.fingerprint).first()
+
+
 def _spine(db: Session, row: KoboSyncedBook) -> list[int]:
-    """Chapter numbers of the book the device holds (latest build as a fallback)."""
-    query = db.query(EpubBuild).filter(EpubBuild.novel_id == row.novel_id)
-    build = query.filter(EpubBuild.fingerprint == row.fingerprint).first() if row.fingerprint else None
-    if build is None:
-        build = query.order_by(EpubBuild.id.desc()).first()
+    """Advertised exact file only; never guess a latest file for an old bookmark."""
+    build=_build(db,row)
     return list(build.spine or []) if build is not None else []
 
 
@@ -377,9 +378,10 @@ def bookmark_position(
         return None
     match = CHAPTER_FILE.search(source or "")
     if match:
-        index = min(max(int(match.group(1)) - 1, 0), len(spine) - 1)
+        index = int(match.group(1))-1
+        if not 0<=index<len(spine):return None
         return index, min(max((content_percent or 0) / 100, 0), 1)
-    if progress_percent is None:
+    if source or progress_percent is None:
         return None
     exact = min(max(progress_percent / 100, 0), 1) * len(spine)
     index = min(int(exact), len(spine) - 1)
@@ -404,8 +406,10 @@ def reading_state(db: Session, device: KoboDevice, row: KoboSyncedBook) -> dict:
     """The furthest of the device's bookmark and the Nexus position, as a Kobo ReadingState."""
     spine = _spine(db, row)
     progress = _progress(db, device.user_id, row.novel_id)
-    device_pos = _device_position(row, spine)
-    nexus_pos = _nexus_position(progress, spine)
+    build=_build(db,row)
+    from app.services.ereader_identity_service import progress_index
+    device_pos = _device_position(row, spine) if row.bookmark_fingerprint==row.fingerprint else None
+    nexus_pos = progress_index(db,device.user_id,build,progress) if build is not None else None
 
     if nexus_pos is not None and (device_pos is None or nexus_pos > device_pos):
         index, fraction = nexus_pos
@@ -419,7 +423,7 @@ def reading_state(db: Session, device: KoboDevice, row: KoboSyncedBook) -> dict:
             "Location": {"Value": "kobo.1.1", "Type": "KoboSpan", "Source": f"OEBPS/chapter-{index + 1}.xhtml"},
         }
         state_status = "Finished" if finished else "Reading"
-    elif row.bookmark_at is not None:
+    elif row.bookmark_at is not None and row.bookmark_fingerprint==row.fingerprint:
         modified = row.bookmark_at
         bookmark = {"LastModified": timestamp(modified)}
         if row.progress_percent is not None:
@@ -456,11 +460,22 @@ def reading_state(db: Session, device: KoboDevice, row: KoboSyncedBook) -> dict:
 def _number(value) -> float | None:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
-    return float(value)
+    import math
+    try:
+        parsed=float(value)
+    except (OverflowError,ValueError):
+        return None
+    return parsed if math.isfinite(parsed) else None
 
 
 def apply_reading_state(db: Session, device: KoboDevice, row: KoboSyncedBook, state: dict) -> dict:
     """Store a bookmark PUT by the device; Nexus progress moves only when the device is further."""
+    from app.services.ereader_identity_service import inferred,owner
+    owner(db,device.user_id,row.novel_id)
+    current_device=db.query(KoboDevice).filter_by(id=device.id,user_id=device.user_id).populate_existing().with_for_update().first()
+    if current_device is None or current_device.revoked_at is not None:raise HTTPException(401,'Device revoked')
+    row=db.query(KoboSyncedBook).filter_by(id=row.id,device_id=device.id).populate_existing().with_for_update().first()
+    if row is None or row.removed:raise HTTPException(404,'Book not found')
     bookmark = state.get("CurrentBookmark") or {}
     status_info = state.get("StatusInfo") or {}
     if not isinstance(bookmark, dict) or not isinstance(status_info, dict):
@@ -486,23 +501,25 @@ def apply_reading_state(db: Session, device: KoboDevice, row: KoboSyncedBook, st
     if state.get("Statistics") is not None:
         result["StatisticsResult"] = {"Result": "Success"}
 
-    spine = _spine(db, row)
-    device_pos = _device_position(row, spine)
-    progress = _progress(db, device.user_id, row.novel_id)
-    nexus_pos = _nexus_position(progress, spine)
-    if device_pos is not None and (nexus_pos is None or device_pos > nexus_pos):
-        index, fraction = device_pos
-        chapter = (
-            db.query(Chapter)
-            .filter(Chapter.novel_id == row.novel_id, Chapter.chapter_number == spine[index])
-            .first()
-        )
-        if chapter is not None:
-            progress = save_reading_progress(db, user_id=device.user_id, chapter=chapter, position=0, percent=fraction * 100)
-    if nexus_pos is None or (device_pos is not None and device_pos >= nexus_pos):
-        # The device knows the furthest position, so it is not sent back. When
-        # Nexus is further, the next sync still offers the Nexus position.
-        row.state_sent_at = max(filter(None, [now, progress.updated_at if progress else None]))
+    build=_build(db,row)
+    if build is None or row.confirmed_fingerprint!=row.fingerprint:
+        row.progress_review_reason='book_version_confirmation_required'
+        row.bookmark_fingerprint=None
+    else:
+        position=_device_position(row,list(build.spine or []))
+        if position is None:row.progress_review_reason='book_position_unknown'
+        else:
+            row.progress_review_reason=inferred(db,device.user_id,build,position[0],position[1],
+                approved_run_key=row.confirmed_reading_run_key,
+                operation=json.dumps(['kobo',device.id,row.entitlement_id,row.confirmed_fingerprint,state],sort_keys=True))
+            row.bookmark_fingerprint=row.fingerprint if row.progress_review_reason is None else None
+            if row.progress_review_reason is None:
+                from app.services.ereader_identity_service import progress_index
+                progress=_progress(db,device.user_id,row.novel_id)
+                nexus=progress_index(db,device.user_id,build,progress) if progress else None
+                if nexus is not None and nexus<=position:
+                    row.state_sent_at=progress.updated_at
+    result['NexusProgress']={'state':'review_required' if row.progress_review_reason else 'inferred','reason':row.progress_review_reason}
     db.commit()
     return result
 
@@ -532,6 +549,8 @@ def sync(db: Session, device: KoboDevice, base: str, incoming_token: str | None)
     wanted = {novel.id for novel in novels}
 
     for novel in novels:
+        from app.services.ereader_identity_service import owner
+        _,novel=owner(db,device.user_id,novel.id)
         row = rows.get(novel.id)
         chapter_rows = epub_service._downloaded_chapter_rows(db, novel.id)
         if not chapter_rows:
@@ -552,6 +571,11 @@ def sync(db: Session, device: KoboDevice, base: str, incoming_token: str | None)
             file = book_file(db, novel)
         except epub_service.NoDownloadedChapters:
             continue
+        owner(db,device.user_id,novel.id)
+        row=db.query(KoboSyncedBook).filter_by(id=row.id,device_id=device.id).populate_existing().with_for_update().first()
+        if row.fingerprint!=file.built.build.fingerprint:
+            row.confirmed_fingerprint=None;row.confirmed_reading_run_key=None
+            row.progress_review_reason='book_version_confirmation_required'
         row.fingerprint = file.built.build.fingerprint
         row.removed = False
         entry = {
@@ -626,3 +650,49 @@ def _shelf_tag(shelf: Shelf, rows, *, new: bool) -> dict:
             }
         }
     }
+
+
+
+def book_versions(db,user_id,device_id,*,offset=0,limit=50):
+    if not 0<=offset<=2147483647 or not 1<=limit<=100:raise HTTPException(422,'Invalid book page')
+    device=get_device(db,user_id,device_id)
+    query=db.query(KoboSyncedBook,Novel.title).join(Novel,Novel.id==KoboSyncedBook.novel_id).join(Library,Library.id==Novel.library_id).filter(
+        KoboSyncedBook.device_id==device.id,Library.user_id==user_id,KoboSyncedBook.removed.is_(False))
+    total=query.count();items=[]
+    from app.services.chapter_identity_service import manifest_state
+    from app.services.reading_run_service import current_run
+    for row,title in query.order_by(KoboSyncedBook.id).offset(offset).limit(limit):
+        build=_build(db,row);state=manifest_state(db,row.novel_id);run=current_run(db,user_id,row.novel_id)
+        items.append(dict(entitlement_id=row.entitlement_id,novel_id=row.novel_id,title=title,
+            fingerprint=row.fingerprint,generated_at=build.created_at if build else None,chapter_count=len(build.spine) if build else 0,
+            manifest_epoch=state.manifest_epoch,manifest_revision=str(state.revision),reading_run_key=run.run_key if run else None,
+            confirmed=row.confirmed_fingerprint==row.fingerprint and bool(row.fingerprint) and row.progress_review_reason in (None,'awaiting_confirmed_device_bookmark'),review_reason=row.progress_review_reason,
+            identity_known=bool(build and build.spine_identity and build.source_snapshot and build.owner_storage_id and build.manifest_epoch)))
+    return dict(items=items,total=total,offset=offset,limit=limit)
+
+
+def confirm_version(db,user_id,device_id,entitlement,*,expected_fingerprint,expected_manifest_epoch,expected_manifest_revision,reading_run_key):
+    from app.services.ereader_identity_service import owner
+    from app.services.chapter_identity_service import manifest_state
+    from app.services.reading_run_service import current_run
+    device=get_device(db,user_id,device_id)
+    row=db.query(KoboSyncedBook).filter_by(device_id=device.id,entitlement_id=entitlement,removed=False).first()
+    if row is None:raise HTTPException(404,'Book not found')
+    user,novel=owner(db,user_id,row.novel_id)
+    device=db.query(KoboDevice).filter_by(id=device_id,user_id=user_id).populate_existing().with_for_update().first()
+    row=db.query(KoboSyncedBook).filter_by(id=row.id,device_id=device_id).populate_existing().with_for_update().first()
+    if device.revoked_at is not None:raise HTTPException(404,'Device not found')
+    db.query(Chapter.id).filter_by(novel_id=novel.id,archived=False).order_by(Chapter.id).with_for_update().all()
+    state=manifest_state(db,novel.id,lock=True);run=current_run(db,user_id,novel.id)
+    build=_build(db,row)
+    actual=epub_service.fingerprint(novel,epub_service._downloaded_chapter_rows(db,novel.id))
+    if (not build or not build.spine_identity or build.owner_storage_id!=user.storage_id or build.manifest_epoch!=state.manifest_epoch
+            or row.fingerprint!=expected_fingerprint or actual!=expected_fingerprint
+            or state.manifest_epoch!=expected_manifest_epoch or str(state.revision)!=expected_manifest_revision
+            or ((run.run_key if run else None)!=reading_run_key and not (reading_run_key is None and run is not None and not run.requires_run_key and run.ordinal==1 and build.reading_run_key==run.run_key))):
+        raise HTTPException(409,detail={'code':'book_version_changed','message':'This book or reading run changed. Sync the Kobo and review the latest installed version.'})
+    if row.confirmed_fingerprint!=expected_fingerprint:
+        row.confirmed_fingerprint=expected_fingerprint;row.confirmed_reading_run_key=reading_run_key
+        row.progress_review_reason='awaiting_confirmed_device_bookmark'
+    db.commit()
+    return {'confirmed':True,'fingerprint':expected_fingerprint}

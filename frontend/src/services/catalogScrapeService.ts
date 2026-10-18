@@ -1,4 +1,5 @@
 import apiClient from "./apiClient";
+import type {CatalogCandidateResponse,CatalogCapabilityResponse,CatalogCapabilitiesResponse,CatalogPreviewResponse,CatalogDefinitionResponse,CatalogJobResponse,CatalogTaxonomyResponse,CreateCatalogRequest,UpdateCatalogRequest,CatalogDeleteResponse,CatalogControlRequest,CatalogCreateResponse,CatalogActiveJobsResponse} from "../generated/api";
 
 export interface CatalogQuery {
   version?: number; intent?: string; mode: string; media: string; fandom_a: string; fandom_a_id?: number | null; fandom_b: string; crossover: boolean;
@@ -7,14 +8,18 @@ export interface CatalogQuery {
   min_reviews: number; min_favorites: number; min_follows: number; time_field: string;
   time_range: string; sort: string; limit: number; max_pages: number; custom_urls?: string[]; search_text?: string;
   include_tags?: string[]; exclude_tags?: string[]; content_warnings?: string[]; source_options?: Record<string, unknown>;
+  run_mode?: "scheduled_check" | "backfill"; daily_request_budget?: number | null;
+  max_pages_per_run?: number | null; top_n?: number | null;
 }
-export interface CatalogCandidate { id?: number; site?: string; title?: string; author?: string; source_url: string; source_key?: string; status?: string; word_count?: number; reviews?: number; favorites?: number; follows?: number; updated?: string; matched?: boolean; skip_reason?: string; candidate_status?: string; import_job_id?: string; listing_metadata?: { title?: string; [key: string]: unknown }; request_snapshot?: Record<string, unknown>; }
-export interface CatalogSourceCapability { site: string; name: string; adapter_version: number; modes: string[]; filters: string[]; remote_filters: string[]; local_filters: string[]; media?: { value: string; label: string }[]; rate_limit: string; policy?: string; }
-export interface CatalogCapabilities { sources: CatalogSourceCapability[]; default_site: string; version: number; }
-export interface CatalogPreview { query: CatalogQuery; source_url: string; capabilities: CatalogSourceCapability; filter_provenance?: { remote: string[]; local: string[] }; adapter_version?: number; estimated_pages: number; preview: CatalogCandidate[]; matched_count: number; warnings: string[]; }
-export interface CatalogDefinition { id: number; name: string; site: string; query: CatalogQuery; enabled: boolean; schedule_interval_minutes?: number | null; next_run_at?: string | null; last_run_at?: string | null; last_job_id?: string | null; checkpoint?: Record<string, unknown>; adapter_version?: number; capability_snapshot?: CatalogSourceCapability; }
-export interface CatalogJob { id: string; job_type: string; site: string; status: string; progress: number; message?: string; results: Record<string, number>; attempt_count: number; retryable: boolean; error_code?: string; retry_cycle?: number; }
-export interface TaxonomyValue { display_value: string; source_value: string; story_count?: number | null; observed_at: string; }
+export type CatalogCandidate = CatalogCandidateResponse;
+export type CatalogSourceCapability = CatalogCapabilityResponse;
+export type CatalogCapabilities = CatalogCapabilitiesResponse;
+// CatalogQuery is the validated legacy editor model, separate from freeform
+// adapter wire metadata. Pick retains known fields despite the wire extras.
+export type CatalogPreview = Pick<CatalogPreviewResponse,"source_url"|"capabilities"|"filter_provenance"|"adapter_version"|"estimated_pages"|"preview"|"matched_count"|"warnings"|"review_token"> & {query:CatalogQuery};
+export type CatalogDefinition = Pick<CatalogDefinitionResponse,"id"|"name"|"site"|"enabled"|"schedule_interval_minutes"|"schedule"|"progress"|"next_run_at"|"last_run_at"|"last_job_id"|"checkpoint"|"adapter_version"|"capability_snapshot"|"definition_revision"|"plugin_state"|"plugin_reason"|"control_state"|"control_reason"> & {query:CatalogQuery};
+export type CatalogJob = CatalogJobResponse;
+export type TaxonomyValue = CatalogTaxonomyResponse;
 
 export const catalogScrapeService = {
   async capabilities(): Promise<CatalogCapabilities> { return (await apiClient.get("/catalog-scrapes/capabilities")).data; },
@@ -28,17 +33,19 @@ export const catalogScrapeService = {
   async preview(site: string, query: CatalogQuery): Promise<CatalogPreview> {
     return (await apiClient.post("/catalog-scrapes/preview", { site, query }, { timeout: 13_500 })).data;
   },
-  async create(input: { name: string; site: string; query: CatalogQuery; schedule_interval_minutes?: number | null; enabled: boolean }) { return (await apiClient.post("/catalog-scrapes", input)).data as { definition: CatalogDefinition; job: CatalogJob }; },
+  async create(input: Omit<CreateCatalogRequest,"query"> & {query:CatalogQuery}) { return (await apiClient.post("/catalog-scrapes", input)).data as { definition: CatalogDefinition; job: CatalogCreateResponse["job"] }; },
   async definitions(): Promise<CatalogDefinition[]> { return (await apiClient.get("/catalog-scrapes")).data; },
-  async update(id: number, input: Partial<Pick<CatalogDefinition, "name" | "query" | "enabled" | "schedule_interval_minutes">>) {
+  async update(id: number, input: Omit<UpdateCatalogRequest,"query"> & {query?:CatalogQuery}) {
     return (await apiClient.patch(`/catalog-scrapes/${id}`, input)).data as CatalogDefinition;
   },
-  async run(id: number): Promise<CatalogJob> { return (await apiClient.post(`/catalog-scrapes/${id}/run`)).data; },
-  async pause(id: number) { return (await apiClient.post(`/catalog-scrapes/${id}/pause`)).data as CatalogDefinition; },
-  async resume(id: number) { return (await apiClient.post(`/catalog-scrapes/${id}/resume`)).data as CatalogDefinition; },
-  async remove(id: number) { return (await apiClient.delete(`/catalog-scrapes/${id}`)).data; },
+  async definition(id:number):Promise<CatalogDefinition> { return (await apiClient.get(`/catalog-scrapes/${id}`)).data; },
+  async activeJobs(id:number,offset=0,limit=50):Promise<CatalogActiveJobsResponse> { return (await apiClient.get(`/catalog-scrapes/${id}/active-jobs`,{params:{offset,limit}})).data; },
+  async run(id: number, control?:CatalogControlRequest): Promise<CatalogJob> { return (await apiClient.post(`/catalog-scrapes/${id}/run`,control)).data; },
+  async pause(id: number,control?:CatalogControlRequest) { return (await apiClient.post(`/catalog-scrapes/${id}/pause`,control)).data as CatalogDefinition; },
+  async resume(id: number,control?:CatalogControlRequest) { return (await apiClient.post(`/catalog-scrapes/${id}/resume`,control)).data as CatalogDefinition; },
+  async remove(id: number,control?:CatalogControlRequest):Promise<CatalogDeleteResponse> { return (await apiClient.delete(`/catalog-scrapes/${id}`,control?{data:control}:undefined)).data; },
   async job(id: string): Promise<CatalogJob> { return (await apiClient.get(`/catalog-scrapes/jobs/${id}`)).data; },
-  async candidates(id: string): Promise<CatalogCandidate[]> { return (await apiClient.get(`/catalog-scrapes/jobs/${id}/candidates?limit=100`)).data; },
+  async candidates(id: string,offset=0,limit=100): Promise<CatalogCandidate[]> { return (await apiClient.get(`/catalog-scrapes/jobs/${id}/candidates?limit=${limit}&offset=${offset}`)).data; },
   async retry(id: string) { return (await apiClient.post(`/catalog-scrapes/jobs/${id}/retry`)).data; },
   async cancel(id: string) { return (await apiClient.post(`/catalog-scrapes/jobs/${id}/cancel`)).data; },
   async ignoreCandidate(jobId: string, candidateId: number) {

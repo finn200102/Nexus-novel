@@ -1,0 +1,3 @@
+import {defineConfig,devices} from "@playwright/test";
+import base from "./playwright.config";
+export default defineConfig({...base,testMatch:["**/story-audio-browser.spec.ts","**/narrator-upload.spec.ts"],use:{...base.use,baseURL:"http://127.0.0.1:4186",channel:undefined,video:"off"},projects:[{name:"chromium",use:{...devices["Desktop Chrome"],channel:undefined}},{name:"firefox",use:{...devices["Desktop Firefox"],channel:undefined}},{name:"webkit",use:{...devices["Desktop Safari"],channel:undefined}}],webServer:{command:"npm run dev -- --host 127.0.0.1 --port 4186",url:"http://127.0.0.1:4186",reuseExistingServer:false,timeout:30000}});

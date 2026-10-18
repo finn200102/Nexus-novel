@@ -1,15 +1,23 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Copy, KeyRound, Trash2 } from "lucide-react";
 import { useToast } from "../../context/useToast";
 import { getUserFacingError } from "../../services/apiClient";
-import { CreatedKoboDevice, KoboDevice, koboEndpointLine, koboService } from "../../services/koboService";
+import { CreatedKoboDevice, KoboDevice, type KoboBookVersion, type KoboBookVersionPage, koboEndpointLine, koboService } from "../../services/koboService";
 import { organizationService } from "../../services/organizationService";
 import type { Shelf } from "../../types/organization";
 import "../../styles/integrations.css";
 
+import { onAccountStorageChange, storageGeneration } from "../../services/accountStorage";
+
 const AUTO_SHELF = "";
 
-const KoboSettings: React.FC = () => {
+const KoboSettingsContents: React.FC = () => {
+  const generation = useRef(storageGeneration()).current, mounted = useRef(true);
+  const current = () => mounted.current && generation === storageGeneration();
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const [books, setBooks] = useState<Record<number, KoboBookVersionPage>>({});
+  const [checked, setChecked] = useState<Record<string, boolean>>({});
+  const [reviewBusy, setReviewBusy] = useState(false);
   const { addToast } = useToast();
   const [devices, setDevices] = useState<KoboDevice[]>([]);
   const [kepub, setKepub] = useState(false);
@@ -20,13 +28,15 @@ const KoboSettings: React.FC = () => {
   const [busy, setBusy] = useState(false);
 
   const load = async () => {
+    if (!current()) return;
     try {
       const [list, shelfList] = await Promise.all([koboService.list(), organizationService.listShelves()]);
+      if (!current()) return;
       setDevices(list.devices);
       setKepub(list.kepub);
       setShelves(shelfList);
     } catch (err) {
-      addToast(getUserFacingError(err, "Could not load Kobo devices"), "error");
+      if (current()) addToast(getUserFacingError(err, "Could not load Kobo devices"), "error");
     }
   };
 
@@ -38,46 +48,76 @@ const KoboSettings: React.FC = () => {
 
   const create = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (!current()) return;
     setBusy(true);
     try {
       const result = await koboService.create(label, shelfChoice === AUTO_SHELF ? null : Number(shelfChoice));
+      if (!current()) return;
       setCreated(result);
       setLabel("");
-      await load();
+      if (current()) await load();
     } catch (err) {
-      addToast(getUserFacingError(err, "Could not set up the Kobo"), "error");
+      if (current()) addToast(getUserFacingError(err, "Could not set up the Kobo"), "error");
     } finally {
-      setBusy(false);
+      if (current()) setBusy(false);
     }
   };
 
   const changeShelf = async (device: KoboDevice, shelfId: number) => {
+    if (!current()) return;
     try {
       await koboService.setShelf(device.id, shelfId);
-      await load();
+      if (current()) await load();
     } catch (err) {
-      addToast(getUserFacingError(err, "Could not change the shelf"), "error");
+      if (current()) addToast(getUserFacingError(err, "Could not change the shelf"), "error");
     }
   };
 
   const revoke = async (device: KoboDevice) => {
+    if (!current()) return;
     try {
       await koboService.revoke(device.id);
-      addToast(`Revoked "${device.label || "Kobo"}"`, "success");
-      await load();
+      if (current()) addToast(`Revoked "${device.label || "Kobo"}"`, "success");
+      if (current()) await load();
     } catch (err) {
-      addToast(getUserFacingError(err, "Could not revoke the Kobo token"), "error");
+      if (current()) addToast(getUserFacingError(err, "Could not revoke the Kobo token"), "error");
     }
   };
 
   const copy = async (text: string) => {
+    if (!current()) return;
     try {
       await navigator.clipboard.writeText(text);
-      addToast("Copied", "success");
+      if (current()) addToast("Copied", "success");
     } catch {
-      addToast("Could not copy; select the text and copy it manually", "error");
+      if (current()) addToast("Could not copy; select the text and copy it manually", "error");
     }
   };
+
+  async function reviewBooks(deviceId: number, offset = 0) {
+    if (!current()) return;
+    setReviewBusy(true);
+    try {
+      const page = await koboService.books(deviceId, offset);
+      if (!current()) return;
+      setBooks(previous => ({ ...previous, [deviceId]: page })); setChecked({});
+    } catch (err) { if (current()) addToast(getUserFacingError(err, "Could not review book versions"), "error"); }
+    finally { if (current()) setReviewBusy(false); }
+  }
+  async function confirmBook(deviceId: number, book: KoboBookVersion) {
+    if (!current() || !checked[book.entitlement_id]) return;
+    setReviewBusy(true);
+    try {
+      await koboService.confirmVersion(deviceId, book.entitlement_id, {
+        expected_fingerprint: book.fingerprint, expected_manifest_epoch: book.manifest_epoch,
+        expected_manifest_revision: book.manifest_revision, reading_run_key: book.reading_run_key,
+      });
+      if (!current()) return;
+      addToast("Installed version confirmed. New device bookmarks remain approximate.", "success");
+      await reviewBooks(deviceId, books[deviceId]?.offset ?? 0);
+    } catch (err) { if (current()) addToast(getUserFacingError(err, "The book changed. Sync the Kobo and review the installed version again."), "error"); }
+    finally { if (current()) setReviewBusy(false); }
+  }
 
   const hasKoboShelf = shelves.some((shelf) => shelf.name === "Kobo");
   const createdLine = created ? koboEndpointLine(created.endpoint_path) : "";
@@ -107,10 +147,12 @@ const KoboSettings: React.FC = () => {
         </ol>
         <p>
           {kepub
-            ? "Books are sent as KEPUB, so progress syncs to the exact place in a chapter. The furthest position wins."
+            ? "KEPUB provides a more detailed device position. Device positions remain estimates and never mark source text as verified read."
             : "This server cannot convert to KEPUB (kepubify is missing), so books are sent as plain EPUB and the Kobo reports progress only per chapter."}
         </p>
       </div>
+
+      <p className="account-form">After syncing or replacing a book, review its installed version below before device bookmarks can update Nexus. Book downloads alone do not confirm what is installed. Older bookmarks are kept for review; a new reading run requires a fresh book and confirmation.</p>
 
       {created && (
         <div className="account-form" role="status">
@@ -170,7 +212,25 @@ const KoboSettings: React.FC = () => {
               </label>{" "}
               <button type="button" className="operations-action operations-action--quiet" onClick={() => void revoke(device)}>
                 <Trash2 size={14} /> Revoke
-              </button>
+              </button>{" "}
+              <button type="button" className="operations-action operations-action--quiet" disabled={reviewBusy} onClick={() => void reviewBooks(device.id)}>Review installed book versions</button>
+              {books[device.id] && <section aria-label={`Installed book versions for ${device.label || "Kobo"}`}>
+                {books[device.id].items.length === 0 && <p>No books have been advertised to this Kobo yet. Sync it first.</p>}
+                {books[device.id].items.map(book => <div key={book.entitlement_id} className="account-form">
+                  <strong>{book.title || "Untitled story"}</strong>
+                  <p>{book.chapter_count} chapters · Generated {book.generated_at ? new Date(book.generated_at).toLocaleString() : "date unknown"}</p>
+                  <p>{book.confirmed ? "Installed version confirmed. Incoming device positions are approximate." : "Version confirmation needed. Existing device bookmarks are preserved."}</p>
+                  {!book.identity_known ? <p>This older book has no chapter identity proof. Sync a newly generated copy before confirming.</p> : <>
+                    <label><input type="checkbox" checked={checked[book.entitlement_id] || false} disabled={reviewBusy}
+                      onChange={event => setChecked(previous => ({ ...previous, [book.entitlement_id]: event.target.checked }))} />
+                      I checked that this generated version is installed on {device.label || "my Kobo"}.</label>
+                    <button type="button" disabled={reviewBusy || !checked[book.entitlement_id]} onClick={() => void confirmBook(device.id, book)}>Confirm installed version</button>
+                  </>}
+                </div>)}
+                <p>{books[device.id].total} books · showing {books[device.id].offset + (books[device.id].items.length ? 1 : 0)}–{books[device.id].offset + books[device.id].items.length}</p>
+                <button type="button" disabled={reviewBusy || books[device.id].offset === 0} onClick={() => void reviewBooks(device.id, Math.max(0, books[device.id].offset - 50))}>Previous books</button>
+                <button type="button" disabled={reviewBusy || books[device.id].offset + books[device.id].items.length >= books[device.id].total} onClick={() => void reviewBooks(device.id, books[device.id].offset + 50)}>Next books</button>
+              </section>}
             </li>
           ))}
         </ul>
@@ -181,4 +241,8 @@ const KoboSettings: React.FC = () => {
   );
 };
 
+const KoboSettings: React.FC = () => {
+  const generation = useSyncExternalStore(onAccountStorageChange, storageGeneration, storageGeneration);
+  return <KoboSettingsContents key={generation} />;
+};
 export default KoboSettings;

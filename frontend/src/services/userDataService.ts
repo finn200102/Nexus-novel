@@ -1,4 +1,5 @@
 import apiClient from "./apiClient";
+import type { PreferenceValues } from "./readerPreferenceSync";
 
 export type UserDataExport = {
   format: "nexus-user-export";
@@ -6,19 +7,27 @@ export type UserDataExport = {
   exported_at: string;
   libraries: unknown[];
   saved_searches: unknown[];
+  smart_shelves?: unknown[];
+  reader_preferences?: PreferenceValues | null;
 };
 
-export type NovelImportStatus = "created" | "linked" | "failed";
+export type NovelImportStatus = "created" | "linked" | "failed" | "conflict";
 
 export type UserDataImportNovel = {
-  url: string;
+  url: string | null;
+  novel_id?: number;
+  portable_link_id?: number;
+  original_status?: "unavailable";
   title: string | null;
   status: NovelImportStatus;
   reason: string | null;
   follow_state: "updated" | "unchanged" | null;
-  progress: "applied" | "unchanged" | null;
-  history: { added: number; updated: number; unchanged: number };
+  progress: "applied" | "unchanged" | "kept_local" | "review_required" | null;
+  reading_review_id?: number | null;
+  history: { added: number; updated: number; unchanged: number; kept_local?: number };
+  reading_runs?: { added: number; unchanged: number; kept_local: number; events_added: number; events_unchanged: number; inferred_events: number; current_restored: number };
   annotations: { added: number; duplicate: number; deferred: number };
+  reader_preferences?: "applied" | "unchanged" | "kept_local" | null;
 };
 
 export type UserDataImportReport = {
@@ -27,6 +36,9 @@ export type UserDataImportReport = {
   summary: Record<string, number>;
   libraries: { name: string; status: "created" | "existing"; novels: UserDataImportNovel[] }[];
   saved_searches: { name: string; status: "created" | "unchanged" | "conflict" }[];
+  smart_shelves?: { name: string; status: "created" | "unchanged" | "conflict" | "invalid" | "limit_reached"; needs_review?: boolean }[];
+  reader_preferences?: "applied" | "unchanged" | "kept_local" | null;
+  discovery_preferences?: "applied" | "unchanged" | "kept_local" | null;
 };
 
 // Importing may start metadata scrapes for many novels, which can take longer

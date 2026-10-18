@@ -1,0 +1,9 @@
+.chapter-changes-disclosure { margin-block: 1.25rem; }
+.chapter-changes { display: grid; gap: 1rem; min-width: 0; overflow-wrap: anywhere; }
+.chapter-changes section { min-width: 0; }
+.chapter-changes__actions { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin-block: .75rem; }
+.chapter-changes__items, .chapter-changes__choices { display: grid; gap: .75rem; padding-left: 1.25rem; }
+.chapter-changes__items > li, .chapter-changes__choices > li { padding: .75rem; border: 1px solid var(--border, #667085); border-radius: .5rem; min-width: 0; }
+.chapter-changes .ui-button, .chapter-changes .ui-button__label, .chapter-changes__choices .ui-button, .chapter-changes__choices .ui-button__label { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+
+.chapter-changes__dialog .ui-button, .chapter-changes__dialog .ui-button__label { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }

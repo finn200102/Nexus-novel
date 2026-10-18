@@ -279,8 +279,8 @@ def test_epub_cache_rebuilds_when_a_chapter_is_added(client, auth_headers, reade
     assert first.headers["etag"] != second.headers["etag"]
     assert "OEBPS/chapter-3.xhtml" in zipfile.ZipFile(BytesIO(second.content)).namelist()
     assert db.query(EpubBuild).filter(EpubBuild.novel_id == novel.id).count() == 2
-    # Only the current file stays on disk.
-    assert len(list((download_dir / "epub").glob(f"{novel.id}-*.epub"))) == 1
+    # Prior private file snapshots remain available by immutable build identity.
+    assert len(list((download_dir / "epub").glob(f"{novel.id}-*.epub"))) == 2
 
 
 def test_partial_md5_samples_follow_koreader_offsets():
@@ -362,8 +362,9 @@ def test_kosync_returns_web_progress_when_it_is_further_along(client, auth_heade
 
     # The web reader moved on to chapter 3.
     progress = db.query(ReadingProgress).filter(ReadingProgress.novel_id == novel.id, ReadingProgress.user_id == reader.id).one()
-    progress.chapter_number = 3
-    db.commit()
+    from app.services.reading_progress_service import save_reading_progress
+    chapter3=db.query(Chapter).filter_by(novel_id=novel.id,chapter_number=3).one()
+    save_reading_progress(db,user_id=reader.id,chapter=chapter3,position=0,percent=0)
 
     got = client.get(f"/kosync/syncs/progress/{document}", headers=sync_headers).json()
     assert got["progress"] == "/body/DocFragment[3]/body"

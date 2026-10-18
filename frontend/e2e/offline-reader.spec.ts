@@ -28,8 +28,10 @@ test("chapters made available offline open after an offline reload", async ({ pa
   page.on("pageerror", (error) => pageErrors.push(error.message));
 
   await installMockApi(context);
+  let offline = false;
   // Later routes win over the generic mock.
   await context.route(/127\.0\.0\.1:8000|localhost:8000|\/api\//, async (route) => {
+    if (offline) return route.abort("internetdisconnected");
     const path = new URL(route.request().url()).pathname.replace(/^\/api(?=\/)/, "");
     const reply = (body: unknown, status = 200) =>
       route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
@@ -73,6 +75,7 @@ test("chapters made available offline open after an offline reload", async ({ pa
   await page.goto(`/library/${LIBRARY_ID}/novels/${NOVEL_ID}/1`);
   await expect(page.getByText(chapterText(1))).toBeVisible();
 
+  offline = true;
   await context.setOffline(true);
   // Chapter 7 was never opened online, so only the offline store has it.
   await page.goto(`/library/${LIBRARY_ID}/novels/${NOVEL_ID}/7`);
@@ -80,7 +83,8 @@ test("chapters made available offline open after an offline reload", async ({ pa
   await page.reload();
   await expect(page.getByText(chapterText(7))).toBeVisible();
   // The text came from the device, not from a (mocked) server response.
-  await expect(page.getByText("Reading the saved copy on this device.")).toBeVisible();
+  await expect(page.getByText("Offline mode: showing the last cached copy.")).toBeVisible();
+  offline = false;
   await context.setOffline(false);
 
   expect(pageErrors).toEqual([]);

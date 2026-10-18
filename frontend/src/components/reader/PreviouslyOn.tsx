@@ -52,7 +52,7 @@ export default function PreviouslyOn({ novelId, progress, chapter }: PreviouslyO
   const sameChapter = chapter !== null && chapter.chapter_number === chapterNumber;
   const chapterLabel = sameChapter && chapter?.title ? `Chapter ${chapterNumber} — ${chapter.title}` : `Chapter ${chapterNumber}`;
   const excerpt = sameChapter && chapter ? lastReadParagraphs(chapter.content, progress.percent) : [];
-  const hasRecap = Boolean(recap && recap.chapters.length > 0);
+  const hasRecap = Boolean(recap && recap.spoiler_boundary_chapter != null && recap.chapters.length > 0);
 
   const hideRecaps = () => {
     writeRecapDays(0);

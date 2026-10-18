@@ -12,32 +12,9 @@ import "../../styles/download-manager.css";
 import { displayTitle } from "../../utils/displayTitle";
 import { EmptyState } from "../ui";
 
-interface NovelDownloadStatus {
-  novel: Novel;
-  total: number;
-  present: number;
-  processing: number;
-  failed: number;
-  processing_chapters: ProcessingChapter[];
-  failed_chapters: FailedChapter[];
-}
-
-interface ProcessingChapter {
-  id: number;
-  chapter_number: number;
-  title: string | null;
-  started_at: string | null;
-  retry_count: number;
-}
-
-interface FailedChapter {
-  id: number;
-  chapter_number: number;
-  title: string | null;
-  error: string | null;
-  retry_count: number;
-  finished_at: string | null;
-}
+import type { NovelDownloadStatusResponse } from "../../generated/api";
+type NovelDownloadStatus = NovelDownloadStatusResponse & { novel: Novel };
+type FailedChapter = NovelDownloadStatusResponse["failed_chapters"][number];
 
 interface DownloadsTabProps {
   jobs: DownloadJob[];

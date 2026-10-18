@@ -9,7 +9,7 @@ import { FOLLOW_STATE_LABELS, storyHref } from "./followStates";
 import { siteLabel } from "../story/storyModel";
 
 interface LibraryStoryCardProps {
-  novel: Novel;
+  novel: Pick<Novel,"id"|"title"|"library_id"> & Partial<Omit<Novel,"id"|"title"|"library_id"|"url">> & {url?:string|null};
   libraryId: number;
   personalRating?: number | null;
   selectionMode: boolean;
@@ -34,7 +34,7 @@ const LibraryStoryCard: React.FC<LibraryStoryCardProps> = ({
 }) => {
   const title = displayTitle(novel);
   const href = storyHref(novel, libraryId);
-  const followLabel = FOLLOW_STATE_LABELS[novel.follow_state];
+  const followLabel = novel.follow_state ? FOLLOW_STATE_LABELS[novel.follow_state] : null;
   const hasNext = novel.next_unread_chapter_number != null;
   const failed = novel.scrape_status === "failed";
   const pending = novel.scrape_status === "pending";
@@ -96,7 +96,7 @@ const LibraryStoryCard: React.FC<LibraryStoryCardProps> = ({
             aria-label={`Continue ${title} at chapter ${novel.next_unread_chapter_number}`}
           >
             Next: Chapter {novel.next_unread_chapter_number}
-            {novel.chapter_count != null && <span className="library-card__of"> of {novel.chapter_count}</span>}
+            {novel.chapter_count != null && <span className="library-card__of"> · {novel.chapter_count} chapters</span>}
           </Link>
         ) : (
           <p className="library-card__meta">

@@ -60,14 +60,22 @@ def connect_readwise(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    user_id=current_user.id
+    proof=export.authority(db,user_id)
+    connection=export.connection_identity(db,user_id)
     token = body.token.strip()
+    db.rollback()
     try:
         valid = export.verify_readwise_token(token)
     except export.ReadwiseError as exc:
         raise _readwise_error(exc) from exc
+    export.authority(db,user_id,proof,lock=True)
+    if export.connection_identity(db,user_id,lock=True)!=connection:
+        db.rollback()
+        raise HTTPException(409,'Readwise connection changed. Review and retry.')
     if not valid:
         raise HTTPException(status_code=422, detail="Readwise rejected this token")
-    export.save_readwise_token(db, current_user, token)
+    export.save_readwise_token(db, db.query(User).filter_by(id=user_id).populate_existing().one(), token)
     return {"connected": True}
 
 

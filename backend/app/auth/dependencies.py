@@ -41,7 +41,19 @@ def get_current_auth(token: str = Depends(oauth2_scheme), db: Session = Depends(
     user = get_user_by_id(db, token_data["user_id"])
     if user is None or user.is_disabled:
         raise _unauthorized("User not found")
+    db.info['authenticated_session'] = (user.id, session.id)
     return Authenticated(user=user, session=session)
+
+
+def require_current_session(db: Session, user_id: int) -> None:
+    """Recheck this request's session after external I/O; workers have none."""
+    selected = db.info.get('authenticated_session')
+    if selected is None:
+        return
+    owner_id, session_id = selected
+    session = db.query(UserSession).filter_by(id=session_id, user_id=user_id).populate_existing().first()
+    if owner_id != user_id or session is None or session.revoked_at is not None:
+        raise _unauthorized('Session ended. Please sign in again.')
 
 
 def get_current_user(auth: Authenticated = Depends(get_current_auth)) -> User:

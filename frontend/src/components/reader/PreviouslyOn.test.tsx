@@ -44,6 +44,21 @@ describe("PreviouslyOn", () => {
     expect(screen.getByText("3. Arrival")).toBeInTheDocument();
   });
 
+  it.each([0,-3])("preserves signed recap boundary %s",async boundary=>{
+    getSpoilerSafeRecap.mockResolvedValue({summary:"Verified recap",spoiler_boundary_chapter:boundary,chapters:[{number:boundary,title:"A prologue"}]});
+    render(<PreviouslyOn novelId={1} progress={{chapter_number:4,percent:50,updated_at:longAgo}} chapter={chapter}/>);
+    expect(await screen.findByText(new RegExp(`up to chapter ${boundary}`))).toBeInTheDocument();
+  });
+
+  it("does not present chapter entries without a verified boundary",async()=>{
+    getSpoilerSafeRecap.mockResolvedValue({summary:"Unverified",spoiler_boundary_chapter:null,chapters:[{number:4,title:"UNVERIFIED_FUTURE_TITLE"}]});
+    await act(async()=>{render(<PreviouslyOn novelId={1} progress={{chapter_number:4,percent:50,updated_at:longAgo}} chapter={chapter}/>);});
+    await screen.findByRole("heading",{name:/previously on/i});
+    await waitFor(()=>expect(getSpoilerSafeRecap).toHaveBeenCalled());
+    expect(screen.queryByText(/UNVERIFIED_FUTURE_TITLE/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/up to chapter/i)).not.toBeInTheDocument();
+  });
+
   it("stays hidden when the reader was active recently", () => {
     const recent = new Date(Date.now() - DAY).toISOString();
     render(<PreviouslyOn novelId={1} progress={{ chapter_number: 4, percent: 50, updated_at: recent }} chapter={chapter} />);

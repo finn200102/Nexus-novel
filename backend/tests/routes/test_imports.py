@@ -44,6 +44,59 @@ def test_extract_urls_from_text_csv_and_royal_road_paths():
     assert urls == ["https://www.royalroad.com/fiction/12/one", "https://www.royalroad.com/fiction/34"]
 
 
+def test_url_preview_reports_duplicates_without_writes_or_source_requests(client, db, test_library, auth_headers, monkeypatch):
+    db.add(Novel(title="Already here", url=RR.format(1, 1), library_id=test_library.id))
+    db.commit()
+    metadata = AsyncMock()
+    monkeypatch.setattr("app.services.metadata_client.scrape_novel_by_url", metadata)
+    response = client.post("/imports/urls/preview", headers=auth_headers, json={"library_id": test_library.id,
+        "text": "\n".join([RR.format(1, 1), FFN.format(4), FFN.format(4), "https://:443/invalid"]), "source": "url_list"})
+    assert response.status_code == 200
+    assert response.json()["counts"] == {"duplicate": 2, "ready": 1, "unsupported": 1}
+    assert len(response.json()["items"]) == 4
+    assert db.query(ImportJob).count() == 0
+    assert db.query(Novel).count() == 1
+    metadata.assert_not_called()
+
+
+def test_oversized_url_batches_are_rejected_without_silent_truncation(client, db, test_library, auth_headers):
+    payload = {"library_id": test_library.id, "text": "\n".join(FFN.format(n) for n in range(2001))}
+    for route in ("/imports/urls/preview", "/imports/urls"):
+        response = client.post(route, headers=auth_headers, json=payload)
+        assert response.status_code == 422
+        assert "Nothing was imported" in response.json()["detail"]
+    assert db.query(ImportJob).count() == 0
+
+
+def test_retry_preserves_successes_and_reuses_failed_library_entries(client, db, test_user, test_library, auth_headers, monkeypatch):
+    from app.models.import_job import ImportJobItem
+    from app.models.reading_progress import ReadingProgress
+    novel = Novel(title="Needs retry", url=FFN.format(9), library_id=test_library.id,
+        metadata_id=9009, scrape_status="failed", scrape_error="temporary source failure")
+    db.add(novel)
+    db.flush()
+    progress = ReadingProgress(user_id=test_user.id, novel_id=novel.id, chapter_number=1, percent=0.5)
+    db.add(progress)
+    job = imports.create_job(db, test_user, test_library, "url_list", entries=[
+        {"url": FFN.format(1), "status": "linked"}, {"url": FFN.format(9), "status": "failed", "novel_id": novel.id}])
+    job.status = "finished"
+    db.commit()
+    response = client.post(f"/imports/{job.id}/retry", headers=auth_headers)
+    assert response.status_code == 202
+    assert response.json()["counts"] == {"linked": 1, "queued": 1}
+    assert client.post(f"/imports/{job.id}/retry", headers=auth_headers).status_code == 409
+    scrape = FakeScrape()
+    metadata = AsyncMock()
+    monkeypatch.setattr("app.services.metadata_client.scrape_novel_by_url", metadata)
+    asyncio.run(imports.run_import_job(job.id, TestingSessionLocal, scrape=scrape))
+    db.expire_all()
+    assert db.query(Novel).count() == 1
+    assert db.get(ReadingProgress, progress.id).percent == 0.5
+    assert db.query(ImportJobItem).filter_by(job_id=job.id, status="linked").count() == 2
+    assert scrape.calls == [9009]
+    metadata.assert_not_called()
+
+
 def test_epub_source_url_from_fanficfare_fichub_and_title_page():
     assert imports.epub_source_url(_epub(f"<dc:source>{FFN.format(5)}</dc:source>")) == FFN.format(5)
     assert imports.epub_source_url(_epub(f"<dc:identifier>url:{AO3.format(6)}</dc:identifier>")) == AO3.format(6)
@@ -190,7 +243,9 @@ def test_epub_import_and_me_import_jobs_are_processed(client, db, test_user, tes
     job = client.post("/imports/epub", json={"library_id": test_library.id, "files": files}, headers=auth_headers).json()
     asyncio.run(imports.run_import_job(job["id"], TestingSessionLocal, scrape=FakeScrape()))
     items = client.get(f"/imports/{job['id']}", headers=auth_headers).json()["items"]
-    assert [(item["label"], item["status"]) for item in items] == [("good.epub", "linked"), ("plain.epub", "unsupported")]
+    # The metadata-only fixture has no readable spine. A malformed local book
+    # now gets an import error; valid standalone books are covered separately.
+    assert [(item["label"], item["status"]) for item in items] == [("good.epub", "linked"), ("plain.epub", "failed")]
 
     document = {
         "format": "nexus-user-export",

@@ -1,0 +1,15 @@
+.calendar-review { min-width: 0; padding-top: var(--sp-4); border-top: 1px solid var(--border); }
+.calendar-review > summary { cursor: pointer; font-weight: 600; padding-block: var(--sp-3); }
+.calendar-review > .ui-field { max-width: 20rem; margin-block: var(--sp-3); }
+.calendar-review__year, .calendar-review__year > section, .reading-goal { display: grid; min-width: 0; gap: var(--sp-3); }
+.calendar-review__year { margin-top: var(--sp-4); gap: var(--sp-5); }
+.calendar-review h2, .calendar-review h3, .calendar-review h4, .calendar-review p { margin: 0; }
+.reading-goal { border: 1px solid var(--border); border-radius: var(--r-md); padding: var(--sp-4); }
+.reading-goal > .ui-field { max-width: 24rem; }
+.calendar-review__actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-3); }
+.calendar-review__months { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); gap: var(--sp-3); }
+.calendar-review__months > li { display: grid; gap: var(--sp-2); border: 1px solid var(--border); border-radius: var(--r-md); padding: var(--sp-3); min-width: 0; }
+.calendar-review p { overflow-wrap: anywhere; }
+.calendar-review progress { width: min(100%, 24rem); accent-color: var(--accent); }
+.calendar-review .ui-button { max-width: 100%; white-space: normal; line-height: 1.35; padding-block: var(--sp-2); }
+.calendar-review .ui-button__label { min-width: 0; overflow-wrap: anywhere; }

@@ -1,5 +1,6 @@
 import apiClient from "./apiClient";
 import axios from "axios";
+import { logRequestFailure } from "./requestDiagnostics";
 import type { Novel, NovelFollowSettings, NovelUpdateEvent } from "../types/novel";
 
 interface CreateNovelSchema {
@@ -25,15 +26,14 @@ export const novelService = {
     options: LibraryNovelOptions = {},
   ): Promise<Novel[]> {
     try {
-      const extra = new URLSearchParams();
+      const extra = new URLSearchParams({ library_id: String(library_id), search: query });
       if (options.shelfId != null) extra.set("shelf_id", String(options.shelfId));
       if (options.userTag) extra.set("user_tag", options.userTag);
       if (options.minRating) extra.set("min_rating", String(options.minRating));
       if (options.sortBy === "updated_since_read" || options.sortBy === "personal_rating") {
         extra.set("sort_by", options.sortBy);
       }
-      const suffix = extra.toString() ? `&${extra.toString()}` : "";
-      const response = await apiClient.get(`/novel/?library_id=${library_id}&search=${query}${suffix}`);
+      const response = await apiClient.get(`/novel/?${extra.toString()}`);
       return response.data as Novel[];
     } catch (error) {
       if (axios.isAxiosError(error) && error.response?.status != 401) {
@@ -200,14 +200,6 @@ export const novelService = {
   },
 
   handleError(error: unknown, message: string) {
-    console.error(message + ":", error);
-
-    if (axios.isAxiosError(error)) {
-      console.error("Response status:", error.response?.status);
-      console.error("Response data:", error.response?.data);
-      console.error("Request URL:", error.config?.url);
-      console.error("Request method:", error.config?.method);
-      console.error("Request headers:", error.config?.headers);
-    }
+    logRequestFailure(error,message);
   },
 };

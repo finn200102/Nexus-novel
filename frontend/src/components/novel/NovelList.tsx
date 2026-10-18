@@ -1,253 +1,54 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { novelService } from "../../services/novelService";
+import { libraryViewService, type LibrarySortBy, type LibraryViewPage, type OwnedLibraryDefinition, type FollowState } from "../../services/libraryViewService";
+import { getUserFacingError, isRequestCancelled } from "../../services/apiClient";
+import { onAccountStorageChange, storageGeneration } from "../../services/accountStorage";
 import LibraryStoryCard from "../library/LibraryStoryCard";
-import { EmptyState } from "../ui";
-import { Novel } from "../../types/novel";
+import { Banner, Button, Dialog, EmptyState } from "../ui";
 import { NovelCardSkeleton } from "../common/Skeleton";
-import { organizationService } from "../../services/organizationService";
-import type { LibraryPersonalEntry, Shelf } from "../../types/organization";
-import type { LibraryNovelOptions } from "../../services/novelService";
-
-export type LibrarySortBy = "recent" | "title" | "chapters" | "updated_since_read" | "personal_rating";
-
+import type { Shelf } from "../../types/organization";
+export type { LibrarySortBy } from "../../services/libraryViewService";
 interface NovelListProps {
-  library_id: number;
-  searchTerm: string;
-  sourceFilter: string;
-  sortBy: LibrarySortBy;
-  viewMode: "grid" | "list";
-  selectionMode: boolean;
-  refreshKey?: number;
-  shelves?: Shelf[];
-  onShelvesChanged?: (shelves: Shelf[]) => void;
-  shelfId?: number | null;
-  userTag?: string;
-  minRating?: number;
-  /** Follow state to show ("all" for every story). Filtered on the client. */
-  statusFilter?: string;
-  /** Receives every story the current query returned, before the status filter (for chip counts). */
-  onNovelsLoaded?: (novels: Novel[]) => void;
+  library_id:number;searchTerm:string;sourceFilter:string;sortBy:LibrarySortBy;viewMode:"grid"|"list";selectionMode:boolean;
+  refreshKey?:number;shelves?:Shelf[];onShelvesChanged?:(shelves:Shelf[])=>void;shelfId?:number|null;userTag?:string;minRating?:number;statusFilter?:string;
+  onPageLoaded?:(page:LibraryViewPage|null)=>void;
 }
-
-// The server orders these, so the client keeps the order it receives.
-const SERVER_SORTS: LibrarySortBy[] = ["updated_since_read", "personal_rating"];
-
-const NovelList: React.FC<NovelListProps> = ({
-  library_id,
-  searchTerm,
-  sourceFilter,
-  sortBy,
-  viewMode,
-  selectionMode,
-  refreshKey = 0,
-  shelves = [],
-  onShelvesChanged,
-  shelfId = null,
-  userTag = "",
-  minRating = 0,
-  statusFilter = "all",
-  onNovelsLoaded,
-}) => {
-  const [novels, setNovels] = useState<Novel[]>([]);
-  const [personal, setPersonal] = useState<Record<string, LibraryPersonalEntry>>({});
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedNovels, setSelectedNovels] = useState<Set<number>>(new Set());
-  const [deleteLoading, setDeleteLoading] = useState<boolean>(false);
-
-  useEffect(() => {
-    let isCancelled = false;
-    const fetchNovels = async () => {
-      try {
-        setLoading(true);
-        const options: LibraryNovelOptions = {
-          shelfId,
-          userTag: userTag.trim(),
-          minRating,
-          sortBy: SERVER_SORTS.includes(sortBy) ? sortBy : undefined,
-        };
-        const data = await novelService.getAllNovels(library_id, searchTerm, options);
-        if (isCancelled) return;
-        if (Array.isArray(data)) {
-          setNovels(data);
-          setError(null);
-        } else {
-          setError("We couldn't load your stories. Reload the page to try again.");
-        }
-      } catch (err) {
-        if (!isCancelled) {
-          console.error("Failed to fetch novels:", err);
-          setError("We couldn't load your stories. Check your connection and reload the page.");
-        }
-      } finally {
-        if (!isCancelled) {
-          setLoading(false);
-        }
-      }
-    };
-    fetchNovels();
-    return () => {
-      isCancelled = true;
-    };
-  }, [library_id, searchTerm, refreshKey, shelfId, userTag, minRating, sortBy]);
-
-  useEffect(() => {
-    let active = true;
-    organizationService
-      .libraryPersonal(library_id)
-      .then((entries) => active && setPersonal(entries))
-      .catch(() => active && setPersonal({}));
-    return () => {
-      active = false;
-    };
-  }, [library_id, refreshKey]);
-
-  useEffect(() => {
-    onNovelsLoaded?.(novels);
-  }, [novels, onNovelsLoaded]);
-
-  useEffect(() => {
-    if (!selectionMode) {
-      setSelectedNovels(new Set());
-    }
-  }, [selectionMode]);
-
-  const processedNovels = useMemo(() => {
-    const normalizedSource = sourceFilter.toLowerCase();
-    const filtered = novels.filter((novel) => {
-      if (statusFilter !== "all" && novel.follow_state !== statusFilter) return false;
-      if (normalizedSource === "all") return true;
-      const site = (novel.novel_site || novel.source_url || "").toLowerCase();
-      return site.includes(normalizedSource);
-    });
-
-    if (SERVER_SORTS.includes(sortBy)) return filtered;
-
-    const sorted = [...filtered];
-    if (sortBy === "recent") {
-      sorted.sort(
-        (a, b) =>
-          new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-      );
-    } else if (sortBy === "title") {
-      sorted.sort((a, b) => a.title.localeCompare(b.title));
-    } else {
-      sorted.sort(
-        (a, b) => (b.chapter_count || 0) - (a.chapter_count || 0)
-      );
-    }
-    return sorted;
-  }, [novels, sourceFilter, sortBy, statusFilter]);
-
-  const handleNovelClick = (novelId: number) => {
-    if (selectionMode) {
-      const updatedSelection = new Set(selectedNovels);
-      if (selectedNovels.has(novelId)) {
-        updatedSelection.delete(novelId);
-      } else {
-        updatedSelection.add(novelId);
-      }
-      setSelectedNovels(updatedSelection);
-    }
+function NovelListContents({ definition,viewMode,selectionMode,refreshKey=0,shelves=[],onShelvesChanged,onPageLoaded }: NovelListProps & {definition:OwnedLibraryDefinition}) {
+  const generation=storageGeneration(),mounted=useRef(false);
+  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
+  const current=()=>mounted.current&&generation===storageGeneration();
+  const [page,setPage]=useState<LibraryViewPage|null>(null),[offset,setOffset]=useState(0),[refresh,setRefresh]=useState(0);
+  const [loading,setLoading]=useState(true),[error,setError]=useState("");
+  const [selected,setSelected]=useState<Set<number>>(new Set()),[confirm,setConfirm]=useState(false),[deleting,setDeleting]=useState(false);
+  useEffect(()=>{
+    const controller=new AbortController();setLoading(true);setError("");setSelected(new Set());onPageLoaded?.(null);
+    const timer=window.setTimeout(()=>{void libraryViewService.preview(definition,offset,50,controller.signal).then(result=>{
+      if(controller.signal.aborted||!current())return;setPage(result);onPageLoaded?.(result);
+    }).catch(err=>{if(!controller.signal.aborted&&current()&&!isRequestCancelled(err)){setPage(null);setError(getUserFacingError(err,"Could not load your stories. Retry to check all matching stories."));}}).finally(()=>{if(!controller.signal.aborted&&current())setLoading(false);});},200);
+    return()=>{controller.abort();window.clearTimeout(timer);};
+  // Definition is stable for the keyed lifetime of this query.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[definition,offset,refreshKey,refresh,onPageLoaded]);
+  useEffect(()=>{if(!selectionMode){setSelected(new Set());setConfirm(false);}},[selectionMode]);
+  const remove=async()=>{
+    if(!page||!selected.size)return;setDeleting(true);setError("");
+    try{await novelService.deleteNovelsByIds(definition.library_ids[0],Array.from(selected));if(current()){setConfirm(false);setSelected(new Set());if(offset>0&&page.items.length===selected.size)setOffset(Math.max(0,offset-50));else setRefresh(value=>value+1);}}
+    catch(err){if(current())setError(getUserFacingError(err,"Some stories could not be removed. Refresh the list before trying again."));}
+    finally{if(current())setDeleting(false);}
   };
-
-  const handleDeleteSelected = async () => {
-    if (selectedNovels.size === 0) return;
-    if (
-      !window.confirm(
-        `Delete ${selectedNovels.size} selected ${
-          selectedNovels.size === 1 ? "novel" : "novels"
-        }?`
-      )
-    ) {
-      return;
-    }
-    setDeleteLoading(true);
-    try {
-      const novelIdsArray = Array.from(selectedNovels);
-      await novelService.deleteNovelsByIds(library_id, novelIdsArray);
-      setNovels((prev) => prev.filter((novel) => !selectedNovels.has(novel.id)));
-      setSelectedNovels(new Set());
-    } catch (err) {
-      console.error("Failed to delete novels:", err);
-      alert("Some stories could not be removed. Try again.");
-    } finally {
-      setDeleteLoading(false);
-    }
-  };
-
-  const selectAll = () => {
-    const allIds = processedNovels.map((novel) => novel.id);
-    setSelectedNovels(new Set(allIds));
-  };
-
-  const deselectAll = () => {
-    setSelectedNovels(new Set());
-  };
-
-  return (
-    <div className={`library-list library-list--${viewMode}`}>
-      {loading && (
-        <div className="library-list__grid" aria-hidden="true">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <NovelCardSkeleton key={`skeleton-${i}`} />
-          ))}
-        </div>
-      )}
-      {error && (
-        <p className="library-list__error" role="alert">
-          {error}
-        </p>
-      )}
-      {!loading && processedNovels.length === 0 && !error && (
-        <EmptyState
-          title={novels.length === 0 ? "No stories in this library yet" : "No stories match these filters"}
-          description={novels.length === 0 ? "Add a story from a link to start your library." : "Try another search, shelf, or status."}
-        />
-      )}
-
-      {processedNovels.length > 0 && (
-        <div className="library-list__grid">
-          {processedNovels.map((novel) => (
-            <LibraryStoryCard
-              key={novel.id}
-              novel={novel}
-              libraryId={library_id}
-              compact={viewMode === "list"}
-              personalRating={personal[String(novel.id)]?.rating ?? null}
-              selectionMode={selectionMode}
-              selected={selectedNovels.has(novel.id)}
-              onToggleSelect={() => handleNovelClick(novel.id)}
-              shelves={shelves}
-              onShelvesChanged={onShelvesChanged}
-            />
-          ))}
-        </div>
-      )}
-
-      {selectionMode && (
-        <div className="library-selection-bar">
-          <span>{selectedNovels.size} selected</span>
-          <div className="library-selection-bar__actions">
-            <button type="button" onClick={selectAll}>
-              Select all
-            </button>
-            <button type="button" onClick={deselectAll}>
-              Clear
-            </button>
-            <button
-              type="button"
-              className="danger"
-              onClick={handleDeleteSelected}
-              disabled={selectedNovels.size === 0 || deleteLoading}
-            >
-              {deleteLoading ? "Deleting…" : "Delete"}
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-export default NovelList;
+  const items=loading?[]:page?.items??[];
+  return <div className={`library-list library-list--${viewMode}`} aria-busy={loading}>
+    {loading&&<div className="library-list__grid" aria-hidden="true">{Array.from({length:8},(_,index)=><NovelCardSkeleton key={index}/>)}</div>}
+    {error&&<Banner tone="warning">{error}<Button onClick={()=>setRefresh(value=>value+1)}>Retry library results</Button></Banner>}
+    {!loading&&!error&&!items.length&&<EmptyState title={page?.library_total===0?"No stories in this library yet":"No stories match these filters"} description="Add a story or change your search, shelf, source or reading status."/>}
+    {!!items.length&&<div className="library-list__grid">{items.map(novel=><LibraryStoryCard key={novel.id} novel={novel} libraryId={novel.library_id} compact={viewMode==="list"} personalRating={novel.personal_rating} selectionMode={selectionMode} selected={selected.has(novel.id)} onToggleSelect={()=>setSelected(previous=>{const next=new Set(previous);if(next.has(novel.id))next.delete(novel.id);else next.add(novel.id);return next;})} shelves={shelves} onShelvesChanged={onShelvesChanged}/>)}</div>}
+    {page&&!error&&<nav className="library-paging" aria-label="Library result pages"><Button variant="secondary" disabled={loading||deleting||offset===0} onClick={()=>setOffset(value=>Math.max(0,value-50))}>Previous stories</Button><span>{page.total?page.offset+1:0}–{Math.min(page.offset+page.items.length,page.total)} of {page.total} matching stories</span><Button variant="secondary" disabled={loading||deleting||offset+50>=page.total} onClick={()=>setOffset(value=>value+50)}>Next stories</Button></nav>}
+    {selectionMode&&<div className="library-selection-bar"><span>{selected.size} selected on this page</span><div className="library-selection-bar__actions"><Button disabled={loading||deleting} onClick={()=>setSelected(new Set(items.map(item=>item.id)))}>Select this page</Button><Button disabled={deleting} onClick={()=>setSelected(new Set())}>Clear selection</Button><Button variant="danger" disabled={!selected.size||loading||deleting} onClick={()=>setConfirm(true)}>Delete selected stories</Button></div></div>}
+    <Dialog open={confirm} onClose={()=>{if(!deleting)setConfirm(false);}} title={`Delete ${selected.size} selected ${selected.size===1?"story":"stories"}?`} actions={<><Button disabled={deleting} onClick={()=>setConfirm(false)}>Keep stories</Button><Button variant="danger" disabled={deleting} onClick={()=>void remove()}>{deleting?"Deleting…":"Delete reviewed stories"}</Button></>}><p>These library copies and their private reading data will be removed. Only the selected stories from this page are included.</p><ul>{page?.items.filter(item=>selected.has(item.id)).map(item=><li key={item.id}>{item.title}</li>)}</ul></Dialog>
+  </div>;
+}
+export default function NovelList(props:NovelListProps){
+  const generation=useSyncExternalStore(onAccountStorageChange,storageGeneration);
+  const definition=useMemo<OwnedLibraryDefinition>(()=>({version:1,scope:"owned_library",library_ids:[props.library_id],q:props.searchTerm,source:props.sourceFilter==="all"?null:props.sourceFilter,follow_states:props.statusFilter&&props.statusFilter!=="all"?[props.statusFilter as FollowState]:[],user_tag:props.userTag?.trim()||null,min_rating:props.minRating||null,shelf_id:props.shelfId??null,sort_by:props.sortBy}),[props.library_id,props.searchTerm,props.sourceFilter,props.statusFilter,props.userTag,props.minRating,props.shelfId,props.sortBy]);
+  return <NovelListContents key={`${generation}:${JSON.stringify(definition)}`} {...props} definition={definition}/>;
+}

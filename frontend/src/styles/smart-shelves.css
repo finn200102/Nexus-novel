@@ -1,0 +1,12 @@
+.ui-sheet.smart-shelves { width: min(960px, 100%); max-width: 100vw; }
+.smart-shelves__actions { display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-2);margin-block:var(--sp-3); }
+.smart-shelves__actions .ui-button { max-width:100%;white-space:normal; }
+.smart-shelves__actions .ui-button__label { white-space:normal;overflow-wrap:anywhere; }
+.smart-shelves__list { padding:0;list-style:none; }
+.smart-shelves__list > li { display:flex;flex-wrap:wrap;justify-content:space-between;gap:var(--sp-2);border-bottom:1px solid var(--border);padding-block:var(--sp-3);overflow-wrap:anywhere; }
+.smart-shelves__editor { display:grid;gap:var(--sp-3);padding-block:var(--sp-4);border-top:1px solid var(--border); }
+.smart-shelves__editor fieldset { display:flex;flex-wrap:wrap;gap:var(--sp-3);min-width:0;border:1px solid var(--border);border-radius:var(--r-md); }
+.smart-shelves__editor legend { max-width:100%;white-space:normal; }
+.smart-shelves__library { color:var(--text-2);font-size:var(--fs-sm); }
+.library-paging { display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:var(--sp-3);margin-block:var(--sp-4); }
+.library-paging .ui-button { max-width:100%;white-space:normal; }

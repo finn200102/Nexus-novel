@@ -67,12 +67,14 @@ class Novel(BaseModel):
     followed_at = Column(DateTime, nullable=True)
 
     # Relationships
+    manifest_state = relationship("ChapterManifestState", uselist=False, cascade="all, delete-orphan")
     author_obj = relationship("Author", back_populates="novels")
     genre = relationship("Genre", back_populates="novels")
     library = relationship("Library", back_populates="novels")
     chapters = relationship(
         "Chapter", back_populates="novel", cascade="all, delete-orphan"
     )
+    local_cover = relationship("LocalBookCover", uselist=False, cascade="all, delete-orphan")
     tags = relationship("Tag", secondary=novel_tag, back_populates="novels")
 
     def __repr__(self):

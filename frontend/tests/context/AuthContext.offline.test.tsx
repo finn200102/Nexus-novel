@@ -17,6 +17,7 @@ const session = {
   expires_in: 900,
   is_admin: false,
 };
+let responseSession = session;
 
 const refreshAdapter = ((config: InternalAxiosRequestConfig) => {
   if (outcome === "network") {
@@ -26,16 +27,17 @@ const refreshAdapter = ((config: InternalAxiosRequestConfig) => {
     const response = { data: { detail: "Session ended" }, status: 401, statusText: "401", headers: {}, config };
     return Promise.reject(new AxiosError("HTTP 401", "401", config, null, response));
   }
-  return Promise.resolve({ data: session, status: 200, statusText: "OK", headers: {}, config });
+  return Promise.resolve({ data: responseSession, status: 200, statusText: "OK", headers: {}, config });
 }) as AxiosAdapter;
 
 const Probe = () => {
-  const { isAuthenticated, isOffline, isLoading, offlineUser } = useAuth();
+  const { isAuthenticated, isOffline, isLoading, offlineUser, user } = useAuth();
   return (
     <div>
       <span data-testid="state">{isLoading ? "loading" : isAuthenticated ? "in" : "out"}</span>
       <span data-testid="offline">{isOffline ? "offline" : "online"}</span>
       <span data-testid="who">{offlineUser?.username ?? "none"}</span>
+      <span data-testid="account">{user?.id ?? offlineUser?.id ?? "none"}</span>
     </div>
   );
 };
@@ -48,6 +50,7 @@ describe("AuthContext offline state", () => {
   beforeEach(() => {
     localStorage.clear();
     outcome = "ok";
+    responseSession = session;
     axios.defaults.adapter = refreshAdapter;
   });
 
@@ -56,17 +59,17 @@ describe("AuthContext offline state", () => {
   });
 
   it("stays offline-signed-in when the refresh fails with a network error and a marker exists", async () => {
-    writeSignedInMarker({ username: "reader", is_admin: false });
+    writeSignedInMarker({ id: 7, username: "reader", is_admin: false });
     outcome = "network";
     renderProbe();
     await waitFor(() => expect(screen.getByTestId("state").textContent).toBe("in"));
     expect(screen.getByTestId("offline").textContent).toBe("offline");
     expect(screen.getByTestId("who").textContent).toBe("reader");
-    expect(readSignedInMarker()).toEqual({ username: "reader", is_admin: false });
+    expect(readSignedInMarker()).toEqual({ id: 7, username: "reader", is_admin: false });
   });
 
   it("signs out when the refresh is rejected with 401, even with a marker", async () => {
-    writeSignedInMarker({ username: "reader", is_admin: false });
+    writeSignedInMarker({ id: 7, username: "reader", is_admin: false });
     outcome = "unauthorized";
     renderProbe();
     await waitFor(() => expect(screen.getByTestId("state").textContent).toBe("out"));
@@ -82,7 +85,7 @@ describe("AuthContext offline state", () => {
   });
 
   it("leaves offline mode when the browser comes back online and the refresh succeeds", async () => {
-    writeSignedInMarker({ username: "reader", is_admin: false });
+    writeSignedInMarker({ id: 7, username: "reader", is_admin: false });
     outcome = "network";
     renderProbe();
     await waitFor(() => expect(screen.getByTestId("offline").textContent).toBe("offline"));
@@ -92,5 +95,29 @@ describe("AuthContext offline state", () => {
     });
     await waitFor(() => expect(screen.getByTestId("offline").textContent).toBe("online"));
     expect(screen.getByTestId("state").textContent).toBe("in");
+  });
+
+  it("removes the active session when another tab signs out", async () => {
+    writeSignedInMarker({ id: 7, username: "reader", is_admin: false });
+    renderProbe();
+    await waitFor(() => expect(screen.getByTestId("state").textContent).toBe("in"));
+    await act(async () => {
+      localStorage.removeItem("nexus-signed-in");
+      window.dispatchEvent(new StorageEvent("storage", { key: "nexus-signed-in", newValue: null }));
+    });
+    expect(screen.getByTestId("state").textContent).toBe("out");
+  });
+
+  it("preserves a newer account marker when a delayed logout event arrives", async () => {
+    writeSignedInMarker({ id: 7, username: "reader", is_admin: false });
+    renderProbe();
+    await waitFor(() => expect(screen.getByTestId("account").textContent).toBe("7"));
+    responseSession = { ...session, id: 8, username: "next-reader" };
+    await act(async () => {
+      writeSignedInMarker(responseSession);
+      window.dispatchEvent(new StorageEvent("storage", { key: "nexus-signed-in", newValue: null }));
+    });
+    await waitFor(() => expect(screen.getByTestId("account").textContent).toBe("8"));
+    expect(readSignedInMarker()?.id).toBe(8);
   });
 });

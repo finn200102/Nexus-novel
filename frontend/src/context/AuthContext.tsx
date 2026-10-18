@@ -1,8 +1,9 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useRef, ReactNode } from "react";
 import { authService, AuthResponse, clearSignedInMarker, readSignedInMarker, RegisterData, SignedInMarker } from "../services/authService";
-import { onSessionChange } from "../services/apiClient";
+import { onSessionChange, setSession } from "../services/apiClient";
 import { isNetworkError } from "../services/networkErrors";
+import { accountIdentity, activateAccountStorage, activeStorageAccount, storageGeneration } from "../services/accountStorage";
 
 interface AuthContextType {
   user: AuthResponse | null;
@@ -23,6 +24,32 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<AuthResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [offlineUser, setOfflineUser] = useState<SignedInMarker | null>(null);
+  const preserveSharedMarker = useRef(false);
+
+  useEffect(() => {
+    // Signing out in another tab also removes its private in-memory reader
+    // state and stops its media, rather than leaving the old account visible.
+    const signedOutElsewhere = (event: StorageEvent) => {
+      if (event.key !== "nexus-signed-in" && event.key !== null) return;
+      const marker = readSignedInMarker();
+      if (!marker || event.newValue === null || accountIdentity(marker) !== activeStorageAccount()) {
+        // A background tab may receive an old logout after a new sign-in.
+        // Clear its memory without deleting the newer shared identity.
+        preserveSharedMarker.current = !!marker;
+        setSession(null);
+        preserveSharedMarker.current = false;
+        const generation = storageGeneration();
+        if (marker) void authService.restore().catch((error: unknown) => {
+          if (generation === storageGeneration() && accountIdentity(readSignedInMarker()) === accountIdentity(marker) && isNetworkError(error)) {
+            activateAccountStorage(accountIdentity(marker));
+            setOfflineUser(marker);
+          }
+        });
+      }
+    };
+    window.addEventListener("storage", signedOutElsewhere);
+    return () => window.removeEventListener("storage", signedOutElsewhere);
+  }, []);
 
   useEffect(() => {
     // apiClient reports every session change: sign-in, silent refresh, and
@@ -31,7 +58,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const unsubscribe = onSessionChange((session) => {
       setUser(session);
       setOfflineUser(null);
-      if (!session) clearSignedInMarker();
+      if (!session && !preserveSharedMarker.current) clearSignedInMarker();
     });
     authService
       .restore()
@@ -39,7 +66,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         // Offline with a previous sign-in: keep the reader usable. A rejected
         // session (401/403) was already reported above and is not kept.
         const marker = readSignedInMarker();
-        if (isNetworkError(error) && marker) setOfflineUser(marker);
+        if (isNetworkError(error) && marker) {
+          activateAccountStorage(accountIdentity(marker));
+          setOfflineUser(marker);
+        }
         return null;
       })
       .finally(() => setIsLoading(false));

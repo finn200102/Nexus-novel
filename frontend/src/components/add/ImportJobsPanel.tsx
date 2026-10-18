@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { getUserFacingError } from "../../services/apiClient";
-import { ImportJob, liveSearchService } from "../../services/liveSearchService";
+import { ImportJob, ImportPreview, liveSearchService } from "../../services/liveSearchService";
+import { notifyStoryAdded } from "./addStoryEvents";
 import { calibreService } from "../../services/calibreService";
 import { Badge, Button, Input, Select, TextArea } from "../ui";
 import { CalibreFileField } from "./CalibreFileField";
@@ -10,7 +11,7 @@ type Source = "url_list" | "rr_list" | "epub" | "calibre" | "ao3_bookmarks" | "f
 const SOURCES: Array<{ value: Source; label: string; hint: string }> = [
   { value: "url_list", label: "A list of links or a CSV file's text", hint: "Paste story links or a CSV export. Every link is added." },
   { value: "rr_list", label: "My Royal Road follows or favorites", hint: "Copy the text of your Royal Road follows or favorites page and paste it here." },
-  { value: "epub", label: "EPUB files", hint: "EPUBs made by FanFicFare or FicHub include the story's link, so we can find it." },
+  { value: "epub", label: "EPUB files", hint: "Import local books to read immediately, or reconnect FanFicFare and FicHub exports to their source." },
   { value: "calibre", label: "Calibre library (metadata.db)", hint: "Pick metadata.db from your Calibre library folder. Stories are matched by their source links." },
   { value: "ao3_bookmarks", label: "AO3 bookmarks", hint: "Public bookmarks of an AO3 user." },
   { value: "ffn_favorites", label: "FanFiction.Net favorites", hint: "Public favorites of a FanFiction.Net profile. Enter the number from the profile link." },
@@ -21,6 +22,7 @@ const STATUS_LABELS: Record<string, string> = {
   expanding: "Reading the list",
   running: "Adding stories",
   completed: "Done",
+  finished: "Done",
   failed: "Failed",
   cancelled: "Cancelled",
 };
@@ -38,11 +40,25 @@ export const ImportJobsPanel: React.FC<Props> = ({ libraryId, onError }) => {
   const [files, setFiles] = useState<File[]>([]);
   const [jobs, setJobs] = useState<ImportJob[]>([]);
   const [open, setOpen] = useState<ImportJob | null>(null);
+  const reportRef = useRef(open);
+  reportRef.current = open;
   const [busy, setBusy] = useState(false);
+  const [preview, setPreview] = useState<ImportPreview | null>(null);
+  const inputKey = JSON.stringify([libraryId, source, text]);
+  const currentInput = useRef(inputKey);
+  currentInput.current = inputKey;
+  const previewInput = useRef("");
+  const visiblePreview = previewInput.current === inputKey ? preview : null;
 
   const refresh = useCallback(async () => {
     try {
       setJobs(await liveSearchService.jobs());
+      const report = reportRef.current;
+      if (report && ACTIVE.includes(report.status)) {
+        const result = await liveSearchService.job(report.id);
+        if (reportRef.current?.id === report.id) setOpen(result);
+        if (["completed", "finished"].includes(result.status)) notifyStoryAdded(result.library_id);
+      }
     } catch {
       /* the list is informational; the next poll retries */
     }
@@ -75,6 +91,11 @@ export const ImportJobsPanel: React.FC<Props> = ({ libraryId, onError }) => {
       setText("");
       setFiles([]);
       setJobs((current) => [job, ...current.filter((item) => item.id !== job.id)]);
+      // The import already exists; a temporarily unavailable report must not
+      // tell the reader that starting it failed and encourage a second submit.
+      try { setOpen(await liveSearchService.job(job.id)); }
+      catch { setOpen(job); }
+      notifyStoryAdded(libraryId);
     } catch (err) {
       onError(getUserFacingError(err, "Could not start the import."));
     } finally {
@@ -88,6 +109,29 @@ export const ImportJobsPanel: React.FC<Props> = ({ libraryId, onError }) => {
     } catch (err) {
       onError(getUserFacingError(err, "Could not load the import report."));
     }
+  };
+
+  const inspect = async () => {
+    if (!libraryId || (source !== "url_list" && source !== "rr_list")) return;
+    const key = inputKey;
+    setBusy(true);
+    try {
+      const result = await liveSearchService.previewUrls(libraryId, text, source);
+      if (currentInput.current !== key) return;
+      previewInput.current = key;
+      setPreview(result);
+    } catch (err) { onError(getUserFacingError(err, "Could not preview this list.")); }
+    finally { setBusy(false); }
+  };
+
+  const jobAction = async (job: ImportJob, action: "cancel" | "retry") => {
+    setBusy(true);
+    try {
+      const result = await liveSearchService[action](job.id);
+      setJobs(current => current.map(item => item.id === result.id ? result : item));
+      if (open?.id === result.id) setOpen(await liveSearchService.job(result.id));
+    } catch (err) { onError(getUserFacingError(err, "Could not update this import.")); }
+    finally { setBusy(false); }
   };
 
   const current = SOURCES.find((item) => item.value === source);
@@ -133,9 +177,17 @@ export const ImportJobsPanel: React.FC<Props> = ({ libraryId, onError }) => {
             placeholder="https://www.royalroad.com/fiction/…"
           />
         )}
+        {(source === "url_list" || source === "rr_list") && <Button type="button" variant="secondary" disabled={busy || !libraryId || !text.trim()} onClick={() => void inspect()}>Preview links</Button>}
         <Button type="submit" variant="primary" loading={busy}
           disabled={busy || (source === "epub" || source === "calibre" ? files.length === 0 : !text.trim())}>Start import</Button>
       </form>
+
+      {visiblePreview && <section aria-label="Import preview" className="add-import__report">
+        <h3 className="add-import__heading">Review {visiblePreview.total_items} links</h3>
+        <p>{Object.entries(visiblePreview.counts).map(([state, count]) => `${count} ${state}`).join(" · ")}</p>
+        {visiblePreview.warnings.map(warning => <p key={warning} className="text-secondary text-sm">{warning}</p>)}
+        <div className="add-import__table"><table><thead><tr><th>Link</th><th>Result</th><th>Reason</th></tr></thead><tbody>{visiblePreview.items.map(item => <tr key={item.position}><td>{item.title || item.url}</td><td>{item.status}</td><td>{item.reason || "Ready to queue"}</td></tr>)}</tbody></table></div>
+      </section>}
 
       {jobs.length > 0 && (
         <section className="add-import__jobs" aria-labelledby="add-import-recent">
@@ -151,14 +203,15 @@ export const ImportJobsPanel: React.FC<Props> = ({ libraryId, onError }) => {
                   </span>
                   {job.error && <span className="text-sm add-import__error">{job.error}</span>}
                 </div>
-                <Badge tone={job.status === "failed" ? "danger" : job.status === "completed" ? "success" : "info"}>
+                <Badge tone={job.status === "failed" ? "danger" : ["completed", "finished"].includes(job.status) ? "success" : "info"}>
                   {STATUS_LABELS[job.status] ?? job.status}
                 </Badge>
                 <div className="add-import__job-actions">
                   <Button size="sm" variant="ghost" onClick={() => void show(job)} aria-label={`Show report for import ${job.id}`}>Report</Button>
                   {ACTIVE.includes(job.status) && (
-                    <Button size="sm" variant="secondary" onClick={() => void liveSearchService.cancel(job.id).then(refresh)}>Cancel</Button>
+                    <Button size="sm" variant="secondary" disabled={busy} onClick={() => void jobAction(job, "cancel")}>Cancel</Button>
                   )}
+                  {!ACTIVE.includes(job.status) && (Boolean(job.counts.failed) || job.status === "cancelled" || job.status === "failed") && <Button size="sm" variant="secondary" disabled={busy} onClick={() => void jobAction(job, "retry")}>Retry unfinished links</Button>}
                 </div>
               </li>
             ))}

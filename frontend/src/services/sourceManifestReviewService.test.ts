@@ -1,0 +1,8 @@
+import {beforeEach,expect,it,vi} from 'vitest';
+import apiClient from './apiClient';
+import {activateAccountStorage} from './accountStorage';
+import {sourceManifestReviewService as service,saveLifecycleIntent,lifecycleIntent} from './sourceManifestReviewService';
+vi.mock('./apiClient',()=>({default:{get:vi.fn(),post:vi.fn()}}));
+beforeEach(()=>{vi.clearAllMocks();localStorage.clear();activateAccountStorage(1);vi.mocked(apiClient.get).mockResolvedValue({data:{}});vi.mocked(apiClient.post).mockResolvedValue({data:{}});});
+it('pins paginated stored context and never supplies a trusted actor',async()=>{await service.context(5,'capture',50,{manifest_key:'manifest',revision:'hash'});expect(apiClient.get).toHaveBeenCalledWith('/admin/source-manifest-reviews/novels/5/context',{params:{capture_id:'capture',offset:50,limit:50,expected_manifest_key:'manifest',expected_revision:'hash'},signal:undefined});const intent={id:'review',action:'apply' as const,input:{expected_revision:1,operation_id:'operation',review_token:'token'}};await service.decide(intent);expect(apiClient.post).toHaveBeenCalledWith('/admin/source-manifest-reviews/review/apply',intent.input);expect(intent.input).not.toHaveProperty('actor_id');});
+it('isolates uncertain operation receipts by account',()=>{saveLifecycleIntent({id:'review',action:'undo',input:{expected_revision:2,operation_id:'same-operation'}});expect(lifecycleIntent()?.input.operation_id).toBe('same-operation');activateAccountStorage(2);expect(lifecycleIntent()).toBeNull();activateAccountStorage(1);expect(lifecycleIntent()?.input.operation_id).toBe('same-operation');saveLifecycleIntent(null);expect(lifecycleIntent()).toBeNull();});

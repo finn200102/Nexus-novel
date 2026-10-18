@@ -389,3 +389,13 @@
 .previously-on__excerpt { color: var(--text-muted, inherit); font-style: italic; }
 .previously-on__foot { margin-top: var(--sp-3); }
 .previously-on__link { background: none; border: 0; padding: 0; font: inherit; font-size: var(--fs-sm); text-decoration: underline; cursor: pointer; color: inherit; }
+.reader-rich-block img { max-width: 100%; height: auto; }
+.reader-rich-block table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
+.reader-rich-block th, .reader-rich-block td { border: 1px solid currentColor; padding: .4em; }
+.reader-rich-block pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.reader-parallel-text section { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+@media (max-width: 600px) { .reader-parallel-text section { grid-template-columns: 1fr; gap: .25rem; } }
+
+.reader-narrators { display: grid; gap: 0.75rem; border-top: 1px solid var(--border); padding-top: 1rem; }
+.reader-narrators__form, .reader-narrators__voice { display: grid; gap: 0.65rem; }
+.reader-narrators audio { max-width: 100%; }

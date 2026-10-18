@@ -325,6 +325,8 @@
 .story-chapter__link { overflow-wrap: anywhere; }
 .story-chapter__meta { color: var(--text-2); font-size: var(--fs-sm); }
 .story-chapter__action { position: relative; z-index: 1; }
+/* The final chapter action sits at the viewport edge on phones. */
+.story-chapter__action .ui-tooltip { left: auto; right: 0; transform: none; max-width: calc(100vw - 2rem); white-space: normal; overflow-wrap: anywhere; }
 
 /* Auto-download sentence */
 .auto-download {

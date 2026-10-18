@@ -43,6 +43,10 @@ def blocked_values(db: Session, user: User) -> dict[str, list[str]]:
     for entry in list_entries(db, user):
         grouped[entry.kind].append(entry.value)
     grouped["tag"].extend(content_limit_service.blocked_tags_of(user))
+    from app.services.discovery_preferences import read
+    preferences = read(db, user)["values"]
+    for kind, field in (("tag", "exclude_tags"), ("fandom", "exclude_fandoms"), ("genre", "exclude_genres"), ("author", "exclude_authors"), ("word", "exclude_words")):
+        grouped[kind].extend(preferences[field])
     return grouped
 
 

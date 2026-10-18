@@ -22,6 +22,7 @@ from app.auth.oidc import Identity, OIDCError
 from app.auth.sessions import set_refresh_cookie, start_session
 from app.logging_config import get_logger
 from app.models.user import User
+from app.models.library import Library
 from app.services import account_service
 from config.database import get_db
 from config.settings import settings
@@ -217,6 +218,9 @@ def oidc_callback(
         return _redirect(LOGIN_PAGE, request, sso_error="disabled")
 
     _apply_admin_group(db, user, identity.claims)
+    db.query(User).filter_by(id=user.id).with_for_update().one()
+    if not db.query(Library.id).filter(Library.user_id == user.id).first():
+        db.add(Library(user_id=user.id, name="My library"))
     session, refresh_token = start_session(db, user, request)
     db.commit()
     audit.log(AuditAction.USER_LOGIN, user_id=user.id, details={"source": "oidc"})

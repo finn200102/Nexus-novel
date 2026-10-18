@@ -4,6 +4,7 @@ import secrets
 import tempfile
 from base64 import urlsafe_b64encode
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
@@ -87,6 +88,9 @@ def _persisted_vapid_keys(download_path: str) -> dict[str, str]:
 
 
 class Settings(BaseSettings):
+    ANALYSIS_ENGINE_URL: str = ""
+    ANALYSIS_ENGINE_API_KEY: str = ""
+
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="ignore"
     )
@@ -162,6 +166,7 @@ class Settings(BaseSettings):
         default=False,
         description="Forward Kobo requests Nexus does not handle to the Kobo store (keeps store purchases working)",
     )
+    NEXUS_PUBLIC_API_URL: str = Field(default="", description="Canonical external API URL, including /api, for private feed links behind HTTPS proxies")
     NEXUS_KOBO_BASE_URL: str = Field(
         default="",
         description="External API URL the Kobo reaches, e.g. http://192.168.1.5:8180/api; empty = derived from requests",
@@ -178,6 +183,13 @@ class Settings(BaseSettings):
         return self.NEXUS_PASSWORD_LOGIN.strip().lower() != "disabled" or not self.oidc_enabled
 
     def model_post_init(self, __context) -> None:
+        self.NEXUS_PUBLIC_API_URL = self.NEXUS_PUBLIC_API_URL.strip().rstrip("/")
+        if self.NEXUS_PUBLIC_API_URL:
+            external = urlsplit(self.NEXUS_PUBLIC_API_URL)
+            if (external.scheme not in {"http", "https"} or not external.hostname or external.username or external.password
+                    or external.query or external.fragment or any(c.isspace() for c in self.NEXUS_PUBLIC_API_URL)):
+                raise ValueError("NEXUS_PUBLIC_API_URL must be an HTTP(S) API URL without credentials, query or fragment")
+            _ = external.port  # Reject invalid ports at startup.
         if self.SECRET_KEY.strip() in INSECURE_SECRET_KEYS:
             self.SECRET_KEY = _persisted_secret_key(self.DOWNLOAD_PATH)
         if not (self.VAPID_PRIVATE_KEY.strip() and self.VAPID_PUBLIC_KEY.strip()):

@@ -2,6 +2,8 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
+from uuid import uuid4
 
 from config.database import get_db
 from config.settings import settings
@@ -17,8 +19,21 @@ from app.schemas.notification import (
     PushUnsubscribeRequest,
 )
 from app.services.notification_crypto import encrypt_url, url_hint
-from app.services.notification_delivery import instantiate_apprise, send_test
+from app.services.notification_delivery import instantiate_apprise, send_test, cancel_destination_deliveries, destination_watermark
 from app.services.outbound_url import BlockedDestination, check_public_url
+
+def _lock_users(db,identities):
+    identities=sorted(set(identities))
+    db.query(User.id).filter(User.id.in_(identities)).order_by(User.id).with_for_update().all()
+    return identities
+
+
+def _reset_delivery_eligibility(db,user_id,kind,target):
+    if target.id is not None:cancel_destination_deliveries(db,user_id,kind,target.id)
+    if not target.delivery_key:target.delivery_key=str(uuid4())
+    target.eligibility_event_id=destination_watermark(db,user_id)
+
+
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
@@ -31,7 +46,7 @@ def _channel_or_404(db: Session, channel_id: int, user: User) -> NotificationCha
     channel = db.query(NotificationChannel).filter(
         NotificationChannel.id == channel_id,
         NotificationChannel.user_id == user.id,
-    ).first()
+    ).populate_existing().first()
     if channel is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Notification channel not found")
     return channel
@@ -98,41 +113,55 @@ def subscribe_push(
         check_public_url(body.endpoint)
     except BlockedDestination as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    subscription = db.query(PushSubscription).filter(PushSubscription.endpoint == body.endpoint).first()
+    previous = db.query(PushSubscription).filter(PushSubscription.endpoint == body.endpoint).first()
+    identities=_lock_users(db,[current_user.id]+([previous.user_id] if previous is not None else []))
+    subscription=db.query(PushSubscription).filter(PushSubscription.endpoint==body.endpoint).with_for_update().populate_existing().first()
+    if subscription is not None and subscription.user_id not in identities:
+        raise HTTPException(409,detail='This device changed accounts; try subscribing again')
     if subscription is None:
-        subscription = PushSubscription(endpoint=body.endpoint)
-        db.add(subscription)
+        subscription = PushSubscription(endpoint=body.endpoint,user_id=current_user.id)
         response.status_code = status.HTTP_201_CREATED
-    # Re-subscribing from the same browser, or after a sign-in on a shared
-    # device, moves the endpoint to the current account.
+        changed=True
+    else:
+        changed=(subscription.user_id!=current_user.id or subscription.p256dh!=body.keys.p256dh or subscription.auth!=body.keys.auth)
+    if changed:
+        if subscription.id is not None:cancel_destination_deliveries(db,subscription.user_id,'push',subscription.id)
+        _reset_delivery_eligibility(db,current_user.id,'push',subscription)
     subscription.user_id = current_user.id
     subscription.p256dh = body.keys.p256dh
     subscription.auth = body.keys.auth
     subscription.user_agent = (user_agent or "")[:255] or None
     subscription.failure_count = 0
-    db.commit()
+    db.add(subscription)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409,detail='This device changed while subscribing; try again') from None
     db.refresh(subscription)
     return _subscription_response(subscription)
 
 
 @router.post("/push/unsubscribe")
 def unsubscribe_push(body: PushUnsubscribeRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    removed = db.query(PushSubscription).filter(
-        PushSubscription.endpoint == body.endpoint,
-        PushSubscription.user_id == current_user.id,
-    ).delete(synchronize_session=False)
+    _lock_users(db,[current_user.id])
+    rows=db.query(PushSubscription).filter_by(endpoint=body.endpoint,user_id=current_user.id).all()
+    for row in rows:
+        cancel_destination_deliveries(db,current_user.id,'push',row.id)
+        db.delete(row)
+    removed=len(rows)
     db.commit()
     return {"removed": removed}
 
 
 @router.delete("/push/subscriptions/{subscription_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_push_subscription(subscription_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    removed = db.query(PushSubscription).filter(
-        PushSubscription.id == subscription_id,
-        PushSubscription.user_id == current_user.id,
-    ).delete(synchronize_session=False)
-    if not removed:
+    _lock_users(db,[current_user.id])
+    subscription=db.query(PushSubscription).filter_by(id=subscription_id,user_id=current_user.id).first()
+    if subscription is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Device not found")
+    cancel_destination_deliveries(db,current_user.id,'push',subscription_id)
+    db.delete(subscription)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -146,6 +175,7 @@ def list_channels(db: Session = Depends(get_db), current_user: User = Depends(ge
 @router.post("/channels", response_model=ChannelResponse, status_code=status.HTTP_201_CREATED)
 def create_channel(body: ChannelCreateRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     url = _validated_apprise_url(body.url)
+    _lock_users(db,[current_user.id])
     channel = NotificationChannel(
         user_id=current_user.id,
         kind="apprise",
@@ -154,6 +184,7 @@ def create_channel(body: ChannelCreateRequest, db: Session = Depends(get_db), cu
         label=body.label.strip(),
         enabled=body.enabled,
     )
+    _reset_delivery_eligibility(db,current_user.id,'channel',channel)
     db.add(channel)
     db.commit()
     db.refresh(channel)
@@ -162,8 +193,11 @@ def create_channel(body: ChannelCreateRequest, db: Session = Depends(get_db), cu
 
 @router.patch("/channels/{channel_id}", response_model=ChannelResponse)
 def update_channel(channel_id: int, body: ChannelUpdateRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    _lock_users(db,[current_user.id])
     channel = _channel_or_404(db, channel_id, current_user)
     changes = body.model_dump(exclude_unset=True)
+    if changes.get('url') is not None or (changes.get('enabled') is not None and changes['enabled']!=channel.enabled):
+        _reset_delivery_eligibility(db,current_user.id,'channel',channel)
     if changes.get("url") is not None:
         url = _validated_apprise_url(changes["url"])
         channel.url_encrypted = encrypt_url(url)
@@ -180,7 +214,9 @@ def update_channel(channel_id: int, body: ChannelUpdateRequest, db: Session = De
 
 @router.delete("/channels/{channel_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_channel(channel_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    _lock_users(db,[current_user.id])
     channel = _channel_or_404(db, channel_id, current_user)
+    cancel_destination_deliveries(db,current_user.id,'channel',channel.id)
     db.delete(channel)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -189,4 +225,5 @@ def delete_channel(channel_id: int, db: Session = Depends(get_db), current_user:
 @router.post("/test")
 def test_notifications(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Send a test to every enabled channel and device; returns each result."""
+    _lock_users(db,[current_user.id])
     return send_test(db, current_user)

@@ -1,38 +1,34 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { chapterIdentity } from "../../services/chapterIdentity";
+import StoryChapterChanges from "./StoryChapterChanges";
+import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Link } from "react-router-dom";
 import { Check, CloudDownload, HardDriveDownload, RotateCcw } from "lucide-react";
-import { chapterService } from "../../services/chapterService";
+import { onAccountStorageChange, storageGeneration } from "../../services/accountStorage";
+import { completedChaptersLabel, readingPlaceLabel } from "./chapterReadingLabels";
+import { chapterService, type ChapterReadingItem, type ChapterReadingSummary } from "../../services/chapterService";
 import { downloadService } from "../../services/downloadService";
 import { organizationService } from "../../services/organizationService";
 import { getUserFacingError } from "../../services/apiClient";
 import { useToast } from "../../context/useToast";
-import { categoryLabel, entryLabel, matchesChapter } from "./storyModel";
+import { categoryLabel, entryLabel } from "./storyModel";
 import AutoDownloadToggle from "../novel/AutoDownloadToggle";
 import OfflineControl from "../novel/OfflineControl";
 import type { OfflineCopies } from "../novel/useOfflineCopies";
 import type { NovelFollowSettings } from "../../types/novel";
 import { Button, Checkbox, Dialog, FilterChip, IconButton, Input, Select, Sheet } from "../ui";
 
-export interface StoryChapter {
-  id: number;
-  novel_id: number;
-  chapter_number: number;
-  title: string;
-  content_status: string;
-  category?: string;
-}
+export type StoryChapter = Omit<ChapterReadingItem, "title"> & { title: string };
 
 interface StoryChaptersProps {
+  manifestReviewRequired?: boolean;
   libraryId: number;
   novelId: number;
-  /** Furthest chapter read; null when nothing is read yet. */
-  readThrough: number | null;
+  onReadingSummary: (summary: ChapterReadingSummary) => void;
   offline: OfflineCopies;
   followSettings: NovelFollowSettings | null;
   onFollowSettings: (settings: Partial<NovelFollowSettings>) => Promise<void>;
 }
 
-const STUCK_PROCESSING_MS = 60000;
 const DOWNLOAD_GAP_MS = 500;
 const PAGE = 100;
 const DEFAULT_CATEGORIES = ["story"];
@@ -40,63 +36,63 @@ const DEFAULT_CATEGORIES = ["story"];
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Chapters tab: progress summary, offline and download controls, followed categories, the list. */
-const StoryChapters: React.FC<StoryChaptersProps> = ({ libraryId, novelId, readThrough, offline, followSettings, onFollowSettings }) => {
+const StoryChaptersContents: React.FC<StoryChaptersProps> = ({ manifestReviewRequired, libraryId, novelId, onReadingSummary, offline, followSettings, onFollowSettings }) => {
+  const generation = storageGeneration(), mounted = useRef(false), request = useRef(0);
+  const current = useCallback(() => mounted.current && generation === storageGeneration(), [generation]);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const { addToast } = useToast();
   const [chapters, setChapters] = useState<StoryChapter[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [limit, setLimit] = useState(PAGE);
+  const [offset, setOffset] = useState(0), [total, setTotal] = useState(0);
+  const [summary, setSummary] = useState<ChapterReadingSummary | null>(null);
+  const [downloads, setDownloads] = useState<Awaited<ReturnType<typeof chapterService.getDownloadStatus>> | null>(null);
   const [followed, setFollowed] = useState<string[]>(DEFAULT_CATEGORIES);
   const [showOther, setShowOther] = useState(false);
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [confirm, setConfirm] = useState<null | "delete" | "download-all">(null);
+  const [confirm, setConfirm] = useState<null | "download-all">(null);
+  const [chapterReviewRequest, setChapterReviewRequest] = useState(0);
   const [manageOpen, setManageOpen] = useState(false);
   const [queueing, setQueueing] = useState(false);
-  const processingSince = useRef(new Map<number, number>());
-
+  const searching = query.trim() !== "";
+  const scope = searching || showOther ? "all" : "followed";
   const fetchChapters = useCallback(async () => {
-    try {
-      const data = (await chapterService.getChapters(novelId)) as StoryChapter[];
-      if (!Array.isArray(data)) return;
-      const now = Date.now();
-      const since = processingSince.current;
-      data.forEach((chapter) => {
-        if (chapter.content_status !== "PROCESSING") {
-          since.delete(chapter.id);
-        } else if (!since.has(chapter.id)) {
-          since.set(chapter.id, now);
-        } else if (now - since.get(chapter.id)! > STUCK_PROCESSING_MS) {
-          // A download that never finishes is marked failed so it can be retried.
-          chapterService.resetChapterStatus(chapter.id, "FAILED").catch(() => undefined);
-          since.delete(chapter.id);
-        }
-      });
-      setChapters([...data].sort((a, b) => a.chapter_number - b.chapter_number));
-      setError(null);
-    } catch {
-      setError("Could not load chapters. Try again.");
-    } finally {
-      setLoading(false);
-    }
-  }, [novelId]);
-
-  useEffect(() => {
-    void fetchChapters();
-  }, [fetchChapters]);
+    const version = ++request.current; setLoading(true); setError(null);
+    const results = await Promise.allSettled([
+      chapterService.getReadingChapters(novelId, { offset, limit: PAGE, q: query.trim(), category_scope: scope }),
+      chapterService.getReadingSummary(novelId), chapterService.getDownloadStatus(novelId),
+    ]);
+    if (!current() || version !== request.current) return;
+    const messages: string[] = [];
+    if (results[0].status === "fulfilled" && results[0].value?.novel_id === novelId) {
+      const page = results[0].value;
+      const known = results[1].status === "fulfilled" ? results[1].value : null;
+      if (known && (known.reading_run_key !== page.reading_run_key || known.revision !== page.revision)) {
+        setChapters([]); messages.push("The reading session changed while loading. Refresh chapter records before reviewing the list.");
+      } else { setChapters(page.items.map(row => ({ ...row, title: row.title ?? "" }))); setTotal(page.total); }
+    } else { setChapters([]); messages.push("Could not load chapters. Try again."); }
+    if (results[1].status === "fulfilled" && results[1].value?.novel_id === novelId) { setSummary(results[1].value); onReadingSummary(results[1].value); }
+    else { setSummary(null); messages.push("Completed chapter counts could not be verified."); }
+    if (results[2].status === "fulfilled" && Number.isSafeInteger(results[2].value?.total)) setDownloads(results[2].value);
+    else { setDownloads(null); messages.push("Server download counts could not be verified."); }
+    setError(messages.length ? messages.join(" ") : null); setLoading(false);
+  }, [novelId, offset, query, scope, onReadingSummary, current]);
+  useEffect(() => { void fetchChapters(); return () => { request.current += 1; }; }, [fetchChapters]);
+  useEffect(() => { setSelected(new Set()); }, [offset, query, scope]);
 
   useEffect(() => {
     let active = true;
     organizationService.getPersonal(novelId)
       .then((data) => {
-        if (active && Array.isArray(data.followed_categories) && data.followed_categories.length) setFollowed(data.followed_categories);
+        if (active && current() && Array.isArray(data.followed_categories) && data.followed_categories.length) setFollowed(data.followed_categories);
       })
       .catch(() => undefined);
     return () => {
       active = false;
     };
-  }, [novelId]);
+  }, [novelId, current]);
 
   const processing = chapters.some((chapter) => chapter.content_status === "PROCESSING");
   useEffect(() => {
@@ -105,21 +101,13 @@ const StoryChapters: React.FC<StoryChaptersProps> = ({ libraryId, novelId, readT
     return () => window.clearInterval(timer);
   }, [processing, fetchChapters]);
 
-  const savedOffline = useMemo(() => new Set(offline.stored.map((item) => item.chapter_number)), [offline.stored]);
-  const categories = useMemo(() => [...new Set(chapters.map((chapter) => chapter.category || "story"))], [chapters]);
-  const searching = query.trim() !== "";
-  const visible = chapters.filter((chapter) => (searching || showOther || followed.includes(chapter.category || "story")) && matchesChapter(chapter, query));
-  const hiddenCount = chapters.filter((chapter) => !followed.includes(chapter.category || "story")).length;
-  const shown = visible.slice(0, limit);
-  const missing = chapters.filter((chapter) => chapter.content_status === "MISSING" || chapter.content_status === "FAILED");
-  const downloaded = chapters.filter((chapter) => chapter.content_status === "PRESENT").length;
-  const readCount = readThrough ? chapters.filter((chapter) => chapter.chapter_number <= readThrough).length : 0;
-
-  const summary = [
-    chapters.length ? `${readCount} of ${chapters.length} read` : null,
-    `${downloaded} downloaded`,
-    `${offline.stored.length} saved offline`,
-  ].filter(Boolean).join(" · ");
+  const savedOffline = useMemo(() => new Set(offline.stored.flatMap((item) => item.chapter_key ? [item.chapter_key] : [])), [offline.stored]);
+  const categories = useMemo(() => summary?.categories ?? [...new Set(chapters.map(chapter => chapter.category || "story"))], [chapters, summary]);
+  const hiddenCount = summary ? summary.total_chapters - summary.followed_total : null;
+  const shown = useMemo(() => loading ? [] : chapters, [loading, chapters]);
+  const missing = chapters.filter(chapter => chapter.content_status === "MISSING" || chapter.content_status === "FAILED");
+  const downloaded = downloads?.present ?? null;
+  const statusSummary = [summary ? completedChaptersLabel(summary) : "Completed chapter counts unavailable", downloaded !== null ? `${downloaded} downloaded on the server` : null, `${offline.stored.length} saved offline`].filter(Boolean).join(" · ");
 
   const toggleCategory = async (category: string, on: boolean) => {
     const next = on ? [...followed, category] : followed.filter((item) => item !== category);
@@ -128,7 +116,9 @@ const StoryChapters: React.FC<StoryChaptersProps> = ({ libraryId, novelId, readT
     setFollowed(next);
     try {
       await organizationService.savePersonal(novelId, { followed_categories: next });
+      if (current()) { if (offset === 0) void fetchChapters(); else setOffset(0); }
     } catch (err) {
+      if (!current()) return;
       setFollowed(previous);
       addToast(getUserFacingError(err, "Could not save the categories you follow."), "error");
     }
@@ -137,35 +127,41 @@ const StoryChapters: React.FC<StoryChaptersProps> = ({ libraryId, novelId, readT
   const downloadOne = async (chapter: StoryChapter) => {
     try {
       if (chapter.content_status === "FAILED") await chapterService.resetChapterStatus(chapter.id, "MISSING");
-      await chapterService.downloadChapter(libraryId, novelId, chapter.chapter_number);
+      if (!current()) return;
+      await chapterService.downloadChapter(libraryId, novelId, chapter.chapter_number,chapterIdentity(chapter) ?? undefined);
     } catch {
+      if (!current()) return;
       addToast(`Could not download chapter ${chapter.chapter_number}.`, "error");
     }
-    void fetchChapters();
+    if (current()) void fetchChapters();
   };
 
   const downloadMany = async (targets: StoryChapter[]) => {
     for (const chapter of targets) {
+      if (!current()) return;
       try {
-        await chapterService.downloadChapter(libraryId, novelId, chapter.chapter_number);
+        await chapterService.downloadChapter(libraryId, novelId, chapter.chapter_number,chapterIdentity(chapter) ?? undefined);
       } catch {
         // Keep going; failed chapters show a Retry button.
       }
+      if (!current()) return;
       await sleep(DOWNLOAD_GAP_MS);
     }
-    void fetchChapters();
+    if (current()) void fetchChapters();
   };
 
   const queueNext = async (count: number) => {
     setQueueing(true);
     try {
       const jobs = await downloadService.queue(libraryId, novelId, count);
+      if (!current()) return;
       addToast(jobs.length ? `Queued ${jobs.length} chapter${jobs.length === 1 ? "" : "s"} for download.` : "The next chapters are already downloaded or queued.", "success");
       void fetchChapters();
     } catch (err) {
+      if (!current()) return;
       addToast(getUserFacingError(err, "Could not queue the download."), "error");
     } finally {
-      setQueueing(false);
+      if (current()) setQueueing(false);
     }
   };
 
@@ -173,18 +169,6 @@ const StoryChapters: React.FC<StoryChaptersProps> = ({ libraryId, novelId, readT
   const stopSelecting = () => {
     setSelecting(false);
     setSelected(new Set());
-  };
-
-  const deleteSelected = async () => {
-    setConfirm(null);
-    try {
-      await chapterService.deleteChaptersByIds(selectedChapters.map((chapter) => chapter.id));
-      addToast(`Deleted ${selectedChapters.length} chapter${selectedChapters.length === 1 ? "" : "s"}.`, "success");
-      stopSelecting();
-    } catch (err) {
-      addToast(getUserFacingError(err, "Could not delete the chapters."), "error");
-    }
-    void fetchChapters();
   };
 
   const statusText = (chapter: StoryChapter) => {
@@ -213,7 +197,7 @@ const StoryChapters: React.FC<StoryChaptersProps> = ({ libraryId, novelId, readT
   return (
     <div className="story-chapters">
       <div className="story-chapters__bar">
-        <p className="story-chapters__summary">{loading ? "Loading chapters…" : summary}</p>
+        <p className="story-chapters__summary">{loading ? "Loading chapters…" : statusSummary}</p>
         <div className="story-chapters__actions">
           <Button size="sm" variant="secondary" icon={<HardDriveDownload aria-hidden="true" size={16} />} disabled={offline.busy} onClick={() => void offline.saveBatch("next", 10)}>
             Save next 10 offline
@@ -224,11 +208,14 @@ const StoryChapters: React.FC<StoryChaptersProps> = ({ libraryId, novelId, readT
           <Button size="sm" variant="ghost" onClick={() => setManageOpen(true)}>Manage downloads…</Button>
         </div>
       </div>
+      {summary && <p className="story-hint">{readingPlaceLabel(summary)}</p>}
+      {summary?.completed_reading && <p className="story-hint">This reading is marked finished. Chapter records are shown separately.</p>}
       <div className="story-chapters__status" role="status">
         {offline.progress ? `Saving ${offline.progress.done} of ${offline.progress.total}…` : offline.message}
       </div>
 
       <AutoDownloadToggle novelId={novelId} />
+      <>{manifestReviewRequired&&<p role="status">The source chapter list changed. Your saved chapters remain readable. Review chapter list changes before changing their addresses.</p>}<StoryChapterChanges openRequest={chapterReviewRequest} novelId={novelId} libraryId={libraryId} onApplied={()=>{setSelected(new Set());void fetchChapters();}}/></>
 
       {categories.length > 1 && (
         <fieldset className="story-chapters__categories">
@@ -246,6 +233,7 @@ const StoryChapters: React.FC<StoryChaptersProps> = ({ libraryId, novelId, readT
             ))}
           </div>
           <p className="story-hint">Continue and unread counts skip categories you don't follow.</p>
+          {summary?.categories_truncated && <p className="story-hint">Only the first 256 categories are listed here. Search all chapters to find other categories.</p>}
         </fieldset>
       )}
 
@@ -255,8 +243,9 @@ const StoryChapters: React.FC<StoryChaptersProps> = ({ libraryId, novelId, readT
           label="Find chapter"
           placeholder="Number or title"
           value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          onClear={() => setQuery("")}
+          maxLength={200}
+          onChange={(event) => { setOffset(0); setQuery(event.target.value); }}
+          onClear={() => { setOffset(0); setQuery(""); }}
           fieldClassName="story-chapters__search"
         />
         {selecting ? (
@@ -264,8 +253,8 @@ const StoryChapters: React.FC<StoryChaptersProps> = ({ libraryId, novelId, readT
             <Button size="sm" variant="secondary" disabled={selected.size === 0} onClick={() => { void downloadMany(selectedChapters); stopSelecting(); }}>
               Download {selected.size || ""} selected
             </Button>
-            <Button size="sm" variant="danger" disabled={selected.size === 0} onClick={() => setConfirm("delete")}>
-              Delete selected
+            <Button size="sm" variant="secondary" onClick={() => { stopSelecting(); setChapterReviewRequest(value => value + 1); }}>
+              Review chapter changes
             </Button>
             <Button size="sm" variant="ghost" onClick={stopSelecting}>Done</Button>
           </div>
@@ -279,15 +268,16 @@ const StoryChapters: React.FC<StoryChaptersProps> = ({ libraryId, novelId, readT
           {error} <Button size="sm" variant="ghost" onClick={() => void fetchChapters()}>Retry</Button>
         </p>
       )}
-      {!loading && !error && chapters.length === 0 && <p className="story-hint">No chapters yet. Use Update story info in Details to check the source.</p>}
-      {!loading && chapters.length > 0 && visible.length === 0 && <p className="story-hint">{searching ? `No chapter matches “${query.trim()}”.` : "No chapters in the categories you follow."}</p>}
+      {!loading && !error && total === 0 && <p className="story-hint">{summary?.total_chapters === 0 ? "No chapters yet. Use Update story info in Details to check the source." : searching ? `No chapter matches “${query.trim()}”.` : "No chapters in the categories you follow."}</p>}
+
 
       {groups.map(([category, items]) => (
         <section key={category} className="story-chapters__group" aria-label={showHeadings ? undefined : "Chapters"}>
           {showHeadings && <h3>{categoryLabel(category)}</h3>}
           <ul className="story-chapter-list">
             {items.map((chapter) => {
-              const read = readThrough != null && chapter.chapter_number <= readThrough;
+              const read = chapter.completed_checkpoint;
+              const isCurrentPlace = summary?.current?.chapter_id === chapter.id;
               const status = statusText(chapter);
               const label = `${entryLabel(chapter)}: ${chapter.title || "Untitled"}`;
               return (
@@ -307,16 +297,16 @@ const StoryChapters: React.FC<StoryChaptersProps> = ({ libraryId, novelId, readT
                     <>
                       <span className="story-chapter__number" aria-hidden="true">{chapter.category && chapter.category !== "story" ? "·" : chapter.chapter_number}</span>
                       <span className="story-chapter__state">
-                        {read ? <Check size={16} aria-label="Read" role="img" /> : <span className="story-chapter__dot" role="img" aria-label="Unread" />}
+                        {read ? <Check size={16} aria-label="Completed chapter recorded" role="img" /> : <span className="story-chapter__dot" role="img" aria-label="No completed chapter record" />}
                       </span>
                       <div className="story-chapter__text">
-                        <Link className="story-chapter__link ui-stretched-link" to={`/library/${libraryId}/novels/${novelId}/${chapter.chapter_number}`}>
+                        <Link className="story-chapter__link ui-stretched-link" to={`/library/${libraryId}/novels/${novelId}/${chapter.chapter_number}${chapterIdentity(chapter) ? `?chapter_key=${encodeURIComponent(chapterIdentity(chapter)!.chapter_key)}` : ""}`}>
                           <span className="visually-hidden">{entryLabel(chapter)}: </span>
                           {chapter.title || "Untitled"}
                         </Link>
-                        {(status || savedOffline.has(chapter.chapter_number)) && (
+                        {(status || savedOffline.has(chapterIdentity(chapter)?.chapter_key ?? "") || isCurrentPlace || chapter.max_percent !== null) && (
                           <span className="story-chapter__meta">
-                            {[status, savedOffline.has(chapter.chapter_number) ? "Saved offline" : null].filter(Boolean).join(" · ")}
+                            {[isCurrentPlace ? "Current place" : null, chapter.max_percent !== null ? `${Math.round(chapter.max_percent)}% recorded` : null, status, savedOffline.has(chapterIdentity(chapter)?.chapter_key ?? "") ? "Saved offline" : null].filter(Boolean).join(" · ")}
                           </span>
                         )}
                       </div>
@@ -339,16 +329,8 @@ const StoryChapters: React.FC<StoryChaptersProps> = ({ libraryId, novelId, readT
       ))}
 
       <div className="story-chapters__more">
-        {visible.length > limit && (
-          <Button variant="secondary" size="sm" onClick={() => setLimit((value) => value + PAGE * 5)}>
-            Show more ({visible.length - limit} left)
-          </Button>
-        )}
-        {!searching && hiddenCount > 0 && (
-          <Button variant="ghost" size="sm" aria-expanded={showOther} onClick={() => setShowOther((value) => !value)}>
-            {showOther ? "Hide" : "Show"} {hiddenCount} chapter{hiddenCount === 1 ? "" : "s"} in other categories
-          </Button>
-        )}
+        <nav className="story-chapters__actions" aria-label="Chapter pages"><Button variant="secondary" size="sm" disabled={loading || offset === 0} onClick={() => setOffset(value => Math.max(0, value - PAGE))}>Previous chapters</Button><span>{total ? offset + 1 : 0}–{Math.min(offset + chapters.length, total)} of {total} matching chapters</span><Button variant="secondary" size="sm" disabled={loading || offset + PAGE >= total} onClick={() => setOffset(value => value + PAGE)}>Next chapters</Button></nav>
+        {!searching && (hiddenCount === null || hiddenCount > 0) && <Button variant="ghost" size="sm" aria-expanded={showOther} onClick={() => { setOffset(0); setShowOther(value => !value); }}>{showOther ? "Hide other categories" : hiddenCount === null ? "Show all categories" : `Show ${hiddenCount} chapters in other categories`}</Button>}
       </div>
 
       <Sheet open={manageOpen} onClose={() => setManageOpen(false)} title="Downloads and offline" variant="auto" closeLabel="Close downloads">
@@ -356,10 +338,10 @@ const StoryChapters: React.FC<StoryChaptersProps> = ({ libraryId, novelId, readT
           <OfflineControl offline={offline} />
           <section className="story-manage__section" aria-labelledby="story-server-downloads">
             <h3 id="story-server-downloads">Downloaded on the server</h3>
-            <p className="story-hint">{downloaded} of {chapters.length} chapters downloaded{missing.length ? `, ${missing.length} missing` : ""}.</p>
+            <p className="story-hint">{downloads ? `${downloads.present} of ${downloads.total} chapters downloaded on the server.` : "Server download counts are unavailable."} {missing.length} missing or failed in the displayed chapters.</p>
             <div className="story-manage__row">
               <Button size="sm" variant="secondary" disabled={missing.length === 0} onClick={() => (missing.length > 10 ? setConfirm("download-all") : void downloadMany(missing))}>
-                Download all missing{missing.length ? ` (${missing.length})` : ""}
+                Download missing from displayed chapters{missing.length ? ` (${missing.length})` : ""}
               </Button>
               <Link to="/updates/downloads" className="story-link">See download queue</Link>
             </div>
@@ -388,27 +370,20 @@ const StoryChapters: React.FC<StoryChaptersProps> = ({ libraryId, novelId, readT
       </Sheet>
 
       <Dialog
-        open={confirm === "delete"}
-        onClose={() => setConfirm(null)}
-        title={`Delete ${selected.size} chapter${selected.size === 1 ? "" : "s"}?`}
-        description="The downloaded text is removed from the server. You can download it again later."
-        actions={<>
-          <Button variant="secondary" onClick={() => setConfirm(null)}>Cancel</Button>
-          <Button variant="danger" onClick={() => void deleteSelected()}>Delete</Button>
-        </>}
-      />
-      <Dialog
         open={confirm === "download-all"}
         onClose={() => setConfirm(null)}
-        title={`Download ${missing.length} chapters?`}
+        title={`Download ${missing.length} displayed chapters?`}
         description="This can take a while. Chapters download one after another."
         actions={<>
           <Button variant="secondary" onClick={() => setConfirm(null)}>Cancel</Button>
-          <Button onClick={() => { setConfirm(null); void downloadMany(missing); }}>Download all</Button>
+          <Button onClick={() => { setConfirm(null); void downloadMany(missing); }}>Download displayed chapters</Button>
         </>}
       />
     </div>
   );
 };
 
-export default StoryChapters;
+export default function StoryChapters(props: StoryChaptersProps) {
+  const generation = useSyncExternalStore(onAccountStorageChange, storageGeneration);
+  return <StoryChaptersContents key={`${generation}:${props.libraryId}:${props.novelId}`} {...props} />;
+}

@@ -1,0 +1,3 @@
+import {defineConfig,devices} from '@playwright/test';
+import base from './playwright.config';
+export default defineConfig({...base,outputDir:'/tmp/nexus-manifest-native-results',testMatch:['**/chapter-manifest.spec.ts','**/import-reading-review.spec.ts'],reporter:'line',use:{...base.use,baseURL:'http://127.0.0.1:4217',channel:undefined,video:'off'},projects:[{name:'chromium',use:{...devices['Desktop Chrome'],channel:undefined}},{name:'firefox',use:{...devices['Desktop Firefox'],channel:undefined}},{name:'webkit',use:{...devices['Desktop Safari'],channel:undefined}}],webServer:{command:'node e2e/manifest-vite-server.mjs',url:'http://127.0.0.1:4217',reuseExistingServer:false,timeout:30000}});

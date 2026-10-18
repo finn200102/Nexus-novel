@@ -1,3 +1,4 @@
+import { useVocabularyLabels } from "../hooks/useVocabularyLabels";
 import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Plus } from "lucide-react";
@@ -14,11 +15,13 @@ import {
   removeDiscoveryFilterChip,
   DiscoveryFilterChip,
 } from "../services/discoveryFilters";
-import { Banner, Button, EmptyState, InputChip, PageHeader, Tabs } from "../components/ui";
+import { Banner, Button, EmptyState, PageHeader, Tabs } from "../components/ui";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { cancelPendingRequests, getUserFacingError, isRequestCancelled } from "../services/apiClient";
 import { RequestCoordinator, useAdaptivePolling } from "../services/requestResilience";
-import { SavedSearch, savedSearchService } from "../services/savedSearchService";
+import { SavedSearches } from "../components/discovery/SavedSearches";
+import GroupedDiscoveryResults from "../components/discovery/GroupedDiscoveryResults";
+import { savedSearchHref } from "../services/savedSearchService";
 import { openAddStory } from "../components/add/addStoryEvents";
 import { LiveSearchPanel } from "../components/discovery/LiveSearchPanel";
 import { DiscoverSearchBar } from "../components/discovery/DiscoverSearchBar";
@@ -39,7 +42,8 @@ const EMPTY_FILTERS = EMPTY_DISCOVERY_FILTERS;
 const parseDiscoverUrl = (locationSearch: string) => {
   const queryParams = new URLSearchParams(locationSearch);
   const searchFromUrl = queryParams.get("q") || "";
-  const similarToFromUrl = Number(queryParams.get("similar_to")) || null;
+  const similarValue = Number(queryParams.get("similar_to"));
+  const similarToFromUrl = Number.isInteger(similarValue) && similarValue > 0 && similarValue <= 2_147_483_647 ? similarValue : null;
   const filtersFromUrl = (() => {
     try { return normalizeDiscoveryFilters(JSON.parse(queryParams.get("filters") || "{}")); }
     catch { return EMPTY_FILTERS; }
@@ -68,7 +72,7 @@ const Discover: React.FC = () => {
   const [appliedFilters, setAppliedFilters] = useState<DiscoveryFilters>(EMPTY_FILTERS);
   const [mode, setMode] = useState<"catalog" | "live">("catalog");
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
+  const [saveRequest, setSaveRequest] = useState(0);
   const [catalogStatus, setCatalogStatus] = useState<"unknown" | "online" | "offline">("unknown");
   const coordinatorRef = React.useRef(new RequestCoordinator());
   const hasSnapshotRef = React.useRef(false);
@@ -76,6 +80,9 @@ const Discover: React.FC = () => {
   const { searchFromUrl, similarToFromUrl } = parseDiscoverUrl(locationSearch);
 
   const currentSite = site || "all";
+  const grouped = new URLSearchParams(locationSearch).get("view") === "works";
+  const [groupRefresh, setGroupRefresh] = useState(0);
+  const preserveView = (href: string) => grouped ? `${href}${href.includes("?") ? "&" : "?"}view=works` : href;
 
   useEffect(() => {
     if (!filtersOpen) return;
@@ -85,9 +92,6 @@ const Discover: React.FC = () => {
     return () => window.clearTimeout(timer);
   }, [currentSite, fandomDraft, filtersOpen]);
 
-  useEffect(() => {
-    void savedSearchService.list().then(setSavedSearches).catch(() => setSavedSearches([]));
-  }, []);
 
   const fetchNovels = async (
     siteValue: string,
@@ -127,7 +131,6 @@ const Discover: React.FC = () => {
       setCatalogStatus("online");
     } catch (err) {
       if (isRequestCancelled(err)) return;
-      console.error("Failed to fetch novels:", err);
       setError(getUserFacingError(err, "We couldn't load stories. Try again."));
       setCatalogStatus("offline");
     } finally {
@@ -137,6 +140,7 @@ const Discover: React.FC = () => {
   };
 
   const handleRefresh = () => {
+    if (grouped) { setGroupRefresh(value => value + 1); return; }
     setNextCursor(null);
     setHasMore(true);
     setIsRefreshing(true);
@@ -147,7 +151,7 @@ const Discover: React.FC = () => {
 
 
   const handleSiteChange = (newSite: string) => {
-    navigate(`/discover/${newSite}`);
+    navigate(preserveView(savedSearchHref({version:1,scope:"catalog",q:searchFromUrl,site:newSite === "all" ? null : newSite,similar_to:similarToFromUrl,filters:appliedFilters})));
   };
 
   const handleLoadMore = () => {
@@ -171,11 +175,11 @@ const Discover: React.FC = () => {
     setSearch(fromUrl.searchFromUrl);
     setFilters(fromUrl.filtersFromUrl);
     setAppliedFilters(fromUrl.filtersFromUrl);
-    void fetchNovelsRef.current(currentSite, 1, fromUrl.searchFromUrl, fromUrl.filtersFromUrl, fromUrl.similarToFromUrl);
+    if (!grouped) void fetchNovelsRef.current(currentSite, 1, fromUrl.searchFromUrl, fromUrl.filtersFromUrl, fromUrl.similarToFromUrl);
     return () => cancelPendingRequests("/discovery/novels/");
-  }, [currentSite, locationSearch]);
+  }, [currentSite, locationSearch, grouped]);
 
-  useAdaptivePolling(() => fetchNovels(currentSite, 1, searchFromUrl, appliedFilters, similarToFromUrl), true, {
+  useAdaptivePolling(() => fetchNovels(currentSite, 1, searchFromUrl, appliedFilters, similarToFromUrl), !grouped, {
     // Discover has no active job to monitor; refreshing it aggressively only
     // creates avoidable load while a source worker is busy elsewhere.
     activeMs: 15000,
@@ -189,8 +193,9 @@ const Discover: React.FC = () => {
     setHasMore(true);
     const params = new URLSearchParams();
     if (searchFromUrl) params.set("q", searchFromUrl);
+    if (similarToFromUrl !== null) params.set("similar_to", String(similarToFromUrl));
     params.set("filters", JSON.stringify(next));
-    navigate(`/discover/${currentSite}?${params.toString()}`);
+    navigate(preserveView(`/discover/${currentSite}?${params.toString()}`));
   };
 
   const removeChip = (chip: DiscoveryFilterChip) => {
@@ -204,23 +209,12 @@ const Discover: React.FC = () => {
     setAppliedFilters(EMPTY_FILTERS);
     setNextCursor(null);
     setHasMore(true);
-    navigate(`/discover/${currentSite}${searchFromUrl ? `?q=${encodeURIComponent(searchFromUrl)}` : ""}`);
-  };
-
-  const saveSearch = async () => {
-    const name = window.prompt("Name this saved search");
-    if (!name?.trim()) return;
-    try {
-      await savedSearchService.create(name.trim(), appliedFilters, window.confirm("Notify when future imports match this search?"));
-      setSavedSearches(await savedSearchService.list());
-      addToast(`Saved search “${name.trim()}”.`, "success");
-    } catch (err) {
-      addToast(getUserFacingError(err, "Could not save this search."), "error");
-    }
+    navigate(preserveView(`/discover/${currentSite}${searchFromUrl ? `?q=${encodeURIComponent(searchFromUrl)}` : ""}`));
   };
 
   const hasActiveFilters = isDiscoveryFilterActive(appliedFilters);
-  const activeChips = describeDiscoveryFilters(appliedFilters);
+  const canonicalLabels = useVocabularyLabels([...(appliedFilters.canonicalInclude ?? []), ...(appliedFilters.canonicalExclude ?? [])]);
+  const activeChips = describeDiscoveryFilters(appliedFilters).map(chip => chip.key === "canonicalInclude" || chip.key === "canonicalExclude" ? { ...chip, label: `${chip.key === "canonicalExclude" ? "Hide reviewed term" : "Reviewed term"}: ${canonicalLabels[chip.value ?? ""] ?? "Unavailable label (criterion retained)"}` } : chip);
   const fandomSuggestions = Array.from(new Set(fandomOptions.map((fandom) => fandom.display_name)));
 
   const handleAddToLibrary = async (novel: DiscoveredNovel) => {
@@ -323,10 +317,10 @@ const Discover: React.FC = () => {
             <DiscoverSearchBar
               value={search}
               onChange={setSearch}
-              onSubmit={() => navigate(`/discover/${currentSite}${search.trim() ? `?q=${encodeURIComponent(search.trim())}` : ""}`)}
+              onSubmit={() => navigate(preserveView(savedSearchHref({version:1,scope:"catalog",q:search.trim(),site:currentSite === "all" ? null : currentSite,similar_to:similarToFromUrl,filters:appliedFilters})))}
               onClear={() => {
                 setSearch("");
-                if (searchFromUrl) navigate(`/discover/${currentSite}`);
+                if (searchFromUrl) navigate(preserveView(savedSearchHref({version:1,scope:"catalog",q:"",site:currentSite === "all" ? null : currentSite,similar_to:similarToFromUrl,filters:appliedFilters})));
               }}
             />
             <SiteChips value={currentSite} onChange={handleSiteChange} />
@@ -341,7 +335,7 @@ const Discover: React.FC = () => {
               chips={activeChips}
               onRemoveChip={removeChip}
               onClearAll={clearFilters}
-              onSaveSearch={hasActiveFilters || searchFromUrl ? () => void saveSearch() : undefined}
+              onSaveSearch={hasActiveFilters || searchFromUrl || similarToFromUrl !== null ? () => setSaveRequest(value => value + 1) : undefined}
             />
           </div>
 
@@ -359,37 +353,10 @@ const Discover: React.FC = () => {
             onFandomDraftChange={setFandomDraft}
           />
 
-          {savedSearches.length > 0 && (
-            <section className="discover-saved" aria-labelledby="discover-saved-heading">
-              <h2 id="discover-saved-heading" className="discover-saved__heading">Saved searches</h2>
-              <ul className="discover-saved__list">
-                {savedSearches.map((saved) => (
-                  <li key={saved.id}>
-                    <InputChip
-                      onRemove={() =>
-                        void savedSearchService
-                          .remove(saved.id)
-                          .then(() => setSavedSearches((items) => items.filter((item) => item.id !== saved.id)))
-                          .catch((err) => addToast(getUserFacingError(err, "Could not remove the saved search."), "error"))
-                      }
-                      removeLabel={`Delete saved search ${saved.name}`}
-                    >
-                      {saved.name + (saved.notify_on_match ? " · alerts" : "")}
-                    </InputChip>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => navigate(`/discover/all?${new URLSearchParams({ filters: JSON.stringify(saved.filters) }).toString()}`)}
-                    >
-                      Open<span className="visually-hidden"> {saved.name}</span>
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
+          <SavedSearches saveRequest={saveRequest} definition={{version:1,scope:"catalog",q:searchFromUrl,site:currentSite === "all" ? null : currentSite,similar_to:similarToFromUrl,filters:appliedFilters}} />
 
-          <ResultsGrid
+          <Tabs<"editions" | "works"> label="Catalog result presentation" value={grouped ? "works" : "editions"} onChange={value => { const params = new URLSearchParams(locationSearch); if (value === "works") params.set("view", "works"); else params.delete("view"); navigate(`/discover/${currentSite}?${params}`); }} items={[{value:"editions",label:"All editions"},{value:"works",label:"Group reviewed editions"}]} />
+          {grouped ? <GroupedDiscoveryResults site={currentSite} q={searchFromUrl} similarTo={similarToFromUrl} filters={appliedFilters} refresh={groupRefresh} /> : <ResultsGrid
             novels={novels}
             loading={loading}
             loadingMore={loadingMore}
@@ -401,7 +368,7 @@ const Discover: React.FC = () => {
             onAdd={(novel) => void handleAddToLibrary(novel)}
             onHideAuthor={(novel) => void hideAuthor(novel)}
             empty={emptyState}
-          />
+          />}
         </>
       )}
     </div>

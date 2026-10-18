@@ -170,6 +170,7 @@ def clear_refresh_cookie(response: Response, request: Request) -> None:
 def token_response(user: User, session: UserSession, message: str = "Login successful") -> dict:
     return {
         "id": user.id,
+        "storage_id": user.storage_id,
         "username": user.username,
         "message": message,
         "access_token": create_access_token({"sub": str(user.id), "sid": session.id}),

@@ -16,6 +16,7 @@ import {
   WORD_SPACINGS,
 } from "./readerSettings";
 import { typographyStyle } from "./typographyStyle";
+import type { PreferenceSyncStatus } from "../../services/readerPreferenceSync";
 
 export interface ReaderSettingsProps {
   typography: ReaderTypography;
@@ -31,6 +32,8 @@ export interface ReaderSettingsProps {
   storyOnly: boolean;
   onStoryOnly: (value: boolean) => void;
   onUseForAll: () => void;
+  sync?: PreferenceSyncStatus;
+  onResolveSync?: (choice: "account" | "device") => Promise<void>;
 }
 
 const THEME_LABELS: Record<ReaderThemeChoice, string> = { app: "Match app", paper: "Paper", sepia: "Sepia", night: "Night", black: "Black" };
@@ -90,6 +93,13 @@ export function ReaderSettingsPanel(props: ReaderSettingsProps) {
   const sizeId = useId();
   return (
     <div className="reader-settings">
+      {props.sync && <div className="reader-settings__group" role="status">
+        {props.sync.conflicts.length ? <><p>Settings changed on another device. Your changes are still saved here.</p><Button size="sm" onClick={() => void props.onResolveSync?.("account")}>Use account settings</Button><Button size="sm" variant="secondary" onClick={() => void props.onResolveSync?.("device")}>Keep this device’s settings</Button></>
+          : props.sync.memoryOnly ? <p>Browser storage is unavailable. Settings remain in memory while this page is open.</p>
+          : props.sync.error ? <p>{props.sync.error}</p>
+          : props.sync.pending || props.sync.offline ? <p>Settings saved here; waiting to synchronize.</p>
+          : <p>Settings follow your account across devices.</p>}
+      </div>}
       <p className="reader-settings__preview" data-reader-theme={resolvedTheme} style={typographyStyle({ ...t, fontSize: Math.min(t.fontSize, 22) })}>
         The ledger was bound in grey calfskin and smelled faintly of lamp oil.
       </p>

@@ -18,6 +18,12 @@ from app.services.audio_job_service import process_audio_job
 from app.services.import_job_service import next_job_id, run_import_job
 from app.services.notification_delivery import deliver_due_notifications
 from app.services.webhook_delivery import deliver_due_webhooks
+from app.services.job_lease import recover_expired
+from app.services.translation_service import process_due_translations
+from app.services.reader_guide_service import process_due_guides
+from app.services.voice_service import process_due_voices
+from app.services.audio_export_service import process_due_exports
+from app.services.podcast_audio_service import process_due_podcast_audio
 
 
 def release_due_notifications(db) -> int:
@@ -67,6 +73,7 @@ def release_due_notifications(db) -> int:
 
 def process_downloads() -> int:
     db = SessionLocal()
+    recover_expired(db, ChapterDownloadJob)
     jobs = (
         db.query(ChapterDownloadJob)
         .filter(
@@ -124,6 +131,7 @@ def process_webhooks() -> int:
 def process_audio_jobs() -> int:
     db = SessionLocal()
     try:
+        recover_expired(db, ChapterAudioJob)
         now = datetime.now(UTC).replace(tzinfo=None)
         jobs = (
             db.query(ChapterAudioJob)
@@ -178,6 +186,58 @@ async def run() -> None:
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, stop.set)
     imports_task = asyncio.create_task(run_imports(stop))
+    async def translations_loop():
+        while not stop.is_set():
+            await asyncio.to_thread(process_due_translations, SessionLocal)
+            await asyncio.to_thread(process_due_guides, SessionLocal)
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=5)
+            except asyncio.TimeoutError:
+                pass
+    translations_task = asyncio.create_task(translations_loop())
+    async def voices_loop():
+        while not stop.is_set():
+            await asyncio.to_thread(process_due_voices, SessionLocal)
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=5)
+            except asyncio.TimeoutError:
+                pass
+    voices_task = asyncio.create_task(voices_loop())
+    async def exports_loop():
+        while not stop.is_set():
+            try:
+                await asyncio.to_thread(process_due_exports, SessionLocal, should_stop=stop.is_set)
+            except Exception:
+                logging.getLogger(__name__).exception("Audio export processing failed")
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=5)
+            except asyncio.TimeoutError:
+                pass
+    exports_task = asyncio.create_task(exports_loop())
+    async def podcast_audio_loop():
+        while not stop.is_set():
+            try:
+                await asyncio.to_thread(process_due_podcast_audio, SessionLocal, should_stop=stop.is_set)
+            except Exception:
+                logging.getLogger(__name__).exception("Podcast audio preparation failed")
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=5)
+            except asyncio.TimeoutError:
+                pass
+    podcast_audio_task = asyncio.create_task(podcast_audio_loop())
+    async def catalog_watches_loop():
+        from app.services.catalog_watch_worker import run_once
+        while not stop.is_set():
+            try:
+                progressed = await run_once()
+            except Exception:
+                logging.getLogger(__name__).warning('Catalog watch processing failed')
+                progressed = False
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=1 if progressed else 10)
+            except asyncio.TimeoutError:
+                pass
+    catalog_watches_task = asyncio.create_task(catalog_watches_loop())
     while not stop.is_set():
         # The downloader is synchronous internally and bridges to async source
         # clients with asyncio.run(). Keep it off this worker's event loop.
@@ -195,6 +255,11 @@ async def run() -> None:
         except asyncio.TimeoutError:
             pass
     await imports_task
+    await translations_task
+    await voices_task
+    await exports_task
+    await podcast_audio_task
+    await catalog_watches_task
 
 
 if __name__ == "__main__":

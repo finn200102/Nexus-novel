@@ -1,28 +1,21 @@
 import apiClient from "./apiClient";
 
-export type StatsRange = "week" | "month" | "year" | "all";
+import type { CalendarReviewMonthResponse, CalendarYearReviewResponse, DailyStatResponse, GoalWrite, ReadingGoalResponse, ReadingTimeResponse, StatsSummaryResponse } from "../generated/api";
 
-export interface DailyStat {
-  date: string;
-  seconds: number;
-  words: number;
-  chapters_finished: number;
-}
-
-export interface StatsSummary {
-  range: StatsRange;
-  start: string | null;
-  end: string;
-  totals: { seconds: number; words: number; chapters_finished: number; stories_finished: number };
-  daily: DailyStat[];
-  streak: { current: number; longest: number; min_seconds: number };
-  top_stories: { novel_id: number; title: string; seconds: number; words: number }[];
-  by_site: { site: string; seconds: number }[];
-  by_tag: { tag: string; seconds: number }[];
-}
+export type StatsRange = StatsSummaryResponse["range"];
+export type DailyStat = DailyStatResponse;
+export type StatsSummary = StatsSummaryResponse;
+export type ReadingGoal = ReadingGoalResponse;
+// UI writes explicitly include the new target; the API also permits defaults.
+export type ReadingGoalWrite = GoalWrite & { values: Required<GoalWrite["values"]> };
+export type CalendarReviewMonth = CalendarReviewMonthResponse;
+export type CalendarYearReview = CalendarYearReviewResponse;
 
 export const readingStatsService = {
-  async recordReadingTime(novelId: number, chapterId: number, seconds: number, wordsReadEstimate: number) {
+  async getCalendarReview(year: number): Promise<CalendarYearReview> { return (await apiClient.get(`/stats/review/${year}`)).data; },
+  async getGoal(year: number): Promise<ReadingGoal> { return (await apiClient.get(`/stats/goals/${year}`)).data; },
+  async saveGoal(year: number, value: ReadingGoalWrite): Promise<ReadingGoal> { return (await apiClient.put(`/stats/goals/${year}`, value)).data; },
+  async recordReadingTime(novelId: number, chapterId: number, seconds: number, wordsReadEstimate: number): Promise<ReadingTimeResponse> {
     const response = await apiClient.post("/stats/reading-time", {
       novel_id: novelId,
       chapter_id: chapterId,

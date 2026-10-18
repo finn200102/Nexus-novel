@@ -1,10 +1,17 @@
 """Live site search through the metadata server, merged with catalog hits."""
 
 from unittest.mock import AsyncMock
+import pytest
 
 from app.models.blocklist import BlocklistEntry
 
 RR_URL = "https://www.royalroad.com/fiction/1/mother-of-learning"
+
+
+@pytest.fixture(autouse=True)
+def capabilities(monkeypatch):
+    from tests.routes.test_progressive_discovery import capability_response
+    monkeypatch.setattr('app.services.metadata_client.live_capabilities', AsyncMock(return_value=capability_response()))
 
 
 def _live(site, results=None, error=None):
@@ -40,7 +47,7 @@ def test_live_search_merges_local_hits_and_reports_site_errors(client, db, test_
     assert response.status_code == 200
     body = response.json()
     assert [(row["title"], row["sources"]) for row in body["results"]] == [("Mother of Learning", ["live", "local"])]
-    assert body["errors"] == [{"site": "fanfiction", "code": "rate_limited", "message": "HTTP 429 (Retry-After: 30)"}]
+    assert body["errors"] == [{"site": "fanfiction", "code": "rate_limited", "message": "This source could not complete the request. Try again later.", "retryable": None}]
     assert {params["site"] for _, params in calls} == {"royalroad", "fanfiction"}
 
 

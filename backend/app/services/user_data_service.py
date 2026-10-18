@@ -6,10 +6,14 @@ Import rules:
   notes attach to them) and queued on a durable import job; the worker
   starts their metadata scrapes one at a time (``import_job_ids``).
 * Follow state is set to the exported value.
-* Progress keeps the furthest position (chapter, then percent).
-* History keeps one row per chapter and day, with the higher percent.
-* Annotations are deduplicated by content. They need the chapter to exist
-  locally, so they are reported as deferred until a later import finds it.
+* Imported reading references are staged privately until their immutable chapter
+  bindings are proven on this installation or individually reviewed. Numeric
+  labels never select a destination chapter. Existing live places are retained.
+* Reviewed history is inferred and never becomes a content-read receipt.
+* Optional reading runs/events preserve historical facts with destination-
+  scoped identities; importing the same file does not duplicate the journal.
+* Unbound annotations, original quotes and versions remain in durable review
+  payloads and portable exports until an explicit owned chapter is selected.
 * Saved searches are created when missing. A name that already exists with
   different content is reported as a conflict and left unchanged.
 * Personal data (notes, rating, user tags): a value is applied only where the
@@ -23,19 +27,26 @@ Running an import twice leaves the second run with nothing to change.
 """
 
 from collections import defaultdict
-from datetime import UTC, date, datetime, time
+from datetime import UTC, datetime
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.models.chapter import Chapter
 from app.models.library import Library
 from app.models.novel import Novel
 from app.models.reading_annotation import ReadingAnnotation
 from app.models.reading_history import ReadingHistory
 from app.models.reading_progress import ReadingProgress
+from app.models.reading_run import ReadingRun
+from app.services import portable_reading_service
+from app.services import import_reading_review_service as imported_reading
+from app.services import smart_shelf_portable_service
+from app.services import portable_story_service
+from app.services.reading_run_service import restore_progress
+from app.models.reader_preference import ReaderPreference
 from app.models.blocklist import BlocklistEntry
 from app.models.novel_personal import NovelPersonalData, NovelUserTag
 from app.models.saved_search import SavedSearch
+from app.services.saved_search_service import imported as imported_search_filters
 from app.models.shelf import Shelf, ShelfNovel
 from app.models.follow import UserNovelFollow
 from app.models.user import User
@@ -52,10 +63,6 @@ from app.services.blocklist_service import normalize_value
 import app.services.library_organization_service as organization
 
 
-def _clamp_percent(value: float) -> float:
-    return min(max(float(value), 0.0), 100.0)
-
-
 def _naive_utc(value: datetime | None) -> datetime | None:
     if value is None:
         return None
@@ -64,15 +71,8 @@ def _naive_utc(value: datetime | None) -> datetime | None:
     return value
 
 
-def _chapter(db: Session, novel_id: int, chapter_number: int) -> Chapter | None:
-    return (
-        db.query(Chapter)
-        .filter(Chapter.novel_id == novel_id, Chapter.chapter_number == chapter_number)
-        .first()
-    )
-
-
 # ---------------------------------------------------------------- export
+LOCATOR_FIELDS = ("block_id", "text_offset", "text_quote", "quote_prefix", "quote_suffix", "locator_content_version", "locator_variant")
 
 
 def export_user_data(db: Session, user: User) -> dict:
@@ -82,6 +82,12 @@ def export_user_data(db: Session, user: User) -> dict:
         row.novel_id: row
         for row in db.query(ReadingProgress).filter(ReadingProgress.user_id == user.id).all()
     }
+    # A deleted chapter may have cascaded its old progress row; portable
+    # exports use the same durable canonical snapshot as the progress endpoint.
+    for run in db.query(ReadingRun).filter_by(user_id=user.id).filter(ReadingRun.archived_at.is_(None)).order_by(ReadingRun.ordinal):
+        if run.novel_id not in progress_by_novel:
+            restored=restore_progress(run)
+            if restored is not None:progress_by_novel[run.novel_id]=restored
     follow_by_novel = {
         row.novel_id: row
         for row in db.query(UserNovelFollow).filter(UserNovelFollow.user_id == user.id).all()
@@ -99,17 +105,16 @@ def export_user_data(db: Session, user: User) -> dict:
         annotations_by_novel[row.novel_id].append(row)
 
     library_documents = []
+    entry_by_novel_id: dict[int, dict] = {}
     for library in libraries:
         novels = []
         for novel in sorted(library.novels, key=lambda item: item.url or ""):
-            # Novels without a source URL cannot be re-linked on import.
-            if not novel.url:
-                continue
             follow = follow_by_novel.get(novel.id)
             progress = progress_by_novel.get(novel.id)
             followed_at = follow.followed_at if follow else novel.followed_at
             novels.append({
                 "url": novel.url,
+                "portable_story": portable_story_service.export_identity(db,user,novel),
                 "title": novel.title,
                 "site": novel.novel_site,
                 "metadata_id": novel.metadata_id,
@@ -119,31 +124,38 @@ def export_user_data(db: Session, user: User) -> dict:
                     "chapter_number": progress.chapter_number,
                     "position": progress.position,
                     "percent": progress.percent,
+                    "furthest_chapter_number": progress.furthest_chapter_number,
+                    "furthest_percent": progress.furthest_percent,
+                    **{field: getattr(progress, field) for field in LOCATOR_FIELDS},
+                    **({"reading_run_key":progress.reading_run_key} if progress.reading_run_key else {}),
                 } if progress and progress.chapter_number is not None else None,
                 "history": [
                     {
                         "chapter_number": row.chapter_number,
                         "date": row.reading_date.date().isoformat(),
                         "max_percent": row.max_percent,
+                        **({"reading_run_key":row.reading_run_key} if row.reading_run_key else {}),
                     }
                     for row in history_by_novel.get(novel.id, [])
                 ],
                 "annotations": sorted(
                     [
                         {
-                            "chapter_number": row.chapter.chapter_number,
+                            "chapter_number": row.chapter_number,
+                            "chapter_ref": row.chapter_key,
                             "annotation_type": row.annotation_type,
                             "position": row.position,
                             "percent": row.percent,
                             "quote": row.quote,
                             "note": row.note,
+                            **{field: getattr(row, field) for field in LOCATOR_FIELDS},
                         }
                         for row in annotations_by_novel.get(novel.id, [])
-                        if row.chapter is not None
                     ],
-                    key=lambda item: (item["chapter_number"], item["position"], item["annotation_type"], item["quote"] or "", item["note"] or ""),
+                    key=lambda item: (item["chapter_number"] if item["chapter_number"] is not None else -(2**31), item["position"], item["annotation_type"], item["quote"] or "", item["note"] or ""),
                 ),
             })
+        for novel,entry in zip(sorted(library.novels,key=lambda item:item.url or ""),novels):entry_by_novel_id[novel.id]=entry
         library_documents.append({"name": library.name, "novels": novels})
 
     saved_searches = (
@@ -160,21 +172,12 @@ def export_user_data(db: Session, user: User) -> dict:
     for row in db.query(NovelUserTag).filter(NovelUserTag.user_id == user.id).order_by(NovelUserTag.tag).all():
         tags_by_novel[row.novel_id].append(row.tag)
     novel_url_by_id = {
-        novel.id: (library.name, novel.url)
-        for library in libraries
-        for novel in library.novels
-        if novel.url
+        novel.id: {'library':library.name,'url':novel.url,**({'portable_story':portable_story_service.export_identity(db,user,novel)} if novel.url is None else {})}
+        for library in libraries for novel in library.novels
     }
-    entry_by_novel_id: dict[int, dict] = {}
-    for library_document, library in zip(library_documents, libraries):
-        for novel in library.novels:
-            if not novel.url:
-                continue
-            for entry in library_document["novels"]:
-                if entry["url"] == novel.url:
-                    entry_by_novel_id[novel.id] = entry
-                    break
     for novel_id, entry in entry_by_novel_id.items():
+        runs=portable_reading_service.export_runs(db,user.id,novel_id)
+        if runs:entry["reading_runs"]=runs
         personal = personal_by_novel.get(novel_id)
         tags = tags_by_novel.get(novel_id, [])
         has_notes_or_rating = personal is not None and (bool(personal.notes) or personal.rating is not None)
@@ -184,6 +187,14 @@ def export_user_data(db: Session, user: User) -> dict:
                 "rating": personal.rating if personal else None,
                 "user_tags": tags,
             }
+    preferences = {row.scope: row for row in db.query(ReaderPreference).filter_by(user_id=user.id)}
+    for novel_id, entry in entry_by_novel_id.items():
+        preference = preferences.get(f"story:{novel_id}")
+        if preference and preference.values.get("typography"):
+            entry["reader_typography"] = preference.values["typography"]
+        pronunciation = preferences.get(f"pronunciation:{novel_id}")
+        if pronunciation:
+            entry["pronunciation"] = pronunciation.values
 
     shelves = db.query(Shelf).filter(Shelf.user_id == user.id).order_by(Shelf.position, Shelf.name).all()
     shelf_documents = []
@@ -198,12 +209,17 @@ def export_user_data(db: Session, user: User) -> dict:
             "name": shelf.name,
             "position": shelf.position,
             "novels": [
-                {"library": novel_url_by_id[row.novel_id][0], "url": novel_url_by_id[row.novel_id][1]}
+                novel_url_by_id[row.novel_id]
                 for row in members
                 if row.novel_id in novel_url_by_id
             ],
         })
     blocklist = db.query(BlocklistEntry).filter(BlocklistEntry.user_id == user.id).order_by(BlocklistEntry.kind, BlocklistEntry.value).all()
+    for novel_id,story_doc in entry_by_novel_id.items():
+        local=db.get(Novel,novel_id)
+        imported_reading.enrich_export(db,user,local,story_doc,progress_by_novel.get(local.id),history_by_novel.get(local.id,[]),annotations_by_novel.get(local.id,[]))
+    for library_doc,library in zip(library_documents,libraries):
+        library_doc['novels'].extend(portable_story_service.retained_conflicts(db,user,library))
     return {
         "format": EXPORT_FORMAT,
         "version": EXPORT_VERSION,
@@ -214,7 +230,14 @@ def export_user_data(db: Session, user: User) -> dict:
             for item in saved_searches
         ],
         "shelves": shelf_documents,
+        "smart_shelves": smart_shelf_portable_service.export_rows(db, user.id),
         "blocklist": [{"kind": row.kind, "value": row.value} for row in blocklist],
+        "reader_preferences": preferences["global"].values if "global" in preferences else None,
+        "discovery_preferences": preferences["discovery"].values if "discovery" in preferences else None,
+        "pronunciation": preferences["pronunciation"].values if "pronunciation" in preferences else None,
+        "activity_preferences": preferences['reading_activity'].values if 'reading_activity' in preferences else None,
+        "reading_goals": [{'year':int(scope.split(':')[1]),'values':row.values} for scope,row in sorted(preferences.items())
+            if scope.startswith('reading_goal:') and scope.split(':')[1].isdigit()],
     }
 
 
@@ -233,110 +256,6 @@ def _apply_follow(db: Session, user: User, novel: Novel, item) -> str | None:
     novel.follow_state = follow.state
     novel.followed_at = follow.followed_at
     return status_value
-
-
-def _apply_progress(db: Session, user: User, novel: Novel, item) -> str | None:
-    if item is None:
-        return None
-    chapter = _chapter(db, novel.id, item.chapter_number)
-    row = (
-        db.query(ReadingProgress)
-        .filter(ReadingProgress.user_id == user.id, ReadingProgress.novel_id == novel.id)
-        .first()
-    )
-    incoming = (item.chapter_number, _clamp_percent(item.percent))
-    if row is None:
-        row = ReadingProgress(
-            user_id=user.id,
-            novel_id=novel.id,
-            chapter_id=chapter.id if chapter else None,
-            chapter_number=item.chapter_number,
-            position=max(item.position, 0),
-            percent=incoming[1],
-        )
-        db.add(row)
-        return "applied"
-
-    result = "unchanged"
-    if incoming > (row.chapter_number or 0, row.percent or 0.0):
-        row.chapter_number = item.chapter_number
-        row.chapter_id = chapter.id if chapter else None
-        row.position = max(item.position, 0)
-        row.percent = incoming[1]
-        result = "applied"
-    elif row.chapter_id is None and chapter is not None:
-        # Progress recorded before the chapter was scraped: link it now.
-        row.chapter_id = chapter.id
-    return result
-
-
-def _apply_history(db: Session, user: User, novel: Novel, points) -> dict:
-    counts = {"added": 0, "updated": 0, "unchanged": 0}
-    existing = {
-        (row.chapter_number, row.reading_date.date()): row
-        for row in db.query(ReadingHistory)
-        .filter(ReadingHistory.user_id == user.id, ReadingHistory.novel_id == novel.id)
-        .all()
-    }
-    for point in points:
-        day = date.fromisoformat(point.day)
-        percent = min(max(int(point.max_percent), 0), 100)
-        key = (point.chapter_number, day)
-        row = existing.get(key)
-        if row is None:
-            row = ReadingHistory(
-                user_id=user.id,
-                novel_id=novel.id,
-                chapter_number=point.chapter_number,
-                reading_date=datetime.combine(day, time.min),
-                max_percent=percent,
-            )
-            db.add(row)
-            existing[key] = row
-            counts["added"] += 1
-        elif percent > (row.max_percent or 0):
-            row.max_percent = percent
-            counts["updated"] += 1
-        else:
-            counts["unchanged"] += 1
-    return counts
-
-
-def _annotation_key(chapter_id: int, annotation_type: str, position: int, quote: str | None, note: str | None) -> tuple:
-    return (chapter_id, annotation_type, position, quote or "", note or "")
-
-
-def _apply_annotations(db: Session, user: User, novel: Novel, items) -> dict:
-    counts = {"added": 0, "duplicate": 0, "deferred": 0}
-    existing = {
-        _annotation_key(row.chapter_id, row.annotation_type, row.position, row.quote, row.note)
-        for row in db.query(ReadingAnnotation)
-        .filter(ReadingAnnotation.user_id == user.id, ReadingAnnotation.novel_id == novel.id)
-        .all()
-    }
-    for item in items:
-        chapter = _chapter(db, novel.id, item.chapter_number)
-        if chapter is None:
-            counts["deferred"] += 1
-            continue
-        position = max(item.position, 0)
-        key = _annotation_key(chapter.id, item.annotation_type, position, item.quote, item.note)
-        if key in existing:
-            counts["duplicate"] += 1
-            continue
-        db.add(ReadingAnnotation(
-            user_id=user.id,
-            novel_id=novel.id,
-            chapter_id=chapter.id,
-            annotation_type=item.annotation_type,
-            position=position,
-            percent=_clamp_percent(item.percent),
-            quote=item.quote,
-            note=item.note,
-        ))
-        existing.add(key)
-        counts["added"] += 1
-    return counts
 
 
 def _apply_personal(db: Session, user: User, novel: Novel, item) -> str:
@@ -393,7 +312,7 @@ def _import_shelves(db: Session, user: User, entries, novel_index: dict[tuple[st
             shelf_status = "created"
         links_added = links_existing = missing = 0
         for member in entry.novels:
-            novel = novel_index.get((member.library, member.url))
+            novel = novel_index.get(portable_story_service.reference_key(member.library,member.url,member.portable_story))
             if novel is None:
                 missing += 1
                 continue
@@ -443,6 +362,11 @@ def title_from_url(url: str) -> str:
 
 
 def _create_novel(db: Session, library: Library, item) -> tuple[Novel | None, str | None]:
+    if item.url.startswith('nexus-local:'):
+        # Private originals are not source-fetch URLs. Retain their story and
+        # reading material while the user restores the original file separately.
+        novel=Novel(title=clean_title(item.title,item.url) or 'Private original awaiting restoration',url=item.url,library_id=library.id,novel_site='local',site='local',scrape_status='awaiting_original',num_chapters=0,chapter_count=0)
+        db.add(novel);db.flush();return novel,None
     if not accepted_src(item.url):
         return None, "Not a supported source url"
     site_name = get_site_name_from_url(item.url)
@@ -457,24 +381,71 @@ def _create_novel(db: Session, library: Library, item) -> tuple[Novel | None, st
 
 def _import_novel(db: Session, user: User, library: Library, item, queued: list[Novel]) -> dict:
     report: dict = {"url": item.url, "title": item.title, "status": None, "reason": None}
-    novel = db.query(Novel).filter(Novel.library_id == library.id, Novel.url == item.url).first()
-    if novel is None:
-        novel, failure = _create_novel(db, library, item)
-        if novel is None:
-            report["status"] = "failed"
-            report["reason"] = failure
-            return report
-        report["status"] = "created"
-        queued.append(novel)
+    if item.url is None:
+        novel,portable_status,link_id,failure=portable_story_service.resolve(db,user,library,item)
+        report.update(status=portable_status,reason=failure,portable_link_id=link_id)
+        if novel is None:return report
     else:
-        report["status"] = "linked"
-
+        novel = db.query(Novel).filter(Novel.library_id == library.id, Novel.url == item.url).first()
+        if novel is None:
+            novel, failure = _create_novel(db, library, item)
+            if novel is None:
+                report['status']='failed';report['reason']=failure;return report
+            report['status']='created'
+            if novel.novel_site!='local':queued.append(novel)
+        else:report['status']='linked'
+    report['novel_id']=novel.id
+    if novel.scrape_status=='awaiting_original':report['original_status']='unavailable'
     report["follow_state"] = _apply_follow(db, user, novel, item)
-    report["progress"] = _apply_progress(db, user, novel, item.progress)
-    report["history"] = _apply_history(db, user, novel, item.history)
-    report["annotations"] = _apply_annotations(db, user, novel, item.annotations)
+    # Run facts are portable; numeric snapshots are not chapter authority.
+    # Keep all original positions and locators durably in the private review.
+    facts=item.model_copy(deep=True)
+    facts.progress=None
+    for run in facts.reading_runs:run.progress=None
+    mapping,protected,run_report=portable_reading_service.import_runs(db,user,novel,facts)
+    if item.reading_runs:report['reading_runs']=run_report
+    before_progress=db.query(ReadingProgress).filter_by(user_id=user.id,novel_id=novel.id).first()
+    before_history=db.query(ReadingHistory).filter_by(user_id=user.id,novel_id=novel.id).count()
+    before_annotations=db.query(ReadingAnnotation).filter_by(user_id=user.id,novel_id=novel.id).count()
+    review=imported_reading.stage(db,user,novel,item,mapping)
+    db.flush()
+    report['reading_review_id']=review.id if review else None
+    nested=[]
+    for raw in item.pending_reading_imports:
+        if raw.get('pending_reading_imports'):raise HTTPException(422,'Nested reading import reviews are not supported')
+        from app.schemas.user_data import ExportNovel
+        from pydantic import ValidationError
+        try:original=ExportNovel.model_validate(raw)
+        except ValidationError:raise HTTPException(422,'A retained reading review is invalid. Its original imported material was not applied.') from None
+        nested_facts=original.model_copy(deep=True);nested_facts.progress=None
+        for run in nested_facts.reading_runs:run.progress=None
+        nested_mapping,_,_=portable_reading_service.import_runs(db,user,novel,nested_facts)
+        retained=imported_reading.stage(db,user,novel,original,nested_mapping)
+        if retained:nested.append(retained.id)
+    report['retained_reading_review_ids']=nested
+    report['progress']=('applied' if before_progress is None and review and review.payload.get('_progress_outcome')=='applied' else 'review_required') if item.progress else 'unchanged'
+    report['history']={'added':db.query(ReadingHistory).filter_by(user_id=user.id,novel_id=novel.id).count()-before_history,'unchanged':0,'review_required':len(item.history) if review and len(review.applied_refs or {})<len(review.payload['chapter_refs']) else 0}
+    report['annotations']={'added':db.query(ReadingAnnotation).filter_by(user_id=user.id,novel_id=novel.id).count()-before_annotations,'unchanged':0,'deferred':len(item.annotations) if review and len(review.applied_refs or {})<len(review.payload['chapter_refs']) else 0,'review_required':len(item.annotations) if review and len(review.applied_refs or {})<len(review.payload['chapter_refs']) else 0}
     report["personal"] = _apply_personal(db, user, novel, item.personal) if item.personal else None
+    report["reader_preferences"] = _apply_reader_preferences(db, user, {"typography": item.reader_typography.model_dump(exclude_none=True)}, novel) if item.reader_typography is not None else None
+    report["pronunciation"] = _apply_pronunciation(db, user, item.pronunciation, novel) if item.pronunciation is not None else None
     return report
+
+
+def _apply_pronunciation(db, user, value, novel=None):
+    values = {"rules": sorted([rule.model_dump() for rule in value.rules], key=lambda rule: rule["source"]),
+              "inherit_account": value.inherit_account if novel else False}
+    return _apply_reader_preferences(db, user, values, novel, scope=f"pronunciation:{novel.id}" if novel else "pronunciation")
+
+
+def _apply_reader_preferences(db, user, values, novel=None, scope=None):
+    scope = scope or (f"story:{novel.id}" if novel else "global")
+    row = db.query(ReaderPreference).filter_by(user_id=user.id, scope=scope).first()
+    if row is not None:
+        return "unchanged" if row.values == values else "kept_local"
+    db.add(ReaderPreference(user_id=user.id, novel_id=novel.id if novel else None, scope=scope, revision=1, values=values))
+    db.flush()
+    return "applied"
 
 
 def _summarize(libraries: list[dict], saved_searches: list[dict], shelves: list[dict], blocklist: list[dict]) -> dict:
@@ -491,10 +462,19 @@ def _summarize(libraries: list[dict], saved_searches: list[dict], shelves: list[
         "novels_created": total("status", "created"),
         "novels_linked": total("status", "linked"),
         "novels_failed": total("status", "failed"),
+        "novels_conflicts": total("status", "conflict"),
         "follow_states_updated": total("follow_state", "updated"),
         "progress_applied": total("progress", "applied"),
         "history_added": sum_of("history", "added"),
         "history_updated": sum_of("history", "updated"),
+        "history_kept_local": sum_of("history", "kept_local"),
+        "reading_runs_added": sum_of("reading_runs","added"),
+        "reading_runs_unchanged": sum_of("reading_runs","unchanged"),
+        "reading_runs_kept_local": sum_of("reading_runs","kept_local"),
+        "reading_run_events_added": sum_of("reading_runs","events_added"),
+        "reading_run_inferred_events_added": sum_of("reading_runs","inferred_events"),
+        "reading_current_restored": sum_of("reading_runs","current_restored"),
+        "progress_kept_local": total("progress","kept_local"),
         "annotations_added": sum_of("annotations", "added"),
         "annotations_duplicate": sum_of("annotations", "duplicate"),
         "annotations_deferred": sum_of("annotations", "deferred"),
@@ -510,12 +490,19 @@ def _summarize(libraries: list[dict], saved_searches: list[dict], shelves: list[
 
 
 def import_user_data(db: Session, user: User, document: UserDataDocument) -> dict:
-    if document.version != EXPORT_VERSION:
+    from app.services.chapter_identity_service import sqlite_transaction
+    from app.auth.dependencies import require_current_session
+    sqlite_transaction(db,write=True)
+    fresh=db.query(User).filter_by(id=user.id).populate_existing().with_for_update().first()
+    if fresh is None or fresh.is_disabled:raise HTTPException(401,'Account is unavailable')
+    require_current_session(db,user.id)
+    if document.version not in (1, EXPORT_VERSION):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Unsupported export version {document.version}; this Nexus reads version {EXPORT_VERSION}",
         )
 
+    portable_reading_service.prepare_import(db,user,document)
     library_reports = []
     import_jobs = []
     novel_index: dict[tuple[str, str], Novel] = {}
@@ -537,9 +524,9 @@ def import_user_data(db: Session, user: User, document: UserDataDocument) -> dic
             report = _import_novel(db, user, library, item, queued)
             novel_reports.append(report)
             db.flush()
-            novel = db.query(Novel).filter(Novel.library_id == library.id, Novel.url == item.url).first()
+            novel=db.get(Novel,report.get('novel_id')) if report.get('novel_id') is not None else None
             if novel is not None:
-                novel_index[(entry.name, item.url)] = novel
+                novel_index[portable_story_service.reference_key(entry.name,item.url,item.portable_story)]=novel
         library_reports.append({"name": entry.name, "status": library_status, "novels": novel_reports})
         if queued:
             import_jobs.append(import_job_service.create_job(
@@ -554,34 +541,53 @@ def import_user_data(db: Session, user: User, document: UserDataDocument) -> dic
         for row in db.query(SavedSearch).filter(SavedSearch.user_id == user.id).all()
     }
     for item in document.saved_searches:
+        imported_filters = imported_search_filters(item.filters)
         row = existing_searches.get(item.name)
         if row is None:
             row = SavedSearch(
                 user_id=user.id,
                 name=item.name,
-                filters=item.filters,
+                filters=imported_filters,
                 notify_on_match=item.notify_on_match,
             )
             db.add(row)
             existing_searches[item.name] = row
             saved_status = "created"
-        elif (row.filters or {}) == item.filters and bool(row.notify_on_match) == item.notify_on_match:
+        elif (row.filters or {}) == imported_filters and bool(row.notify_on_match) == item.notify_on_match:
             saved_status = "unchanged"
         else:
             saved_status = "conflict"
         saved_reports.append({"name": item.name, "status": saved_status})
 
     shelf_reports = _import_shelves(db, user, document.shelves, novel_index)
+    smart_shelf_reports = smart_shelf_portable_service.import_rows(db, user.id, document.smart_shelves)
     blocklist_reports = _import_blocklist(db, user, document.blocklist)
+    preference_report = _apply_reader_preferences(db, user, document.reader_preferences.model_dump(exclude_none=True)) if document.reader_preferences is not None else None
+    pronunciation_report = _apply_pronunciation(db, user, document.pronunciation) if document.pronunciation is not None else None
+    discovery_report = _apply_reader_preferences(db, user, document.discovery_preferences.model_dump(), scope="discovery") if document.discovery_preferences is not None else None
 
+    activity_report=_apply_reader_preferences(db,user,document.activity_preferences.model_dump(),scope='reading_activity') if document.activity_preferences is not None else None
+    goal_reports=[{'year':entry.year,'status':_apply_reader_preferences(db,user,entry.values.model_dump(),scope=f'reading_goal:{entry.year}')} for entry in document.reading_goals]
     db.commit()
+    summary=_summarize(library_reports,saved_reports,shelf_reports,blocklist_reports)
+    summary.update(activity_preferences_applied=int(activity_report=='applied'),
+        smart_shelves_created=sum(entry['status']=='created' for entry in smart_shelf_reports),
+        smart_shelves_conflicts=sum(entry['status']=='conflict' for entry in smart_shelf_reports),
+        reading_goals_applied=sum(entry['status']=='applied' for entry in goal_reports),
+        reading_goals_kept_local=sum(entry['status']=='kept_local' for entry in goal_reports))
     return {
         "format": EXPORT_FORMAT,
         "version": EXPORT_VERSION,
-        "summary": _summarize(library_reports, saved_reports, shelf_reports, blocklist_reports),
+        "summary": summary,
         "libraries": library_reports,
         "saved_searches": saved_reports,
         "shelves": shelf_reports,
+        "smart_shelves": smart_shelf_reports,
         "blocklist": blocklist_reports,
+        "reader_preferences": preference_report,
+        "discovery_preferences": discovery_report,
+        "pronunciation": pronunciation_report,
+        "activity_preferences": activity_report,
+        "reading_goals": goal_reports,
         "import_job_ids": [job.id for job in import_jobs],
     }

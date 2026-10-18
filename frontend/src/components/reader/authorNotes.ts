@@ -8,7 +8,7 @@ export interface AuthorNoteSplit {
   tail: string[];
 }
 
-const NOTE_MARKER = /^\s*(a\/n\b|an:|author'?s\s+note|note:)/i;
+const NOTE_MARKER = /^\s*(a\/n\b|an:|author['’]?s\s+note|note:)/i;
 
 export const isAuthorNoteParagraph = (paragraph: string): boolean => NOTE_MARKER.test(paragraph);
 

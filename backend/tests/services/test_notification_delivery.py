@@ -159,7 +159,7 @@ def test_released_event_is_never_sent_twice(db, sent):
     assert len(sent.push) == 1
 
 
-def test_failed_send_still_counts_as_delivered(db, sent):
+def test_failed_send_is_snapshotted_for_retry_not_recorded_as_success(db, sent):
     user = make_user(db)
     novel = make_novel(db, user)
     follow(db, user, novel)
@@ -174,6 +174,10 @@ def test_failed_send_still_counts_as_delivered(db, sent):
     assert channel.last_error == "Delivery failed"
     assert update.notified_at is not None
     assert len(sent.apprise) == 1
+    from app.models.notification_delivery import NotificationDelivery
+    attempt = db.query(NotificationDelivery).one()
+    assert attempt.status == 'retry_wait' and attempt.finished_at is None
+    assert attempt.attempt_count == 1
 
 
 def test_hidden_digest_event_waits_for_release(db, sent):

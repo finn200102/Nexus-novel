@@ -1,0 +1,6 @@
+.pronunciation-editor { margin-block: var(--space-4, 1rem); }
+.pronunciation-editor summary { cursor: pointer; font-weight: 600; padding-block: .5rem; }
+.pronunciation-editor section { display: grid; gap: .8rem; }
+.pronunciation-editor fieldset { display: grid; gap: .75rem; min-width: 0; }
+.pronunciation-editor__row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; align-items: end; gap: .6rem; }
+@media (max-width: 640px) { .pronunciation-editor__row { grid-template-columns: minmax(0, 1fr); } }

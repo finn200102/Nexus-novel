@@ -7,14 +7,13 @@ server clamps every heartbeat so a client cannot inflate the numbers.
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models.chapter import Chapter
 from app.models.novel import Novel, novel_tag
-from app.models.reading_progress import ReadingProgress
+from app.models.library import Library
 from app.models.reading_session import ReadingSessionDaily
 from app.models.tag import Tag
+from app.services.reading_activity_service import tracking_enabled,utc_today
 
 MAX_SECONDS_PER_CALL = 90
 MAX_WORDS_PER_SECOND = 10  # roughly 600 wpm, faster than any real reader
@@ -75,10 +74,13 @@ def _upsert_daily(db: Session, *, user_id: int, novel_id: int, day: date,
 def record_reading_time(db: Session, *, user_id: int, novel_id: int, seconds: int, words: int,
                         today: date | None = None) -> int:
     """Store one clamped heartbeat. Returns the seconds actually recorded."""
+    if not tracking_enabled(db,user_id):
+        db.commit()
+        return 0
     seconds, words = clamp_reading_time(seconds, words)
     if seconds == 0:
         return 0
-    _upsert_daily(db, user_id=user_id, novel_id=novel_id, day=today or date.today(), seconds=seconds, words=words)
+    _upsert_daily(db, user_id=user_id, novel_id=novel_id, day=today or utc_today(), seconds=seconds, words=words)
     db.commit()
     return seconds
 
@@ -87,13 +89,14 @@ def record_progress_crossing(db: Session, *, user_id: int, novel_id: int, chapte
                              previous_chapter: int | None, previous_percent: float, percent: float,
                              today: date | None = None) -> None:
     """Count a chapter as finished when progress first reaches FINISHED_PERCENT. Does not commit."""
+    if not tracking_enabled(db,user_id):return
     crossed = (
         previous_chapter == chapter_number
         and previous_percent < FINISHED_PERCENT
         and percent >= FINISHED_PERCENT
     )
     if crossed:
-        _upsert_daily(db, user_id=user_id, novel_id=novel_id, day=today or date.today(), chapters=1)
+        _upsert_daily(db, user_id=user_id, novel_id=novel_id, day=today or utc_today(), chapters=1)
 
 
 def _window_start(range_name: str, today: date) -> date | None:
@@ -101,13 +104,17 @@ def _window_start(range_name: str, today: date) -> date | None:
     return None if days is None else today - timedelta(days=days - 1)
 
 
-def get_summary(db: Session, *, user_id: int, range_name: str, today: date | None = None) -> dict:
+def get_summary(db: Session, *, user_id: int, range_name: str, today: date | None = None, calendar_start: date | None = None) -> dict:
     if range_name not in RANGE_DAYS:
         raise ValueError(f"unknown range: {range_name}")
-    today = today or date.today()
-    start = _window_start(range_name, today)
+    today = today or utc_today()
+    start = calendar_start or _window_start(range_name, today)
 
-    all_rows = db.query(ReadingSessionDaily).filter(ReadingSessionDaily.user_id == user_id).all()
+    measurement_query = db.query(ReadingSessionDaily).join(Novel, Novel.id == ReadingSessionDaily.novel_id).join(
+        Library, Library.id == Novel.library_id).filter(
+        ReadingSessionDaily.user_id == user_id, Library.user_id == user_id, ReadingSessionDaily.day <= today)
+    if calendar_start is not None:measurement_query=measurement_query.filter(ReadingSessionDaily.day>=calendar_start)
+    all_rows=measurement_query.all()
     per_day_seconds: dict[date, int] = defaultdict(int)
     for row in all_rows:
         per_day_seconds[row.day] += row.seconds or 0
@@ -154,7 +161,7 @@ def get_summary(db: Session, *, user_id: int, range_name: str, today: date | Non
         daily_series.append({"date": day.isoformat(), **values})
         day += timedelta(days=1)
 
-    stories_finished = _stories_finished(db, user_id=user_id, start=start)
+    completions = _completion_summary(db, user_id=user_id, start=start, today=today)
 
     top_stories = sorted(
         ({"novel_id": nid, "title": titles.get(nid, "Unknown story"), **vals} for nid, vals in per_novel.items()),
@@ -164,7 +171,8 @@ def get_summary(db: Session, *, user_id: int, range_name: str, today: date | Non
         "range": range_name,
         "start": start.isoformat() if start else None,
         "end": today.isoformat(),
-        "totals": {**totals, "stories_finished": stories_finished},
+        "totals": {**totals, **completions["totals"]},
+        "completion_history": completions["history"],
         "daily": daily_series,
         "streak": {"current": current_streak, "longest": longest_streak, "min_seconds": STREAK_MIN_SECONDS},
         "top_stories": top_stories,
@@ -179,24 +187,56 @@ def get_summary(db: Session, *, user_id: int, range_name: str, today: date | Non
     }
 
 
+def _completion_ordinal(local_ordinal: int, snapshot) -> int:
+    """An imported run keeps its original first-read/reread meaning."""
+    portable = snapshot.get("_portable_ordinal") if isinstance(snapshot, dict) else None
+    return portable if type(portable) is int and portable > 0 else local_ordinal
+
+
+def _completion_events(db,user_id):
+    from app.models.reading_run import ReadingRun, ReadingRunEvent
+    from app.services.reading_continuity_service import completion_rows,work_key
+    legacy = db.query(ReadingRunEvent.run_key, ReadingRunEvent.novel_id,
+        ReadingRunEvent.occurred_at, ReadingRunEvent.inferred, ReadingRun.ordinal, ReadingRun.progress_snapshot).join(
+        ReadingRun, (ReadingRun.run_key == ReadingRunEvent.run_key)
+        & (ReadingRun.user_id == ReadingRunEvent.user_id)
+        & (ReadingRun.novel_id == ReadingRunEvent.novel_id)).join(
+        Novel, Novel.id == ReadingRunEvent.novel_id).join(Library, Library.id == Novel.library_id).filter(
+        ReadingRunEvent.user_id == user_id, ReadingRunEvent.kind == "completed", Library.user_id == user_id, ReadingRun.continuity_key.is_(None)).all()
+    identities={novel_id:work_key(db,user_id,novel_id) for novel_id in {row[1] for row in legacy}}
+    compatible=[(*row[:5],{**(row[5] or {}),'_continuity_work_key':identities[row[1]]}) for row in legacy]
+    return completion_rows(db,user_id) + compatible
+
+
+def _completion_summary(db: Session, *, user_id: int, start: date | None, today: date, events=None) -> dict:
+    """Count immutable completion facts; undated history is all-time only."""
+    if events is None:events=_completion_events(db,user_id)
+    # Prefer known exact dates over an earlier inferred fact for the same run.
+    # Date sorting also makes contradictory duplicate imports deterministic.
+    events=sorted(events,key=lambda event:(bool(event[3] or event[2] is None),event[2] or datetime.max))
+    seen, stories = set(), set()
+    runs_finished = rereads_finished = undated_runs = 0
+    for run_key, novel_id, occurred_at, inferred, ordinal, snapshot in events:
+        if run_key in seen:
+            continue
+        seen.add(run_key)
+        undated = inferred or occurred_at is None
+        if undated:
+            undated_runs += 1
+            if start is not None:
+                continue
+        else:
+            completed_day = occurred_at.date()
+            if completed_day > today or (start is not None and completed_day < start):
+                continue
+        stories.add(snapshot.get("_continuity_work_key",novel_id) if isinstance(snapshot,dict) else novel_id)
+        runs_finished += 1
+        rereads_finished += int(_completion_ordinal(ordinal, snapshot) > 1)
+    return {"totals": {"stories_finished": len(stories), "reading_runs_finished": runs_finished,
+        "rereads_finished": rereads_finished}, "history": {"undated_runs": undated_runs,
+        "undated_runs_included": start is None}}
+
+
 def _stories_finished(db: Session, *, user_id: int, start: date | None) -> int:
-    """Stories whose last chapter reached FINISHED_PERCENT, last touched inside the window."""
-    query = db.query(ReadingProgress).filter(
-        ReadingProgress.user_id == user_id,
-        ReadingProgress.percent >= FINISHED_PERCENT,
-    )
-    if start is not None:
-        query = query.filter(ReadingProgress.updated_at >= datetime.combine(start, datetime.min.time()))
-    progress_rows = query.all()
-    if not progress_rows:
-        return 0
-    last_chapters = dict(
-        db.query(Chapter.novel_id, func.max(Chapter.chapter_number))
-        .filter(Chapter.novel_id.in_({p.novel_id for p in progress_rows}))
-        .group_by(Chapter.novel_id)
-        .all()
-    )
-    return sum(
-        1 for p in progress_rows
-        if p.chapter_number is not None and p.chapter_number == last_chapters.get(p.novel_id)
-    )
+    """Retain the existing helper contract, using durable events rather than position."""
+    return _completion_summary(db, user_id=user_id, start=start, today=date.today())["totals"]["stories_finished"]

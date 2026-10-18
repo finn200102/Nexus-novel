@@ -1,0 +1,5 @@
+.discovery-preferences-form { display: grid; gap: var(--sp-4); padding: var(--sp-4); border: 1px solid var(--border); grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); margin-bottom: var(--sp-4); }
+.recommendations-grid { list-style: none; padding: 0; display: grid; gap: var(--sp-6); grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); }
+.recommendations-grid li { padding: var(--sp-4); border: 1px solid var(--border); border-radius: var(--r-lg); }
+.recommendations-grid h2 { font-size: 1.2rem; margin-block: var(--sp-3); }
+.recommendations-grid button { margin: var(--sp-2); }

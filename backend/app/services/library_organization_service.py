@@ -248,6 +248,9 @@ def set_personal(db: Session, user: User, novel_id: int, fields: Mapping[str, An
     if "notes" in fields:
         row.notes = (fields["notes"] or "").strip() or None
     if "rating" in fields:
+        if row.rating != rating:
+            from app.services.feedback_service import record_event
+            record_event(db, user_id=user.id, novel_id=novel_id, kind="rated", value=rating)
         row.rating = rating
     if categories is not None:
         row.followed_categories = categories

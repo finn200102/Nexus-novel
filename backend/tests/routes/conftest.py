@@ -146,6 +146,10 @@ def client_with_auth(db, test_user, test_library):
             new_callable=AsyncMock,
         ) as mock_chapters_fn,
         patch(
+            "app.routers.novel.metadata_client.get_chapter_manifest",
+            new_callable=AsyncMock,
+        ) as mock_manifest,
+        patch(
             "app.routers.novel.metadata_client.get_novel_metadata",
             new_callable=AsyncMock,
         ) as mock_get_metadata,
@@ -155,6 +159,17 @@ def client_with_auth(db, test_user, test_library):
     ):
         mock_scrape.return_value = mock_scrape_response
         mock_chapters_fn.return_value = mock_chapters
+        from uuid import NAMESPACE_URL, uuid5
+        from app.services.metadata_client import ChapterManifestSnapshot
+        async def manifest(metadata_id, **_kwargs):
+            items = [{**row, 'chapter_key': str(uuid5(NAMESPACE_URL, f'fixture:{metadata_id}:{row["id"]}')),
+                      'identity_kind': 'stable_source_id', 'category': 'story',
+                      'url': f'https://synthetic.invalid/{metadata_id}/{row["id"]}'} for row in mock_chapters]
+            return ChapterManifestSnapshot(novel_id=metadata_id,
+                manifest_key=str(uuid5(NAMESPACE_URL, f'fixture-work:{metadata_id}')), revision='1', fingerprint='a' * 64,
+                identity_kind='stable_source_id', total=len(items), items=items,
+                source={'site': 'royalroad', 'story_id': 21220, 'source_url': mock_scraped_data['source_url']})
+        mock_manifest.side_effect = manifest
         mock_get_metadata.return_value = mock_scraped_data
         mock_invalidate_cache.return_value = None
 

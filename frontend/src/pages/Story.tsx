@@ -3,8 +3,13 @@ import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } 
 import { Bell, BellOff, BookOpen, ChevronDown, MoreHorizontal, Plus } from "lucide-react";
 import { Badge, Button, Cover, Dialog, EmptyState, IconButton, Input, Menu, Select, Skeleton, SkeletonGroup, Tabs, type MenuItem } from "../components/ui";
 import SourceStatusChip from "../components/common/SourceStatusChip";
+import { useChapterReadingSummary } from "../hooks/useChapterReadingSummary";
 import StoryAbout from "../components/story/StoryAbout";
 import StoryChapters from "../components/story/StoryChapters";
+import StoryAudio from "../components/story/StoryAudio";
+import StoryPrivateGuide from "../components/story/StoryPrivateGuide";
+import StoryTranslations from "../components/story/StoryTranslations";
+import StoryReadingHistory from "../components/story/StoryReadingHistory";
 import StoryDetails from "../components/story/StoryDetails";
 import StoryShelves from "../components/story/StoryShelves";
 import CompletionToggle from "../components/story/CompletionToggle";
@@ -27,7 +32,7 @@ import {
 } from "../components/story/storyModel";
 import { chapterService } from "../services/chapterService";
 import { discoveryService } from "../services/discoveryService";
-import { insightService, type CanonicalWork, type InsightSignal, type SimilarNovel, type StoryGuide } from "../services/insightService";
+import { insightService, type InsightSignal, type SimilarNovel, type StoryGuide } from "../services/insightService";
 import { novelService } from "../services/novelService";
 import { organizationService } from "../services/organizationService";
 import { getUserFacingError } from "../services/apiClient";
@@ -40,8 +45,8 @@ import type { BlocklistKind } from "../types/organization";
 import "../styles/organization.css";
 import "../styles/story.css";
 
-type TabValue = "about" | "chapters" | "notes" | "details";
-const TABS: TabValue[] = ["about", "chapters", "notes", "details"];
+type TabValue = "about" | "chapters" | "audio" | "translations" | "companion" | "history" | "notes" | "details";
+const TABS: TabValue[] = ["about", "chapters", "audio", "translations", "companion", "history", "notes", "details"];
 
 interface StoryPageProps {
   /** Library copy to show when the story has no catalog id (old library stories). */
@@ -72,7 +77,7 @@ export const StoryPage: React.FC<StoryPageProps> = ({ fallbackCopy }) => {
   });
 
   const requestedTab = searchParams.get("tab") as TabValue | null;
-  const tab: TabValue = requestedTab && TABS.includes(requestedTab) && (inLibrary || requestedTab !== "notes") ? requestedTab : "about";
+  const tab: TabValue = requestedTab && TABS.includes(requestedTab) && (inLibrary || !["notes", "audio", "translations", "companion", "history"].includes(requestedTab)) ? requestedTab : "about";
   const setTab = (next: TabValue) => {
     const params = new URLSearchParams(searchParams);
     if (next === "about") params.delete("tab");
@@ -80,7 +85,9 @@ export const StoryPage: React.FC<StoryPageProps> = ({ fallbackCopy }) => {
     setSearchParams(params, { replace: true });
   };
 
-  // Reading position: drives Continue, read marks and the spoiler cutoff of the story guide.
+  const reading = useChapterReadingSummary(copy?.novelId ?? null);
+
+  // The raw reading place remains separate from verified completed-chapter records.
   const [readThrough, setReadThrough] = useState<number | null>(null);
   useEffect(() => {
     if (!copy) {
@@ -95,13 +102,12 @@ export const StoryPage: React.FC<StoryPageProps> = ({ fallbackCopy }) => {
       active = false;
     };
   }, [copy]);
-  const guideCutoff = Math.max(0, readThrough ?? 0);
+  const guideCutoff = readThrough ?? undefined;
 
   // Insights from the catalog: writing style, similar stories, editions, story guide.
   const [signals, setSignals] = useState<InsightSignal[]>([]);
   const [analysisState, setAnalysisState] = useState("not_started");
   const [similar, setSimilar] = useState<SimilarNovel[]>([]);
-  const [editions, setEditions] = useState<CanonicalWork | null>(null);
   const [guide, setGuide] = useState<StoryGuide | null>(null);
   useEffect(() => {
     if (!storyMetadataId) return;
@@ -109,14 +115,12 @@ export const StoryPage: React.FC<StoryPageProps> = ({ fallbackCopy }) => {
     Promise.all([
       insightService.analysis(storyMetadataId).catch(() => ({ state: "not_started" as const, signals: [] })),
       insightService.similar(storyMetadataId).catch(() => ({ results: [] })),
-      insightService.editions(storyMetadataId).catch(() => null),
       insightService.storyGuide(storyMetadataId, guideCutoff).catch(() => null),
-    ]).then(([analysis, matches, work, storyGuide]) => {
+    ]).then(([analysis, matches, storyGuide]) => {
       if (!active) return;
       setSignals(analysis?.signals || []);
       setAnalysisState(analysis?.state || "not_started");
       setSimilar(matches?.results || []);
-      setEditions(work);
       setGuide(storyGuide);
     });
     return () => {
@@ -247,12 +251,12 @@ export const StoryPage: React.FC<StoryPageProps> = ({ fallbackCopy }) => {
     if (!storyMetadataId) return;
     setBusy("guide");
     try {
-      const result = await insightService.backfillStoryGuide(storyMetadataId);
-      if (!result.chapter_count) addToast("Download at least one chapter before building a story guide.", "info");
-      else if (result.queued) addToast(`Analyzing ${result.queued} downloaded chapter${result.queued === 1 ? "" : "s"} for the story guide.`, "success");
-      else addToast("Every downloaded chapter is already in the story guide.", "info");
-    } catch {
-      addToast("Could not start the story guide. Try again.", "error");
+      const result = await insightService.backfillStoryGuide(storyMetadataId, guideCutoff);
+      if (!result.chapter_count) addToast("Download at least one chapter before preparing local evidence.", "info");
+      else if (result.queued) addToast(`Queued ${result.queued} downloaded chapter${result.queued === 1 ? "" : "s"} for local evidence preparation.`, "success");
+      else addToast("Downloaded chapter evidence is already prepared or queued.", "info");
+    } catch (error) {
+      addToast(getUserFacingError(error, "Could not prepare local chapter evidence. Your saved guide is preserved."), "error");
     } finally {
       setBusy(null);
     }
@@ -332,15 +336,14 @@ export const StoryPage: React.FC<StoryPageProps> = ({ fallbackCopy }) => {
   }
 
   const site = siteLabel(view.site);
-  const facts = storyFacts(view);
+  const shownView = inLibrary && reading.summary ? { ...view, chapterCount: reading.summary.total_chapters } : view;
+  const facts = storyFacts(shownView);
   const otherLibraries = libraries.filter((library) => !entries.some((entry) => entry.library_id === library.id));
   const followState = (novel?.follow_state ?? "plan_to_read") as FollowState;
   const following = followState !== "ignored";
   const notifyPolicy = followSettings?.notification_policy ?? "immediate";
-  const continueChapter = novel?.next_unread_chapter_number ?? (readThrough && readThrough > 0 ? readThrough : null);
+  const continueChapter = reading.summary ? reading.summary.next_unread_chapter_number ?? reading.summary.current?.chapter_number ?? null : novel?.next_unread_chapter_number ?? readThrough;
   const readerBase = copy ? `/library/${copy.libraryId}/novels/${copy.novelId}` : "";
-  const totalChapters = novel?.chapter_count ?? view.chapterCount ?? 0;
-  const readCount = Math.min(readThrough ?? 0, totalChapters);
 
   const addMenuItems: MenuItem[] = (inLibrary ? otherLibraries : libraries).map((library) => ({
     label: `${inLibrary ? "Also add to" : "Add to"} ${library.name}`,
@@ -380,10 +383,10 @@ export const StoryPage: React.FC<StoryPageProps> = ({ fallbackCopy }) => {
       ]
     : [{ label: "Follow new chapters", onSelect: () => void saveFollow("reading") }];
 
-  const primaryAction = inLibrary ? (
-    <Link to={`${readerBase}/${continueChapter ?? 1}`} className="ui-button ui-button--primary ui-button--lg story-actions__primary">
+  const primaryAction = inLibrary ? continueChapter === null ? <Button variant="primary" size="lg" className="story-actions__primary" icon={<BookOpen size={18} aria-hidden="true" />} onClick={() => setTab("chapters")}>Choose a chapter</Button> : (
+    <Link to={`${readerBase}/${continueChapter}`} className="ui-button ui-button--primary ui-button--lg story-actions__primary">
       <BookOpen size={18} aria-hidden="true" />
-      {continueChapter ? `Continue · Ch. ${continueChapter}` : "Start reading"}
+      {continueChapter !== null ? `Continue · Ch. ${continueChapter}` : "Start reading"}
     </Link>
   ) : libraries.length > 1 ? (
     <Menu
@@ -404,7 +407,7 @@ export const StoryPage: React.FC<StoryPageProps> = ({ fallbackCopy }) => {
 
   const aboutPanel = (
     <StoryAbout
-      view={view}
+      view={shownView}
       inLibrary={inLibrary}
       signals={signals}
       analysisState={analysisState}
@@ -416,7 +419,10 @@ export const StoryPage: React.FC<StoryPageProps> = ({ fallbackCopy }) => {
       buildingGuide={busy === "guide"}
       onBuildGuide={() => void buildGuide()}
       onHide={(kind, value) => void hide(kind, value)}
-      progress={inLibrary ? { read: readCount, total: totalChapters } : null}
+      progress={inLibrary ? reading.summary : null}
+      progressLoading={reading.loading}
+      progressError={reading.error}
+      onRefreshProgress={() => void reading.refresh()}
       onSaveNext={() => void offline.saveBatch("next", 10)}
       savingOffline={offline.busy}
       offlineCount={offline.stored.length}
@@ -424,9 +430,10 @@ export const StoryPage: React.FC<StoryPageProps> = ({ fallbackCopy }) => {
   );
   const chaptersPanel = inLibrary && copy ? (
     <StoryChapters
+      manifestReviewRequired={novel?.chapter_manifest_review_required}
       libraryId={copy.libraryId}
       novelId={copy.novelId}
-      readThrough={readThrough}
+      onReadingSummary={reading.adopt}
       offline={offline}
       followSettings={followSettings}
       onFollowSettings={(settings) => saveFollow(followState, settings)}
@@ -449,10 +456,9 @@ export const StoryPage: React.FC<StoryPageProps> = ({ fallbackCopy }) => {
   ) : null;
   const detailsPanel = (
     <StoryDetails
-      view={view}
+      view={shownView}
       novel={novel}
       entries={entries}
-      editions={editions}
       updating={busy === "refresh"}
       onRefresh={() => void refresh()}
       onRescrape={() => void rescrape()}
@@ -463,6 +469,10 @@ export const StoryPage: React.FC<StoryPageProps> = ({ fallbackCopy }) => {
   const tabItems = [
     { value: "about" as const, label: "About", panel: aboutPanel },
     { value: "chapters" as const, label: "Chapters", panel: chaptersPanel },
+    ...(inLibrary && copy ? [{ value: "audio" as const, label: "Audio", panel: <StoryAudio libraryId={copy.libraryId} novelId={copy.novelId} /> }] : []),
+    ...(inLibrary && copy ? [{ value: "translations" as const, label: "Translations", panel: <StoryTranslations libraryId={copy.libraryId} novelId={copy.novelId} /> }] : []),
+    ...(inLibrary && copy ? [{ value: "companion" as const, label: "Private companion", panel: <StoryPrivateGuide novelId={copy.novelId} libraryId={copy.libraryId} /> }] : []),
+    ...(inLibrary && copy ? [{ value: "history" as const, label: "Reading history", panel: <StoryReadingHistory libraryId={copy.libraryId} novelId={copy.novelId} /> }] : []),
     ...(inLibrary ? [{ value: "notes" as const, label: "My notes", panel: notesPanel }] : []),
     { value: "details" as const, label: "Details", panel: detailsPanel },
   ];

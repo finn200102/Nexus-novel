@@ -1,5 +1,6 @@
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
+from uuid import uuid4
 
 from app.models.base import BaseModel
 
@@ -10,6 +11,8 @@ class PushSubscription(BaseModel):
     __tablename__ = "push_subscriptions"
     __table_args__ = (UniqueConstraint("endpoint", name="uq_push_subscription_endpoint"),)
 
+    delivery_key = Column(String(36), nullable=True, default=lambda: str(uuid4()))
+    eligibility_event_id = Column(Integer, nullable=True, default=0)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     endpoint = Column(String(2048), nullable=False)
     p256dh = Column(String(255), nullable=False)
@@ -26,6 +29,8 @@ class NotificationChannel(BaseModel):
 
     __tablename__ = "notification_channels"
 
+    delivery_key = Column(String(36), nullable=True, default=lambda: str(uuid4()))
+    eligibility_event_id = Column(Integer, nullable=True, default=0)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     kind = Column(String(20), nullable=False, default="apprise", server_default="apprise")
     url_encrypted = Column(Text, nullable=False)

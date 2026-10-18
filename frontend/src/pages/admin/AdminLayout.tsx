@@ -5,9 +5,10 @@ import "../../styles/admin.css";
 /** Admin sections. Old URLs (/operations, /scrape-jobs, /integrations) redirect here via legacyRedirects. */
 const ADMIN_SECTIONS = [
   { label: "Status", to: "/admin/status" },
+  { label: "Source packages", to: "/admin/plugins" },
   { label: "Catalog jobs", to: "/admin/jobs" },
   { label: "Users & invites", to: "/admin/users" },
-  { label: "Duplicates and webhooks", to: "/admin/duplicates" },
+  { label: "Catalog review and webhooks", to: "/admin/duplicates" },
 ];
 
 /** Shell for every admin page. Owns the single H1 ("Admin"); pages render their sections as H2. */

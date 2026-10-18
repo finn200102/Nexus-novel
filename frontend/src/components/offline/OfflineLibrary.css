@@ -1,0 +1,32 @@
+.offline-library { display: grid; gap: var(--sp-5); min-width: 0; }
+.offline-library__storage, .offline-library__story { border-top: 1px solid var(--border); padding-top: var(--sp-4); min-width: 0; }
+.offline-library__usage, .offline-library__readiness { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--sp-3); }
+.offline-library__usage dt, .offline-library__readiness dt { font-weight: 600; }
+.offline-library__usage dd, .offline-library__readiness dd { margin: var(--sp-1) 0; overflow-wrap: anywhere; }
+.offline-library__readiness ul { margin: 0; padding-left: var(--sp-4); }
+.offline-library__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); margin-block: var(--sp-3); }
+.offline-library__storage form { max-width: 28rem; }
+.offline-library__chapters { list-style: none; padding: 0; }
+.offline-library__chapter { border-bottom: 1px solid var(--border); padding-block: var(--sp-3); }
+.offline-library__chapter h3 { margin-block: var(--sp-1); overflow-wrap: anywhere; }
+.offline-library__story summary { cursor: pointer; padding-block: var(--sp-3); }
+.offline-library__cleanup-types { display: grid; gap: var(--sp-3); margin-block: var(--sp-4); }
+.offline-library__cleanup-types label { display: flex; align-items: start; gap: var(--sp-2); }
+.offline-library__cleanup-types input { flex-shrink: 0; margin-top: .2em; }
+/* Keep long story names and actions inside narrow layouts without clipping
+   labels or changing the shared focus and minimum touch-height rules. */
+.offline-library .ui-button,
+.ui-dialog:has(.offline-library__cleanup-types) .ui-button {
+  max-width: 100%; min-width: 0; white-space: normal;
+  overflow-wrap: anywhere; line-height: var(--lh-sm); padding-block: var(--sp-2);
+}
+.offline-library .ui-button__label,
+.ui-dialog:has(.offline-library__cleanup-types) .ui-button__label {
+  min-width: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere;
+}
+.offline-library__story h2, .offline-library__story summary,
+.ui-dialog:has(.offline-library__cleanup-types) .ui-dialog__title,
+.ui-dialog:has(.offline-library__cleanup-types) .ui-dialog__body {
+  min-width: 0; overflow-wrap: anywhere;
+}
+@media (max-width: 640px) { .offline-library__usage, .offline-library__readiness { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

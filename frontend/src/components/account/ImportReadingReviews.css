@@ -1,0 +1,5 @@
+.import-reading-reviews{display:grid;gap:var(--space-3,12px);min-width:0;padding-block:var(--space-3,12px)}
+.import-reading-reviews section,.import-reading-reviews li{min-width:0;overflow-wrap:anywhere}
+.import-reading-reviews li{margin-block:12px}
+.import-reading-reviews nav{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.import-reading-reviews .ui-button,.import-reading-reviews .ui-button__label{max-width:100%;white-space:normal;overflow-wrap:anywhere}

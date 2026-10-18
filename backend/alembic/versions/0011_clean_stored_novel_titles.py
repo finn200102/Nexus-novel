@@ -20,9 +20,6 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
-import re
-from urllib.parse import unquote
-
 _PLACEHOLDER_TITLES = {"scraping...", "unknown", "untitled"}
 _SMALL_WORDS = {
     "a", "an", "and", "as", "at", "by", "for", "from", "in", "of", "on", "or", "the", "to", "with",

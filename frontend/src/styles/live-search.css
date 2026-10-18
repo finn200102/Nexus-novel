@@ -37,3 +37,10 @@
   .live-search__results li { grid-template-columns: auto minmax(0, 1fr); }
   .live-search__results li > .ui-button { grid-column: 1 / -1; justify-self: start; }
 }
+.live-search__channel { display: grid; gap: var(--sp-3); min-width: 0; border-top: 1px solid var(--border); padding-top: var(--sp-4); }
+.live-search__channel h2, .live-search__channel > p { margin: 0; }
+.live-search__channel > small, .live-search__pagination-note { color: var(--text-2); font-size: var(--fs-sm); line-height: 1.5; }
+.live-search__pages { flex-wrap: wrap; }
+.live-search__text a, .live-search__channel p { overflow-wrap: anywhere; }
+.live-search .ui-button, .live-search .ui-button__label { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.live-search__fandom { display: grid; gap: var(--sp-3); padding: var(--sp-3); border: 1px solid var(--border); border-radius: var(--r-md); min-width: 0; }

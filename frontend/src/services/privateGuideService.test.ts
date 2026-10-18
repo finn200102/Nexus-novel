@@ -1,0 +1,12 @@
+import {beforeEach,describe,expect,it,vi} from 'vitest';
+import apiClient from './apiClient';
+import {privateGuideService,savePrivateGuideIntent,loadPrivateGuideIntent,hasPendingPrivateGuideIntents} from './privateGuideService';
+import {activateAccountStorage} from './accountStorage';
+vi.mock('./apiClient',()=>({default:{get:vi.fn().mockResolvedValue({data:{}}),post:vi.fn().mockResolvedValue({data:{}})}}));
+beforeEach(()=>{vi.clearAllMocks();localStorage.clear();activateAccountStorage(1);});
+describe('private guide transport contracts',()=>{
+ it('reads paged owned state without preparing work',async()=>{const abort=new AbortController();await privateGuideService.state(42,abort.signal,20);expect(apiClient.get).toHaveBeenCalledExactlyOnceWith('/reader/stories/42/guide',{signal:abort.signal,headers:{'Cache-Control':'no-cache'},params:{offset:20,limit:20}});expect(apiClient.post).not.toHaveBeenCalled();});
+ it('keeps exact reviewed input and operation identity on create and controls',async()=>{const input={provider_id:2,kind:'guide' as const,through_chapter:0,external_consent:true,ao3_consent:true,review_token:'exact-review',operation_id:'stable-create'};await privateGuideService.execute(42,{action:'create',body:input});expect(apiClient.post).toHaveBeenLastCalledWith('/reader/stories/42/guide/jobs',input);const body={expected_revision:7,operation_id:'stable-retry'};await privateGuideService.execute(42,{action:'retry',id:9,body});expect(apiClient.post).toHaveBeenLastCalledWith('/reader/stories/42/guide/jobs/9/retry',body);});
+ it('gets private image bytes by owned artifact ID rather than following provider URLs',async()=>{const abort=new AbortController();await privateGuideService.media(42,9,abort.signal);expect(apiClient.get).toHaveBeenCalledExactlyOnceWith('/reader/stories/42/guide/artifacts/9/media',{signal:abort.signal,headers:{'Cache-Control':'no-cache'},responseType:'blob'});});
+ it('partitions recovery records by instance/account and keeps them until explicit acknowledgement',()=>{const intent={action:'cancel' as const,id:9,body:{expected_revision:7,operation_id:'stable-cancel'}};savePrivateGuideIntent(42,intent);expect(hasPendingPrivateGuideIntents()).toBe(true);activateAccountStorage(2);expect(loadPrivateGuideIntent(42)).toBeNull();expect(hasPendingPrivateGuideIntents()).toBe(false);activateAccountStorage(1);expect(loadPrivateGuideIntent(42)).toEqual(intent);savePrivateGuideIntent(42,null);expect(hasPendingPrivateGuideIntents()).toBe(false);});
+});

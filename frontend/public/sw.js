@@ -1,4 +1,4 @@
-const CACHE = "nexus-shell-v3";
+const CACHE = "nexus-shell-v4";
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(["/", "/manifest.webmanifest"])));
   self.skipWaiting();
@@ -21,7 +21,9 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin || url.pathname.startsWith("/api/")) {
-    event.respondWith(fetch(request).catch(() => caches.match(request)));
+    // Private API data belongs in account-scoped stores. Never revive an
+    // unscoped response from a previous shell cache or another reader.
+    event.respondWith(fetch(request));
     return;
   }
   // Hashed bundles never change, so the app can boot offline once visited.

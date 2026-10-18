@@ -2,15 +2,19 @@ from collections import defaultdict
 from datetime import UTC, date, datetime, time, timedelta
 
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
+from app.models.chapter_manifest import ChapterManifestState
 
 from app.models.chapter import Chapter
+from app.models.user import User
+from app.models.reading_progress import ReadingProgress
 from app.models.download_job import ChapterDownloadJob
 from app.models.novel import Novel
 from app.models.novel_personal import NovelPersonalData
 from app.models.update_event import NovelUpdateEvent
 from app.services.library_organization_service import followed_categories_of
 from app.services.reading_order import last_finished_number, next_unread_chapter
-from app.services.reading_progress_service import save_reading_progress
+from app.services.reading_progress_service import save_server_selected_position
 
 
 def _bounds(start_date: date | None, end_date: date | None) -> tuple[datetime, datetime]:
@@ -61,8 +65,6 @@ def _event_chapter_numbers(event: NovelUpdateEvent) -> set[int]:
     numbers = (event.details or {}).get("chapter_numbers")
     if numbers:
         return {int(number) for number in numbers}
-    if event.first_chapter_number is not None and event.last_chapter_number is not None:
-        return set(range(event.first_chapter_number, event.last_chapter_number + 1))
     return set()
 
 
@@ -94,14 +96,31 @@ def inbox(db: Session, *, user_id: int, library_id: int) -> list[dict]:
     for novel_id, group in groups.items():
         novel = db.get(Novel, novel_id)
         personal = db.query(NovelPersonalData).filter(NovelPersonalData.user_id == user_id, NovelPersonalData.novel_id == novel_id).first()
-        numbers = set().union(*(_event_chapter_numbers(event) for event in group["events"]))
-        new_numbers = []
-        if numbers:
-            new_numbers = [number for (number,) in db.query(Chapter.chapter_number).filter(
-                Chapter.novel_id == novel_id,
-                Chapter.chapter_number.in_(numbers),
-                Chapter.category.in_(followed_categories_of(personal)),
-            ).order_by(Chapter.chapter_number).all()]
+        keys=set();numbers=set();ranges=[]
+        for event in group['events']:
+            details=event.details or {}
+            if 'chapter_keys' in details:
+                if isinstance(details['chapter_keys'],list):keys.update(key for key in details['chapter_keys'] if isinstance(key,str))
+                continue  # Explicit UUID evidence never falls back to numeric labels.
+            numbers.update(_event_chapter_numbers(event))
+            if not details.get('chapter_numbers') and event.first_chapter_number is not None and event.last_chapter_number is not None:
+                ranges.append((event.first_chapter_number,event.last_chapter_number))
+        query=db.query(Chapter.chapter_number).filter(Chapter.novel_id==novel_id,
+            Chapter.category.in_(followed_categories_of(personal)))
+        # Keep the legacy gate inside each SQL statement so a concurrent review
+        # cannot turn an earlier "legacy allowed" read into a replacement join.
+        legacy_allowed=~db.query(ChapterManifestState.novel_id).filter(
+            ChapterManifestState.novel_id==novel_id,ChapterManifestState.identity_required.is_(True)).exists()
+        found=set()
+        for values,column,legacy in ((sorted(keys),Chapter.chapter_key,False),(sorted(numbers),Chapter.chapter_number,True)):
+            for start in range(0,len(values),500):
+                selected=query.filter(column.in_(values[start:start+500]))
+                if legacy:selected=selected.filter(legacy_allowed)
+                found.update(number for number, in selected.all())
+        for start in range(0,len(ranges),100):
+            intervals=[Chapter.chapter_number.between(low,high) for low,high in ranges[start:start+100]]
+            found.update(number for number, in query.filter(legacy_allowed,or_(*intervals)).all())
+        new_numbers=sorted(found)
         if not new_numbers:
             continue
         next_chapter = next_unread_chapter(db, user_id, novel)
@@ -160,11 +179,17 @@ def catch_up(db: Session, user_id: int, novel: Novel) -> dict:
     Progress only moves forward: a user already past the latest followed chapter
     keeps their place.
     """
+    db.query(User).filter_by(id=user_id).with_for_update().first()
+    current_progress=db.query(ReadingProgress).filter_by(user_id=user_id,novel_id=novel.id).populate_existing().first()
+    if current_progress is None:
+        from app.services.reading_run_service import current_run,restore_progress
+        current_progress=restore_progress(current_run(db,user_id,novel.id))
     personal = db.query(NovelPersonalData).filter(NovelPersonalData.user_id == user_id, NovelPersonalData.novel_id == novel.id).first()
     latest = (
         db.query(Chapter)
         .filter(Chapter.novel_id == novel.id, Chapter.category.in_(followed_categories_of(personal)))
         .order_by(Chapter.chapter_number.desc())
+        .with_for_update()
         .first()
     )
     updated = mark_novel_read(db, user_id, novel.id)
@@ -172,7 +197,12 @@ def catch_up(db: Session, user_id: int, novel: Novel) -> dict:
     if latest is not None:
         furthest = last_finished_number(db, user_id, novel.id)
         if furthest is None or latest.chapter_number > furthest:
-            save_reading_progress(db, user_id=user_id, chapter=latest, position=0, percent=100)
+            from app.services.chapter_identity_service import manifest_state,state_fields
+            header=state_fields(manifest_state(db,novel.id,lock=True))
+            save_server_selected_position(db, user_id=user_id, chapter=latest, position=0, percent=100,
+                expected_chapter_key=latest.chapter_key,expected_manifest_epoch=header['manifest_epoch'],expected_manifest_revision=header['manifest_revision'],
+                expected_revision=(current_progress.revision or 0) if current_progress else 0,
+                reading_run_key=current_progress.reading_run_key if current_progress else None)
             progress_chapter = latest.chapter_number
     db.commit()
     return {"updated": updated, "progress_chapter_number": progress_chapter}
