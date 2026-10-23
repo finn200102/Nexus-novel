@@ -429,3 +429,37 @@
 /* Links to the original site (open, comments, kudos). */
 .story-hero__info .source-links { display: flex; flex-wrap: wrap; gap: var(--sp-1); margin-left: calc(-1 * var(--sp-3)); }
 .story-hero__info .source-links .ui-button { min-height: var(--control-sm, 32px); }
+
+@media (max-width:767px) {
+ .story-hero__top {grid-template-columns:72px minmax(0,1fr);gap:var(--sp-3);}
+ .story-hero__cover {width:72px;}
+ .story-hero__title {font-size:var(--fs-lg);}
+ .story-hero__badges {gap:var(--sp-1);}
+}
+.reader-finish {padding:1rem 0;}
+
+.story-download-range {
+  padding: var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  background: var(--surface);
+}
+.story-download-range > summary { cursor: pointer; font-weight: 600; }
+.story-download-range > fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-3);
+  border: 0;
+  margin: var(--sp-3) 0 0;
+  padding: 0;
+}
+.story-download-range > fieldset > .ui-field { flex: 1 1 10rem; min-width: 0; }
+.story-download-range section > ul {
+  max-height: 18rem;
+  overflow-y: auto;
+  margin: var(--sp-3) 0;
+  padding: 0;
+  list-style: none;
+}
+.story-download-range section li { padding: var(--sp-2) 0; border-bottom: 1px solid var(--border); }

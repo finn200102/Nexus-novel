@@ -267,6 +267,7 @@ const StoryGuideContent: React.FC = () => {
           <p className="novel-insights__eyebrow">Nexus story encyclopedia</p>
           <h1>AI story guide</h1>
           <p className="novel-insights__notice">{projection.safe_through_chapter == null ? "No completed chapters have verified evidence yet." : <>Verified chapter-cited knowledge through chapter <strong>{projection.safe_through_chapter}</strong>. This private reference stays bounded to your verified reading evidence.</>}</p>
+          {projection.safe_through_chapter == null && <p>Read the downloaded chapters in order. In the reader, open “Translation &amp; story companion” and select “I have finished this downloaded chapter” after reading each chapter. Then return here.</p>}
         </div>
         <div className="story-guide-page__hero-actions">
           <button className="novel-insights__browse" type="button" disabled={building || projection.safe_through_chapter == null} onClick={() => void build()}>{building ? "Queueing…" : "Prepare local chapter evidence"}</button>

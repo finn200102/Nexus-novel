@@ -1,5 +1,5 @@
 import {fixtureChapterIdentity as identity} from "../../tests/fixtures/chapterIdentity";
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Story, { LibraryStoryRedirect } from "./Story";
@@ -10,6 +10,7 @@ import { novelService } from "../services/novelService";
 import { chapterService } from "../services/chapterService";
 import { editionReviewService } from "../services/editionReviewService";
 import { organizationService } from "../services/organizationService";
+import { insightService } from "../services/insightService";
 
 vi.mock("../context/useLibraryContext", () => ({
   useLibraryContext: () => ({ libraries: [{ id: 1, name: "Main" }], activeLibraryId: 1 }),
@@ -51,6 +52,7 @@ vi.mock("../services/editionReviewService", () => ({ editionReviewService: { gro
 vi.mock("../services/insightService", () => ({
   insightService: {
     analysis: vi.fn().mockResolvedValue({ state: "not_started", signals: [] }),
+    enqueue: vi.fn(),
     similar: vi.fn().mockResolvedValue({ results: [{ novel_id: 9, title: "The Ninth Archivist", score: 0.8, explanation: "Shared tags", reasons: ["Both are slow burns"] }] }),
     editions: vi.fn().mockResolvedValue(null),
     storyGuide: vi.fn().mockResolvedValue(null),
@@ -136,6 +138,25 @@ beforeEach(() => {
 });
 
 describe("Story page", () => {
+  it("refreshes a queued writing estimate and identifies catalog-only input", async () => {
+    vi.mocked(storyService.membership).mockResolvedValue({ metadata_id: 4, library_entries: [], support_links: [] });
+    vi.mocked(insightService.analysis).mockResolvedValue({state:'not_started',signals:[]});
+    vi.mocked(insightService.enqueue).mockResolvedValue({queued:true});
+    const view=renderAt('/story/4');
+    await screen.findByRole('heading',{level:1,name:'The Quiet Ledger'});
+    fireEvent.click(screen.getByText('Writing style (estimated)'));
+    const estimate=await screen.findByRole('button',{name:'Estimate writing style'});
+    vi.useFakeTimers();
+    try {
+      await act(async()=>{fireEvent.click(estimate);});
+      expect(screen.getByRole('button',{name:'Estimate queued'})).toBeDisabled();
+      vi.mocked(insightService.analysis).mockResolvedValue({state:'completed',signal_scope:'metadata',signals:[{family:'readability',value:'moderate',evidence:{},model_version:'local'}]});
+      await act(async()=>{await vi.advanceTimersByTimeAsync(3000);});
+      expect(screen.getByText('moderate')).toBeVisible();
+      expect(screen.getByText(/downloaded chapter prose was not used/)).toBeVisible();
+      view.unmount();
+    } finally {vi.useRealTimers();}
+  });
   it("renders a catalog-only story with Add to library and no library tabs", async () => {
     vi.mocked(storyService.membership).mockResolvedValue({ metadata_id: 4, library_entries: [], support_links: [] });
     vi.mocked(discoveryService.addToLibrary).mockResolvedValue({ id: 11 });

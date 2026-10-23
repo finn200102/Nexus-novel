@@ -15,7 +15,7 @@ export type SavedChapterVersion = ReaderChapterContent;
 export type ChapterReadingSummary = import("../generated/api").ChapterReadingSummaryResponse;
 export type ChapterReadingPage = import("../generated/api").ChapterReadingPageResponse;
 export type ChapterReadingItem = import("../generated/api").ChapterReadingItemResponse;
-export type ChapterReadingQuery = { offset?: number; limit?: number; q?: string; category_scope?: "all" | "followed" };
+export type ChapterReadingQuery = { offset?: number; limit?: number; q?: string; category_scope?: "all" | "followed"; from_chapter?:number;to_chapter?:number };
 
 const revisionKey = (novelId: number) => `progress-revision:${novelId}`;
 const revisionFor = (novelId: number) => Number(accountStorage.getItem(revisionKey(novelId)) || 0);
@@ -313,6 +313,10 @@ export const chapterService = {
   },
   async createReadingAnnotation(novelId: number, annotation: ReadingAnnotationCreate): Promise<ReadingAnnotationResponse> {
     const response = await apiClient.post(`/chapter/annotations/${novelId}`, annotation);
+    return response.data;
+  },
+  async updateReadingAnnotation(annotationId: number, update: { note: string | null; expected_chapter_key: string; expected_manifest_epoch: string; expected_manifest_revision: string; expected_content_version: string }): Promise<ReadingAnnotationResponse> {
+    const response = await apiClient.patch(`/chapter/annotations/${annotationId}`, update);
     return response.data;
   },
   async deleteReadingAnnotation(annotationId: number) {

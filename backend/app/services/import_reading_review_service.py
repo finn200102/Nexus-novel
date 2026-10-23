@@ -3,6 +3,7 @@ from copy import deepcopy
 from datetime import UTC,date,datetime,timedelta
 from hashlib import sha256
 import json
+import re
 from uuid import uuid4
 from fastapi import HTTPException
 from sqlalchemy import or_
@@ -13,6 +14,37 @@ from app.services import chapter_identity_service as identities
 
 def digest(value):return sha256(json.dumps(value,sort_keys=True,separators=(',',':'),default=str).encode()).hexdigest()
 def conflict(message):raise HTTPException(409,detail={'code':'import_reading_changed','message':message})
+
+
+def _restored_document(raw, content, expected_version):
+    """Sanitize each block while preserving verified stable local block IDs."""
+    from app.services.chapter_document import content_version,from_html,from_text
+    if not raw:
+        document=from_text(content)
+        if document['content_version']!=expected_version:raise ValueError
+        return document
+    blocks=raw.get('blocks')
+    if not isinstance(blocks,list) or not blocks:raise ValueError
+    clean=[];seen_ids=set()
+    for block in blocks:
+        if not isinstance(block,dict) or not isinstance(block.get('html'),str):raise ValueError
+        identity=block.get('id')
+        if not isinstance(identity,str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,128}',identity) or identity in seen_ids:raise ValueError
+        seen_ids.add(identity)
+        fragment=from_html(block['html'])['blocks']
+        if len(fragment)!=1:raise ValueError
+        safe=fragment[0];safe['id']=identity
+        if block.get('role')=='author_note':
+            provenance=block.get('role_provenance')
+            if provenance not in ('source','heuristic'):raise ValueError
+            safe.update(role='author_note',role_provenance=provenance)
+        elif block.get('role') is not None:raise ValueError
+        clean.append(safe)
+    version=content_version(clean)
+    if version!=expected_version:raise ValueError
+    return {'schema_version':1,'blocks':clean,'content_version':version,
+        'source_format':raw['source_format'] if isinstance(raw.get('source_format'),str) and len(raw['source_format'])<=32 else 'html',
+        'plain_text':'\n\n'.join(block['text'] for block in clean)}
 
 
 def owned(db,user,review_id,lock=False):
@@ -54,9 +86,14 @@ def normalize_payload(value):
     return value
 
 
-def stage(db,user,novel,item,run_mapping):
+def stage(db,user,novel,item,run_mapping,private_originals=None,backup_placeholder_keys=None):
     payload=normalize_payload(item.model_dump(mode='json',by_alias=True))
     if not payload['chapter_refs']:return None
+    if private_originals:
+        payload['_private_originals']=deepcopy(private_originals)
+        if backup_placeholder_keys:payload['_backup_placeholder_keys']=deepcopy(backup_placeholder_keys)
+        if len(json.dumps(payload,ensure_ascii=False,default=str).encode())>32*1024*1024:
+            raise HTTPException(413,'This story’s backup chapter material exceeds the 32 MiB review limit; split the backup by story.')
     fingerprint=digest(payload)
     from app.models.reading_run import ReadingRun
     row=db.query(ImportReadingReview).filter_by(user_id=user.id,novel_id=novel.id,fingerprint=fingerprint).first()
@@ -124,9 +161,14 @@ def view(db,row,offset=0,limit=50):
         return chapter is not None and chapter.manifest_epoch==bound.get('manifest_epoch') and identities.source_version(chapter)==bound.get('source_version') and bool(chapter.archived)==bool(bound.get('archived'))
     for ref in refs[offset:offset+limit]:
         choices,truncated=candidates(db,row.novel_id,ref)
-        items.append(dict(reference=ref,applied=valid(ref),candidates=choices,candidates_truncated=truncated))
+        original=(row.payload.get('_private_originals') or {}).get(ref['ref'])
+        items.append(dict(reference=ref,applied=valid(ref),candidates=choices,candidates_truncated=truncated,
+            archived_body_available=bool(original and original.get('kind')=='current'),
+            retained_originals=len(original.get('versions',[])) if original else 0,
+            backup_placeholder_key=(row.payload.get('_backup_placeholder_keys') or {}).get(ref['ref'])))
     novel=db.query(Novel).filter_by(id=row.novel_id).first()
-    return dict(id=row.id,novel_id=row.novel_id,novel_title=novel.title if novel else None,library_name=novel.library.name if novel and novel.library else None,revision=row.revision,total=len(refs),applied=len(applied),offset=offset,limit=limit,items=items,warnings=(["This private original is not stored here yet. For an EPUB, upload the same EPUB into this library, then explicitly match its restored chapters. No original files or sources are fetched by this review."] if novel and novel.scrape_status=='awaiting_original' else [])+(["You kept the existing reading place. The imported place remains preserved in this review and future exports."] if row.payload.get('_progress_outcome')=='kept_by_reader' else [])+['Imported checkpoints are inferred history, never verified reading evidence.','Chapter numbers, titles and matching text only suggest candidates. Review each foreign binding.','Unselected material stays private in this review, including its original locators.'])
+    awaiting_warning=(['A full backup contains chapter text. Match each archived chapter to an empty owned chapter and explicitly choose which bodies to restore.'] if row.payload.get('_private_originals') else ['This private original is not stored here yet. For an EPUB, upload the same EPUB into this library, then explicitly match its restored chapters. No original files or sources are fetched by this review.']) if novel and novel.scrape_status=='awaiting_original' else []
+    return dict(id=row.id,novel_id=row.novel_id,novel_title=novel.title if novel else None,library_name=novel.library.name if novel and novel.library else None,revision=row.revision,total=len(refs),applied=len(applied),offset=offset,limit=limit,items=items,warnings=awaiting_warning+(["You kept the existing reading place. The imported place remains preserved in this review and future exports."] if row.payload.get('_progress_outcome')=='kept_by_reader' else [])+['Imported checkpoints are inferred history, never verified reading evidence.','Chapter numbers, titles and matching text only suggest candidates. Review each foreign binding.','Unselected material stays private in this review, including its original locators.'])
 
 
 def target_fingerprint(db,row):
@@ -143,20 +185,45 @@ def preview(db,user,row,body,*,commit=True):
     row=owned(db,user,row.id,True)
     if row.revision!=body.expected_revision:conflict('This imported review changed. Refresh before choosing chapter bindings.')
     refs={ref['ref']:ref for ref in row.payload['chapter_refs']};mapping={};versions={};warnings=[]
+    private_originals=row.payload.get('_private_originals') or {}
+    restoring_targets={}
+    for choice in body.mappings:
+        if not choice.restore_archived_content:continue
+        archived=private_originals.get(choice.ref)
+        if not archived or archived.get('kind')!='current' or archived.get('source_version')!=refs.get(choice.ref,{}).get('source_version'):
+            raise HTTPException(422,'This reference has no verified full-backup chapter body to restore')
+        previous=restoring_targets.get(str(choice.chapter_key))
+        if previous and previous!=archived['source_version']:
+            raise HTTPException(422,'Choose at most one archived body for each owned chapter')
+        restoring_targets[str(choice.chapter_key)]=archived['source_version']
     for choice in body.mappings:
         if choice.ref in mapping or choice.ref not in refs:raise HTTPException(422,'Select each unresolved chapter reference once')
         chapter=_chapter(db,row.novel_id,str(choice.chapter_key),True);version=identities.source_version(chapter)
-        changed=not refs[choice.ref].get('source_version') or refs[choice.ref]['source_version']!=version
-        if changed and not choice.confirm_changed_content:raise HTTPException(422,'Review changed or unknown source text explicitly; original annotation quotes and version provenance will be retained')
-        mapping[choice.ref]=dict(chapter_key=chapter.chapter_key,changed_content=changed,source_version=version,manifest_epoch=chapter.manifest_epoch,archived=bool(chapter.archived))
+        original=private_originals.get(choice.ref)
+        restoring=bool(choice.restore_archived_content)
+        if restoring:
+            from app.models.chapter import ContentStatus
+            if not original or original.get('kind')!='current':raise HTTPException(422,'This reference has no restorable full-backup chapter body')
+            if chapter.content_status not in (ContentStatus.MISSING,ContentStatus.FAILED) or (chapter.content or '').strip() or chapter.document:
+                raise HTTPException(409,'This chapter already has original content. Full-backup restore never replaces existing text.')
+            if original.get('source_version')!=refs[choice.ref].get('source_version'):
+                raise HTTPException(422,'The archived chapter body does not match its immutable source-version evidence')
+        restored_version=restoring_targets.get(chapter.chapter_key)
+        changed=(refs[choice.ref].get('source_version')!=restored_version) if restored_version else (not refs[choice.ref].get('source_version') or refs[choice.ref]['source_version']!=version)
+        if changed and not (restoring or choice.confirm_changed_content):raise HTTPException(422,'Review changed or unknown source text explicitly; original annotation quotes and version provenance will be retained')
+        mapping[choice.ref]=dict(chapter_key=chapter.chapter_key,changed_content=False if restoring else changed,
+            source_version=restored_version or version,
+            target_version_before=version,restore_archived_content=restoring,
+            manifest_epoch=chapter.manifest_epoch,archived=bool(chapter.archived))
         versions[chapter.chapter_key]=version
-        if changed:warnings.append('Changed or unknown text: block locators will not be attached to the selected current original.')
+        if restoring:warnings.append('The selected empty owned chapter will receive its archived text and retained originals after you confirm this review.')
+        elif changed:warnings.append('Changed or unknown text: block locators will not be attached to the selected current original.')
     if not mapping:raise HTTPException(422,'Choose at least one unresolved chapter reference')
     state=identities.manifest_state(db,row.novel_id,lock=True)
     existing=db.query(ReadingProgress).filter_by(user_id=user.id,novel_id=row.novel_id).first()
     if existing is not None and row.payload.get('progress') and not row.payload.get('_progress_applied') and not body.keep_existing_place:
         raise HTTPException(422,'This story already has a saved reading place. Explicitly choose to keep it before applying imported bindings; the imported place remains in this review.')
-    value=dict(keep_existing_place=body.keep_existing_place,token=str(uuid4()),expires_at=(datetime.now(UTC)+timedelta(minutes=15)).isoformat(),revision=row.revision,mappings=mapping,versions=versions,manifest_epoch=state.manifest_epoch,manifest_revision=str(state.revision),target=target_fingerprint(db,row))
+    value=dict(keep_existing_place=body.keep_existing_place,token=str(uuid4()),expires_at=(datetime.now(UTC)+timedelta(minutes=15)).isoformat(),revision=row.revision,mappings=mapping,versions=versions,restoring_targets=restoring_targets,manifest_epoch=state.manifest_epoch,manifest_revision=str(state.revision),target=target_fingerprint(db,row))
     row.preview=value
     db.flush()
     if commit:db.commit()
@@ -195,10 +262,61 @@ def apply(db,user,row,body,*,commit=True):
     payload=deepcopy(row.payload);runmap=payload.get('_run_mapping',{})
     # Every previously bound prerequisite is checked again when a later partial
     # review uses it. A cached UUID alone never blesses a new body or archive.
-    for bound in known.values():
+    for ref,bound in known.items():
+        if ref in selected and bound['chapter_key'] in plan.get('restoring_targets',{}):
+            continue
         original=chapters[bound['chapter_key']]
         if bound.get('manifest_epoch')!=state.manifest_epoch or bound.get('source_version')!=identities.source_version(original) or bool(bound.get('archived'))!=bool(original.archived):
             conflict('An earlier imported binding changed. Select that original reference again and review the new source text before continuing.')
+    # Recheck and restore only explicitly selected archived bodies. Validation
+    # precedes all writes, and the selected target must still be an empty slot.
+    from app.models.chapter import ContentStatus
+    from app.models.chapter_version import ChapterVersion
+    for ref,entry in selected.items():
+        if not entry.get('restore_archived_content'):continue
+        archived_body=payload.get('_private_originals',{}).get(ref)
+        chapter=chapters[entry['chapter_key']]
+        if not archived_body or archived_body.get('kind')!='current' or archived_body.get('source_version')!=row.payload['chapter_refs'][next(i for i,item in enumerate(row.payload['chapter_refs']) if item['ref']==ref)].get('source_version'):
+            conflict('The archived chapter evidence is incomplete. Its text remains in this private review.')
+        if chapter.content_status not in (ContentStatus.MISSING,ContentStatus.FAILED) or (chapter.content or '').strip() or chapter.document:
+            conflict('The selected chapter now contains text. Its existing original was preserved; review another empty chapter.')
+        try:
+            content=archived_body.get('content','')
+            document=_restored_document(archived_body.get('document'),content,archived_body['source_version'])
+        except Exception:
+            raise HTTPException(422,'The archived chapter did not pass sanitization and source-version checks; nothing was restored.') from None
+        archived_body['_validated_document']=document
+        archived_body['_validated_content']=content
+    for ref,entry in selected.items():
+        if not entry.get('restore_archived_content'):continue
+        archived_body=payload['_private_originals'][ref]
+        chapter=chapters[entry['chapter_key']]
+        chapter.content=archived_body['_validated_content'];chapter.document=archived_body['_validated_document']
+        chapter.content_status=ContentStatus.PRESENT;chapter.word_count=archived_body.get('word_count')
+        chapter.download_error=None;chapter.download_finished_at=datetime.now(UTC).replace(tzinfo=None)
+        archived_body.pop('_validated_document',None);archived_body.pop('_validated_content',None)
+        for saved in archived_body.get('versions',[]):
+            if not isinstance(saved,dict) or not re.fullmatch(r'[0-9a-f]{64}',str(saved.get('source_version',''))):
+                raise HTTPException(422,'A retained chapter original is malformed; no restore was applied')
+            exists=db.query(ChapterVersion).filter_by(chapter_key=chapter.chapter_key,content_version=saved['source_version']).first()
+            if exists:continue
+            try:
+                restored=_restored_document(saved.get('document'),saved.get('content',''),saved['source_version'])
+                saved_content=saved.get('content','')
+            except Exception:
+                raise HTTPException(422,'A retained chapter original failed sanitization; no restore was applied') from None
+            db.add(ChapterVersion(chapter_id=chapter.id,chapter_key=chapter.chapter_key,content_version=saved['source_version'],
+                title=(saved.get('title') or chapter.title),source_url=saved.get('source_url'),content=saved_content,document=restored,
+                byte_count=len(saved_content.encode()),reason=saved.get('version_reason') or 'backup_restore'))
+    if any(entry.get('restore_archived_content') for entry in selected.values()):
+        for entry in selected.values():
+            version=plan.get('restoring_targets',{}).get(entry['chapter_key'])
+            if version:
+                entry['source_version']=version
+                entry['manifest_epoch']=state.manifest_epoch
+                entry['archived']=bool(chapters[entry['chapter_key']].archived)
+        known={**(row.applied_refs or {}),**selected}
+        db.flush()
     for index,item in enumerate(payload.get('history',[])):
         ref=item.get('chapter_ref')
         if ref not in selected:continue

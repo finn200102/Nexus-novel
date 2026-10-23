@@ -6,8 +6,9 @@ import { MAIN_NAV, isCurrent, unreadLabel } from "./navItems";
 import { ProfileMenu } from "./ProfileMenu";
 
 /** Desktop navigation (≥ 768 px): full sidebar from 1280 px, labelled icon rail below. */
-export function Sidebar({ unreadCount }: { unreadCount: number }) {
-  const { pathname } = useLocation();
+export function Sidebar({ unreadCount, activePath }: { unreadCount: number;activePath?:string }) {
+  const location = useLocation();
+  const pathname=activePath??location.pathname;
   const { user } = useAuth();
   const adminCurrent = isCurrent(pathname, "/admin", ["/admin"]);
 

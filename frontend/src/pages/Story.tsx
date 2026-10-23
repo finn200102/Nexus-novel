@@ -36,6 +36,7 @@ import { insightService, type InsightSignal, type SimilarNovel, type StoryGuide 
 import { novelService } from "../services/novelService";
 import { organizationService } from "../services/organizationService";
 import { getUserFacingError } from "../services/apiClient";
+import { storageGeneration } from "../services/accountStorage";
 import { useLibraryContext } from "../context/useLibraryContext";
 import { useToast } from "../context/useToast";
 import { usePageTitle } from "../hooks/usePageTitle";
@@ -69,11 +70,14 @@ export const StoryPage: React.FC<StoryPageProps> = ({ fallbackCopy }) => {
   const data = useStoryData(metadataId, preferredCopy, fallbackCopy ?? null);
   const { catalog, novel, copy, entries, followSettings, setNovel, setFollowSettings } = data;
   const view = useMemo(() => toStoryView(catalog, novel), [catalog, novel]);
+  const storyLocation=useLocation();
+  const requestedReturn=(storyLocation.state as {libraryReturn?:unknown}|null)?.libraryReturn;
+  const libraryReturn=typeof requestedReturn==="string"&&/^\/library(?:\?|$)/.test(requestedReturn)?requestedReturn:"/library";
   const inLibrary = !!(novel && copy);
   const storyMetadataId = view.metadataId;
 
   usePageTitle(data.loading ? null : data.restricted ? "Not available" : data.notFound ? "Story not found" : view.title, {
-    back: inLibrary ? { to: "/library", label: "Back to Library" } : { to: "/discover", label: "Back to Discover" },
+    back: inLibrary ? { to: libraryReturn, label: "Back to Library" } : { to: "/discover", label: "Back to Discover" },
   });
 
   const requestedTab = searchParams.get("tab") as TabValue | null;
@@ -107,6 +111,7 @@ export const StoryPage: React.FC<StoryPageProps> = ({ fallbackCopy }) => {
   // Insights from the catalog: writing style, similar stories, editions, story guide.
   const [signals, setSignals] = useState<InsightSignal[]>([]);
   const [analysisState, setAnalysisState] = useState("not_started");
+  const [analysisScope, setAnalysisScope] = useState<"metadata" | "chapter_sample" | null>(null);
   const [similar, setSimilar] = useState<SimilarNovel[]>([]);
   const [guide, setGuide] = useState<StoryGuide | null>(null);
   useEffect(() => {
@@ -120,6 +125,7 @@ export const StoryPage: React.FC<StoryPageProps> = ({ fallbackCopy }) => {
       if (!active) return;
       setSignals(analysis?.signals || []);
       setAnalysisState(analysis?.state || "not_started");
+      setAnalysisScope("signal_scope" in analysis ? analysis.signal_scope ?? null : null);
       setSimilar(matches?.results || []);
       setGuide(storyGuide);
     });
@@ -127,6 +133,32 @@ export const StoryPage: React.FC<StoryPageProps> = ({ fallbackCopy }) => {
       active = false;
     };
   }, [storyMetadataId, guideCutoff]);
+
+  useEffect(() => {
+    if (!storyMetadataId || !["queued", "running"].includes(analysisState)) return;
+    let active = true, attempts = 0;
+    const generation = storageGeneration();
+    let timer: ReturnType<typeof setTimeout>;
+    const current = () => active && generation === storageGeneration();
+    const poll = async () => {
+      let failed = false;
+      try {
+        const result = await insightService.analysis(storyMetadataId);
+        if (!current()) return;
+        if (result.state === "completed" || result.state === "failed") {
+          setSignals(result.signals || []);
+          setAnalysisScope(result.signal_scope ?? null);
+          setAnalysisState(result.state);
+          return;
+        }
+      } catch { failed = true; }
+      if (!current()) return;
+      if (++attempts < 40) timer = setTimeout(() => void poll(), 3000);
+      else addToast(failed ? "Could not refresh the writing-style estimate. Reload this page to check its status." : "The writing-style estimate is still pending. Reload this page to check its status.", failed ? "error" : "info");
+    };
+    timer = setTimeout(() => void poll(), 3000);
+    return () => { active = false; clearTimeout(timer); };
+  }, [storyMetadataId, analysisState, addToast]);
 
   const offline = useOfflineCopies(copy?.libraryId ?? 0, copy?.novelId ?? 0);
 
@@ -248,7 +280,7 @@ export const StoryPage: React.FC<StoryPageProps> = ({ fallbackCopy }) => {
   };
 
   const buildGuide = async () => {
-    if (!storyMetadataId) return;
+    if (!storyMetadataId || guide?.through_chapter == null) return;
     setBusy("guide");
     try {
       const result = await insightService.backfillStoryGuide(storyMetadataId, guideCutoff);
@@ -411,6 +443,7 @@ export const StoryPage: React.FC<StoryPageProps> = ({ fallbackCopy }) => {
       inLibrary={inLibrary}
       signals={signals}
       analysisState={analysisState}
+      analysisScope={analysisScope}
       enriching={busy === "enrich"}
       onEnrich={() => void enrich()}
       similar={similar}
@@ -479,6 +512,7 @@ export const StoryPage: React.FC<StoryPageProps> = ({ fallbackCopy }) => {
 
   return (
     <div className="story">
+      <nav aria-label="Story navigation">{copy ? <Link to={libraryReturn==="/library"?`/library?library=${copy.libraryId}`:libraryReturn}>Back to my library</Link> : <Link to="/discover">Back to Discover</Link>}{copy && <> · <Link to={`/search?novel_id=${copy.novelId}`}>Search this book</Link></>}</nav>
       <header className="story-hero">
         <div className="story-hero__top">
           <div className="story-hero__cover">
@@ -550,6 +584,7 @@ export const StoryPage: React.FC<StoryPageProps> = ({ fallbackCopy }) => {
           </div>
         </div>
       </header>
+      {inLibrary && followState==="plan_to_read" && <p>You planned to read this story. <Button disabled={busy==="follow"} onClick={()=>void saveFollow("reading")}>Mark as reading</Button></p>}
 
       <Tabs label="Story sections" items={tabItems} value={tab} onChange={setTab} sticky className="story-tabs" />
 
@@ -610,7 +645,7 @@ const Story: React.FC = () => {
  */
 export const LibraryStoryRedirect: React.FC = () => {
   const { libraryId, novelId } = useParams<{ libraryId: string; novelId: string }>();
-  const { search, hash } = useLocation();
+  const { search, hash, state } = useLocation();
   const [target, setTarget] = useState<{ to: string | null } | null>(null);
   useEffect(() => {
     let active = true;
@@ -625,7 +660,7 @@ export const LibraryStoryRedirect: React.FC = () => {
   if (!target) return <div className="story" aria-busy="true" />;
   if (target.to) {
     const extra = search.replace(/^\?/, "");
-    return <Navigate replace to={`${extra ? `${target.to}&${extra}` : target.to}${hash}`} />;
+    return <Navigate replace state={state} to={`${extra ? `${target.to}&${extra}` : target.to}${hash}`} />;
   }
   return <StoryPage key={`${libraryId}-${novelId}`} fallbackCopy={{ libraryId: Number(libraryId), novelId: Number(novelId) }} />;
 };

@@ -23,6 +23,7 @@ PROVIDER_CAPABILITIES = [
     {"id": "qwen3_mlx_4bit", "label": "Qwen3-TTS 1.7B · experimental", "execution_mode": "browser", "safe_segment_size": 350, "experimental": True, "response_formats": ["wav"]},
     {"id": "spark_tts_mlx", "label": "Spark-TTS 0.5B · experimental", "execution_mode": "browser", "safe_segment_size": 380, "experimental": True, "response_formats": ["wav"]},
     {"id": "qwen3_clone", "label": "My cloned narrator · local Qwen3", "execution_mode": "server", "safe_segment_size": 350, "experimental": True, "response_formats": ["wav"]},
+    {"id": "fish_clone", "label": "My cloned narrator · Fish Audio", "execution_mode": "server", "safe_segment_size": 350, "experimental": True, "response_formats": ["wav"]},
     {"id": "custom", "label": "Custom OpenAI-compatible API", "execution_mode": "server", "safe_segment_size": 900, "experimental": False, "response_formats": ["wav", "mp3"]},
 ]
 
@@ -59,7 +60,19 @@ def split_text(text: str, maximum: int) -> list[str]:
     return chunks
 
 
-def queue_audio_job(db: Session, *, user_id: int, library_id: int, novel_id: int, chapter: Chapter, provider: dict, voice_profile_id: int | None = None, include_author_notes: bool = False, pronunciation: dict | None = None, identity_expectations: dict | None = None) -> ChapterAudioJob:
+def qwen_generation_settings(provider_id: str, chunk_size: int | None) -> tuple[int | None, int | None]:
+    if provider_id != "qwen3_clone":
+        if chunk_size is not None:
+            raise ValueError("Chunk size can only be selected for the local Qwen narrator.")
+        return None, None
+    size = 350 if chunk_size is None else chunk_size
+    if type(size) is not int or size not in (350, 800, 1500, 3000):
+        raise ValueError("Choose a Qwen chunk size of 350, 800, 1500 or 3000 characters.")
+    return size, 2400 if size == 3000 else 1200
+
+
+def queue_audio_job(db: Session, *, user_id: int, library_id: int, novel_id: int, chapter: Chapter, provider: dict, voice_profile_id: int | None = None, include_author_notes: bool = False, pronunciation: dict | None = None, identity_expectations: dict | None = None, preparation_provider_id: int | None = None, qwen_chunk_size: int | None = None) -> ChapterAudioJob:
+    chunk_size, token_limit = qwen_generation_settings(provider.get("id", "custom"), qwen_chunk_size)
     from app.services.audio_identity_service import capture
     captured = capture(db, user_id, chapter, identity_expectations)
     if chapter.novel_id != novel_id or chapter.novel.library_id != library_id:
@@ -77,13 +90,15 @@ def queue_audio_job(db: Session, *, user_id: int, library_id: int, novel_id: int
         from app.services.audio_identity_service import require_dispatch
         require_dispatch(db, active)
         return active
+    from app.services.audio_preparation import snapshot as preparation_snapshot
+    preparation, preparation_version = preparation_snapshot(db, user_id, preparation_provider_id, provider.get("id", "custom"))
     capability = capability_for(provider.get("id", "custom"))
     from app.services.audio_alignment import plan_passages
     from app.services.chapter_version_service import document_for, retain_current
     document = document_for(chapter)
     from app.services.pronunciation_service import snapshot as pronunciation_snapshot
     pronunciation = pronunciation if pronunciation is not None else pronunciation_snapshot(db, user_id, novel_id)
-    chunks = plan_passages(document, chapter.title, capability["safe_segment_size"], include_author_notes=include_author_notes, pronunciation_rules=pronunciation["effective_rules"])
+    chunks = plan_passages(document, chapter.title, chunk_size or capability["safe_segment_size"], include_author_notes=include_author_notes, pronunciation_rules=pronunciation["effective_rules"], coalesce=chunk_size is not None and chunk_size > 350)
     if not chunks:
         raise ValueError("This chapter has no text to turn into audio.")
     job = ChapterAudioJob(
@@ -91,10 +106,11 @@ def queue_audio_job(db: Session, *, user_id: int, library_id: int, novel_id: int
         voice_profile_id=voice_profile_id, provider_id=provider.get("id", "custom"), provider_url=provider["base_url"],
         provider_model=provider["model"], provider_voice=provider["voice"],
         provider_language=provider.get("language_code"), total_parts=len(chunks),
+        qwen_chunk_size=chunk_size, generation_token_limit=token_limit,
         source_version=document["content_version"], chapter_key=captured["chapter_key"],
         manifest_epoch=captured["manifest_epoch"], manifest_revision=captured["manifest_revision"],
         chapter_title_snapshot=chapter.title, chapter_number_snapshot=chapter.chapter_number, identity_inferred=False,
-        include_author_notes=include_author_notes,
+        include_author_notes=include_author_notes, preparation=preparation, preparation_version=preparation_version,
         pronunciation_version=pronunciation["effective_version"], pronunciation_rules=pronunciation["effective_rules"],
         next_attempt_at=datetime.now(UTC).replace(tzinfo=None),
     )
@@ -170,7 +186,8 @@ def _write_wav_parts(parts: list[Path], final_path: Path) -> int:
     if not parts:
         raise ValueError("No audio segments were created")
     parameters = None
-    with wave.open(str(final_path), "wb") as writer:
+    temporary = final_path.with_suffix(".pending.wav")
+    with wave.open(str(temporary), "wb") as writer:
         for path in parts:
             with wave.open(str(path), "rb") as reader:
                 current = (reader.getnchannels(), reader.getsampwidth(), reader.getframerate(), reader.getcomptype())
@@ -187,6 +204,7 @@ def _write_wav_parts(parts: list[Path], final_path: Path) -> int:
                         raise ValueError("Provider returned truncated WAV audio")
                     writer.writeframesraw(data)
                     remaining -= count
+    temporary.replace(final_path)
     return final_path.stat().st_size
 
 
@@ -232,21 +250,35 @@ def process_audio_job(job_id: int, session_factory) -> None:
         parts = db.query(ChapterAudioPart).filter(ChapterAudioPart.job_id == job.id).order_by(ChapterAudioPart.part_index).all()
         directory = _job_directory(job)
         try:
-            with heartbeat(session_factory, ChapterAudioJob, job.id, job.lease_owner), httpx.Client(timeout=httpx.Timeout(960.0 if job.provider_id == "qwen3_clone" else 120.0, connect=8.0)) as client:
+            with heartbeat(session_factory, ChapterAudioJob, job.id, job.lease_owner), httpx.Client(timeout=httpx.Timeout(960.0 if job.provider_id in {"qwen3_clone", "fish_clone"} else 120.0, connect=8.0), trust_env=False) as client:
+                for part in parts:
+                    if job.preparation and part.synthesis_text is None:
+                        from app.services.audio_preparation import prepare
+                        def authorize_preparation():
+                            if not _owns_audio_job(db, job_id, owner, attempt):
+                                raise ValueError("Narration was cancelled or its original changed")
+                        prepared = prepare(db, job, part, authorize_preparation)
+                        if not _owns_audio_job(db, job_id, owner, attempt):
+                            return
+                        part.synthesis_text = prepared
+                        db.commit()
                 for part in parts:
                     if part.status == "completed":
                         continue
                     if not _owns_audio_job(db, job_id, owner, attempt):
                         return
+                    spoken = part.synthesis_text if part.synthesis_text is not None else part.text
                     db.commit()  # authorization is committed before provider I/O; publication rechecks it.
-                    if job.provider_id == "qwen3_clone":
-                        from app.services.voice_service import owned_ready, bridge_config, request_payload
+                    if job.provider_id in {"qwen3_clone", "fish_clone"}:
+                        from app.services.voice_service import owned_ready, bridge_for_model, request_payload
                         profile = owned_ready(db, job.voice_profile_id, job.user_id)
-                        url, headers = bridge_config()
-                        response = client.post(url + "/v1/audio/speech", json=request_payload(profile, input=part.text), headers=headers)
+                        url, headers = bridge_for_model(profile.model)
+                        if profile.model != job.provider_model:
+                            raise ValueError("Narrator model changed; queue a new recording")
+                        response = client.post(url + "/v1/audio/speech", json=request_payload(profile, input=spoken, **({"max_tokens": job.generation_token_limit or 1200} if job.provider_id == "qwen3_clone" else {})), headers=headers)
                     else:
                         response = client.post(speech_url(job.provider_url), json={
-                        "model": job.provider_model, "voice": job.provider_voice, "input": part.text,
+                        "model": job.provider_model, "voice": job.provider_voice, "input": spoken,
                         "response_format": "wav", **({"lang_code": job.provider_language} if job.provider_language else {}),
                     })
                     response.raise_for_status()
@@ -254,23 +286,26 @@ def process_audio_job(job_id: int, session_factory) -> None:
                         return
                     if not response.content.startswith(b"RIFF"):
                         raise ValueError("Provider did not return a WAV audio segment")
-                    path = directory / f"part-{part.part_index:04d}.wav"
+                    path = directory / f"part-{part.part_index:04d}-{owner}.wav"
                     path.write_bytes(response.content)
                     from app.services.audio_alignment import wav_duration
                     duration = wav_duration(path)
                     part.duration_seconds = duration
                     part.audio_path = str(path)
                     part.status = "completed"
-                    job.completed_parts = part.part_index + 1
+                    job.completed_parts = sum(value.status == "completed" for value in parts)
                     db.commit()
-            final_path = directory / "chapter.wav"
+            final_path = directory / f"chapter-{owner}.wav"
             if not _owns_audio_job(db, job_id, owner, attempt):
                 return
             from app.services.audio_alignment import wav_duration
             for part in parts:
                 if part.audio_path and part.duration_seconds is None:
                     part.duration_seconds = wav_duration(part.audio_path)
-            job.audio_bytes = _write_wav_parts([Path(part.audio_path) for part in parts if part.audio_path], final_path)
+            assembled_bytes = _write_wav_parts([Path(part.audio_path) for part in parts if part.audio_path], final_path)
+            if not _owns_audio_job(db, job_id, owner, attempt):
+                return
+            job.audio_bytes = assembled_bytes
             job.audio_path = str(final_path)
             job.status = "completed"
             job.lease_owner = None
@@ -288,7 +323,7 @@ def process_audio_job(job_id: int, session_factory) -> None:
                 return
             job.lease_owner = None
             job.lease_expires_at = None
-            job.error = "Local voice generation failed. Check the local speech service and retry." if job.provider_id == "qwen3_clone" else str(exc)[:2000]
+            job.error = "Local voice generation failed. Check the local speech service and retry." if job.provider_id in {"qwen3_clone", "fish_clone"} else str(exc)[:2000]
             job.error_code = "audio_provider_failed"
             if job.attempt_count >= job.max_attempts:
                 job.status = "failed"

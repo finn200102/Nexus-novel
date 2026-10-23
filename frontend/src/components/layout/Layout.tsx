@@ -67,7 +67,7 @@ export default function Layout({ children }: { children?: ReactNode }) {
     <ShellContext.Provider value={shell}>
       <div className={wide ? "app-shell app-shell--wide" : "app-shell app-shell--phone"}>
         <SkipLink />
-        {wide && <Sidebar unreadCount={unread.count} />}
+        {wide && <Sidebar unreadCount={unread.count} activePath={pathname.startsWith("/story/")&&meta.back?.to.startsWith("/library")?"/library":undefined} />}
         <div className="app-shell__column">
           <TopBar meta={meta} wide={wide} onAddStory={addStory} />
           <main id="main" tabIndex={-1} className="app-main">
@@ -75,7 +75,7 @@ export default function Layout({ children }: { children?: ReactNode }) {
             {children ?? <Outlet />}
           </main>
         </div>
-        {!wide && <TabBar unreadCount={unread.count} />}
+        {!wide && <TabBar unreadCount={unread.count} activePath={pathname.startsWith("/story/")&&meta.back?.to.startsWith("/library")?"/library":undefined} />}
         <RouteAnnouncer />
         <CreateLibraryModal isOpen={showLibraryModal} onClose={() => setShowLibraryModal(false)} />
         <AddStorySheet open={addRequest !== null} onClose={() => setAddRequest(null)} request={addRequest ?? {}} />

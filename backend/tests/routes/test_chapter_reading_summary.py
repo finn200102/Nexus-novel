@@ -192,3 +192,20 @@ def test_postgresql_actual_aggregates_union_windows_and_identity():
         if engine is not None:engine.dispose()
         with admin.begin() as connection:connection.execute(text(f'DROP SCHEMA IF EXISTS {schema} CASCADE'))
         admin.dispose()
+
+
+def test_range_filters_actual_numbers_before_paging_and_preserves_private_scope(client,auth_headers,indexed,db):
+    novel,chapters,run,point=indexed
+    response=client.get(f'/chapter/reading-chapters/{novel.id}?from_chapter=-3&to_chapter=3&offset=1&limit=1',headers=auth_headers)
+    assert response.status_code==200,response.text
+    assert response.json()['total']==3
+    assert [row['chapter_number'] for row in response.json()['items']]==[0]
+    assert 'PRIVATE BODY' not in response.text
+    invalid=client.get(f'/chapter/reading-chapters/{novel.id}?from_chapter=3&to_chapter=0',headers=auth_headers)
+    assert invalid.status_code==422
+    owner=User(username='range-other',password='unused')
+    db.add(owner);db.flush();library=Library(user_id=owner.id,name='Other')
+    db.add(library);db.flush();other=Novel(library_id=library.id,title='Private other')
+    db.add(other);db.commit()
+    denied=client.get(f'/chapter/reading-chapters/{other.id}?from_chapter=0&to_chapter=3',headers=auth_headers)
+    assert denied.status_code==404

@@ -11,7 +11,7 @@ const SettingsData: React.FC = () => {
   usePageTitle("Your data", { back: SETTINGS_BACK });
   return (
     <>
-      <PageHeader title="Your data" description="Download a copy of your Nexus data, or restore one from an export file." />
+      <PageHeader title="Your data" description="Export account data as JSON or make a full backup with chapter text and retained originals. Restored chapter bodies require your review." />
       <AccountDataPanel />
       <ImportReadingReviews />
       <CalibreExport />

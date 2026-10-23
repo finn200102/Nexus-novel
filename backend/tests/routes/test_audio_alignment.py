@@ -169,3 +169,38 @@ def test_deleted_inflight_job_discards_provider_audio_without_recreating_files(d
     assert db.query(ChapterAudioJob).filter_by(id=job_id).first() is None
     assert not (tmp_path / "audio").exists()
     assert not list(tmp_path.rglob("*.wav"))
+
+
+def test_coalesced_prose_retains_every_utf16_source_span_and_title_boundary():
+    document = from_html('<p>First 😀 paragraph.</p><p>Second paragraph.</p><p>Third paragraph.</p>')
+    original = plan_passages(document, 'Title', 350)
+    combined = plan_passages(document, 'Title', 800, coalesce=True)
+    assert len(combined) == 2 and len(original) == 4
+    assert combined[0]['source_spans'] == []
+    assert combined[1]['text'] == ' '.join(row['text'] for row in original[1:])
+    assert combined[1]['source_spans'] == [{k:r[k] for k in ('block_id','text_offset','text_length')} for r in original[1:]]
+    assert combined[1]['text_length'] == original[1]['text_length']
+
+
+def test_chunk_settings_migration_preserves_old_parts_and_alignment(tmp_path):
+    from alembic import command
+    from sqlalchemy import create_engine, text
+    from app.db_migrations import alembic_config
+    engine = create_engine(f"sqlite:///{tmp_path / 'chunk-upgrade.db'}")
+    try:
+        with engine.begin() as connection:
+            config = alembic_config(connection)
+            command.upgrade(config, '0060')
+            connection.execute(text("INSERT INTO users (id,username,password,storage_id) VALUES (1,'reader','unused','00000000-0000-4000-8000-000000000001')"))
+            connection.execute(text("INSERT INTO libraries (id,user_id,name) VALUES (1,1,'Books')"))
+            connection.execute(text("INSERT INTO novels (id,library_id,title) VALUES (1,1,'Story')"))
+            connection.execute(text("INSERT INTO chapters (id,novel_id,chapter_number,title,content_status,audio_status,retry_count) VALUES (1,1,1,'Chapter','PRESENT','PRESENT',0)"))
+            connection.execute(text("INSERT INTO chapter_audio_jobs (id,user_id,library_id,novel_id,chapter_id,status,provider_id,provider_url,provider_model,provider_voice,audio_path,total_parts) VALUES (1,1,1,1,1,'completed','qwen3_clone','http://local/v1','fixture','reader','/private/narration.wav',1)"))
+            connection.execute(text("INSERT INTO chapter_audio_parts (job_id,part_index,text,status,audio_path,block_id,text_offset,text_length,duration_seconds) VALUES (1,0,'Retained words','completed','/private/part.wav','block',4,14,3.5)"))
+            command.upgrade(config, '0061')
+            assert connection.execute(text('SELECT qwen_chunk_size,generation_token_limit,audio_path FROM chapter_audio_jobs')).one() == (None,None,'/private/narration.wav')
+            assert connection.execute(text('SELECT text,block_id,text_offset,text_length,duration_seconds,source_spans FROM chapter_audio_parts')).one() == ('Retained words','block',4,14,3.5,None)
+            command.downgrade(config, '0060')
+            assert connection.execute(text('SELECT text,block_id,text_offset,text_length,duration_seconds FROM chapter_audio_parts')).one() == ('Retained words','block',4,14,3.5)
+    finally:
+        engine.dispose()

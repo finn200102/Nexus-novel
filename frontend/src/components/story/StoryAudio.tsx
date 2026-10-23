@@ -2,6 +2,8 @@ import { chapterIdentity, expectedChapterIdentity, observeChapterIdentity, asser
 import { getUserFacingError } from "../../services/apiClient";
 import PronunciationEditor from "../reader/PronunciationEditor";
 import type {PronunciationSnapshot} from "../../services/pronunciationService";
+import AudioPartRepair from "./AudioPartRepair";
+import { readerToolsService, type ReaderProvider } from "../../services/readerToolsService";
 import StoryAudioExports from "./StoryAudioExports";
 import StorySavedRecordings from './StorySavedRecordings';
 import "./StoryAudio.css";
@@ -40,6 +42,7 @@ function StoryAudioContents({ novelId, libraryId }: { novelId: number; libraryId
   const [overview, setOverview] = useState<StoryAudioOverview | null>(null);
   const [voices, setVoices] = useState<NarratorVoice[]>([]);
   const [voiceId, setVoiceId] = useState("");
+  const [qwenChunkSize,setQwenChunkSize] = useState<350|800|1500|3000>(350);
   const [providerId, setProviderId] = useState<ProviderId>(savedPreset);
   const [execution, setExecution] = useState<"browser" | "server">(() => accountStorage.getItem("nexus-reader-tts-execution") === "server" ? "server" : "browser");
   const [providerConfig, setProviderConfig] = useState<OpenAICompatibleTtsConfig>(() => {
@@ -63,6 +66,9 @@ function StoryAudioContents({ novelId, libraryId }: { novelId: number; libraryId
   const selectedBindings=useRef(new Map<number,{identity:ChapterIdentity;sourceVersion:string|null}>());
   const [rangeStart, setRangeStart] = useState("1");
   const [rangeEnd, setRangeEnd] = useState("1");
+  const [expressionProvider, setExpressionProvider] = useState("");
+  const [textProviders, setTextProviders] = useState<ReaderProvider[]>([]);
+  const [expressionPreview, setExpressionPreview] = useState<{parts:{original_text:string;text:string}[];warnings?:string[]} | null>(null);
   const [includeNotes, setIncludeNotes] = useState(false);
   const [error, setError] = useState("");
   const [loadError, setLoadError] = useState("");
@@ -125,6 +131,10 @@ function StoryAudioContents({ novelId, libraryId }: { novelId: number; libraryId
     if (overview) void browserAudioQueue.hydrate(novelId, libraryId, overview.chapters.map(chapter => chapter.chapter_number)).catch(() => undefined);
   }, [overview, novelId, libraryId]);
 
+  useEffect(() => { let active = true; void readerToolsService.providers().then(rows => { if (active && generation === storageGeneration()) setTextProviders(rows.filter(row => row.kind === "local" && row.enabled !== false)); }).catch(() => undefined); return () => {active = false;}; }, [generation]);
+
+  useEffect(() => {setExpressionPreview(null);}, [selected, includeNotes, voiceId]);
+
   const readyVoices = voices.filter(voice => voice.status === "completed");
   const selectedVoice = readyVoices.find(voice => String(voice.id) === voiceId);
   const toggle = (number: number, checked: boolean) => {
@@ -155,6 +165,11 @@ function StoryAudioContents({ novelId, libraryId }: { novelId: number; libraryId
   const cloning = providerId === "qwen3_clone";
   const browserMode = !cloning && execution === "browser";
   const validProvider = cloning ? Boolean(selectedVoice) : Boolean(providerConfig.baseUrl.trim() && providerConfig.model.trim() && providerConfig.voice.trim() && (browserMode || !providerConfig.apiKey));
+  const creationBlockers = [
+    ...(!selected.length ? ["Select a downloaded chapter using its checkbox in the chapter list below, or add a chapter range."] : []),
+    ...(!validProvider ? [cloning ? "Choose a ready voice in Narrator above." : "Complete the provider URL, model and voice. Server generation requires a keyless endpoint; use browser generation for an API key."] : []),
+    ...(!pronunciation ? ["Open Pronunciation above to load settings or save unfinished edits before creating audio."] : []),
+  ];
   const serverProvider = () => ({ id: providerId, base_url: providerConfig.baseUrl, model: providerConfig.model, voice: providerConfig.voice, language_code: providerConfig.languageCode, execution_mode: "server" as const });
   const rememberPlayback = () => {
     if (cloning && selectedVoice) accountStorage.setItem("nexus-reader-narrator-id", String(selectedVoice.id));
@@ -189,6 +204,8 @@ function StoryAudioContents({ novelId, libraryId }: { novelId: number; libraryId
         browserAudioQueue.enqueue(browserInput(selected,true));
         result = { novel_id: novelId, outcomes: selected.map(chapter_number => ({ chapter_number, outcome: "queued", job: null })) };
       } else result = await audioService.createStory(novelId, { chapter_numbers: selected, chapter_identities:identities, include_author_notes: includeNotes,
+        ...(cloning && selectedVoice && !selectedVoice.model?.startsWith("fishaudio/") ? {qwen_chunk_size:qwenChunkSize} : {}),
+        ...(cloning && selectedVoice?.model?.startsWith("fishaudio/") && expressionProvider ? {preparation_provider_id: Number(expressionProvider)} : {}),
         ...(cloning && selectedVoice ? { voice_profile_id: selectedVoice.id } : { provider: serverProvider() }) });
       if (current()) {
         rememberPlayback();
@@ -196,6 +213,18 @@ function StoryAudioContents({ novelId, libraryId }: { novelId: number; libraryId
       }
     } catch(error) { if (current()) setError(error instanceof AudioSelectionError || error instanceof ChapterManifestChangedError ? error.message : getUserFacingError(error,"Couldn’t queue these chapters. Your selection is preserved; check the narrator and try again.")); }
     finally { if (current()) setBusy(false); }
+  };
+  const previewExpression = async () => {
+    if (selected.length !== 1 || !expressionProvider || busy) return;
+    setBusy(true);setError("");setExpressionPreview(null);
+    try {
+      const binding=selectedBindings.current.get(selected[0]);
+      if(!binding) throw new AudioSelectionError("Select the chapter again to verify its identity.");
+      assertCurrentChapterIdentity(novelId,binding.identity);
+      const result=await audioService.expressionPreview({novel_id:novelId,chapter_number:selected[0],provider_id:Number(expressionProvider),include_author_notes:includeNotes,...expectedChapterIdentity(binding.identity,binding.sourceVersion ?? undefined)});
+      if(current())setExpressionPreview(result);
+    } catch(error) {if(current())setError(getUserFacingError(error,"Couldn’t prepare expressive narration. Your chapter is unchanged."));}
+    finally {if(current())setBusy(false);}
   };
   const changeJob = async (job: ServerAudioJob, cancel: boolean) => {
     if (busy) return;
@@ -293,10 +322,10 @@ function StoryAudioContents({ novelId, libraryId }: { novelId: number; libraryId
     {loadError && <Banner tone="warning">{loadError}</Banner>}
     {voiceError && <Banner tone="warning">{voiceError}</Banner>}
     {overview && <p role="status">{overview.summary.ready} chapters ready to listen · {overview.summary.queued} queued or preparing · {overview.summary.needs_retry} need attention · {overview.summary.downloaded} of {overview.summary.chapters} chapters downloaded</p>}
-    <Select label="Voice provider" value={providerId} disabled={busy} onChange={event => chooseProvider(event.target.value as ProviderId)} options={[{ value: "qwen3_clone", label: "My cloned narrator · local Qwen3" }, ...TTS_PROVIDER_PRESETS.map(preset => ({ value: preset.id, label: preset.label }))]} />
+    <Select label="Voice provider" value={providerId} disabled={busy} onChange={event => chooseProvider(event.target.value as ProviderId)} options={[{ value: "qwen3_clone", label: "My cloned narrator · Qwen / Fish" }, ...TTS_PROVIDER_PRESETS.map(preset => ({ value: preset.id, label: preset.label }))]} />
     {cloning ? <><Select label="Narrator" value={selectedVoice ? voiceId : ""} disabled={busy} onChange={event => {
       chosenNarrator.current = true; setVoiceId(event.target.value);
-    }} options={[{ value: "", label: "Choose a ready narrator" }, ...readyVoices.map(voice => ({ value: String(voice.id), label: `${voice.name} · ${voice.language}` }))]} />
+    }} options={[{ value: "", label: "Choose a ready narrator" }, ...readyVoices.map(voice => ({ value: String(voice.id), label: `${voice.name} · ${voice.model?.startsWith("fishaudio/") ? "Fish Audio" : "Qwen"} · ${voice.language}` }))]} />
     {!readyVoices.length && <p>No narrator is ready yet. Upload a recording in Settings, then return here when its preview is ready.</p>}</> : <fieldset className="story-audio__provider" disabled={busy}>
       <legend>Provider settings</legend>
       <p>{TTS_PROVIDER_PRESETS.find(preset => preset.id === providerId)?.description}</p>
@@ -310,6 +339,15 @@ function StoryAudioContents({ novelId, libraryId }: { novelId: number; libraryId
       <div className="story-audio__actions"><Button disabled={!validProvider} onClick={() => void diagnose(false)}>Check provider</Button><Button disabled={!validProvider} onClick={() => void diagnose(true)}>Preview voice</Button></div>
       {diagnostic && <p role="status">{diagnostic}</p>}
     </fieldset>}
+    {cloning && selectedVoice && !selectedVoice.model?.startsWith("fishaudio/") && <><Select label="Narration chunk size" value={String(qwenChunkSize)} disabled={busy} onChange={event=>setQwenChunkSize(Number(event.target.value) as 350|800|1500|3000)} options={[350,800,1500,3000].map(value=>({value:String(value),label:`${value} characters`}))}/><p>Shorter chunks create more sentence-group boundaries. Larger chunks may improve flow but take longer per part. Larger chunks also make passage navigation coarser: seeking goes to the start of the chunk. This setting applies to new Qwen recordings.</p></>}
+    {cloning && selectedVoice?.model?.startsWith("fishaudio/") && <div>
+      <Select label="Expressive narration" value={expressionProvider} disabled={busy} onChange={event => {setExpressionProvider(event.target.value);setExpressionPreview(null);}} options={[{value:"",label:"Plain narration"},...textProviders.map(row=>({value:String(row.id),label:`${row.name} · ${row.model}`}))]} />
+      <p>Optional local preparation adds delivery and emotion tags for the recording. Chapter text stays unchanged.</p>
+      {!textProviders.length && <p>Add an enabled local text provider in AI settings to prepare expressive narration.</p>}
+      <Button disabled={busy || !expressionProvider || selected.length !== 1} onClick={() => void previewExpression()}>Preview expression for selected chapter</Button>
+      {expressionPreview && <details open><summary>Prepared narration preview</summary>{expressionPreview.warnings?.map((warning,index)=><p key={index}>{warning}</p>)}{expressionPreview.parts.map((part,index)=><div key={index}><p>Original: {part.original_text}</p><p>Speech: {part.text}</p></div>)}</details>}
+
+    </div>}
     <PronunciationEditor novelId={novelId} onReady={setPronunciation} />
     {!pronunciation && <p role="status">New audio is waiting for pronunciation settings. Open Pronunciation to load or save them.</p>}
     <Checkbox label="Include author notes in new audio" checked={includeNotes} disabled={busy} onChange={event => setIncludeNotes(event.target.checked)} />
@@ -322,7 +360,8 @@ function StoryAudioContents({ novelId, libraryId }: { novelId: number; libraryId
     </fieldset>
     <p aria-live="polite">{selected.length ? `${selected.length} chapters selected: ${selected.join(", ")}` : "No chapters selected."}</p>
     <p>Only downloaded chapters can be narrated. Existing matching audio is kept; failed jobs require an explicit retry. A batch contains at most 200 chapters.</p>
-    <Button variant="primary" disabled={busy || !selected.length || !validProvider || !pronunciation} onClick={() => void create()}>{busy ? "Working…" : "Create selected audio"}</Button>
+    {!busy && creationBlockers.length > 0 && <div role="status" id="audio-creation-requirements"><p>Before creating audio:</p><ul>{creationBlockers.map(reason => <li key={reason}>{reason}</li>)}</ul></div>}
+    <Button variant="primary" aria-describedby={creationBlockers.length ? "audio-creation-requirements" : undefined} disabled={busy || !selected.length || !validProvider || !pronunciation} onClick={() => void create()}>{busy ? "Working…" : "Create selected audio"}</Button>
     {results && <section aria-label="Audio creation results"><h3>Chapter outcomes</h3><ul>{results.outcomes.map(row => <li key={row.chapter_number}>Chapter {row.chapter_number}: {row.message || outcomeLabels[row.outcome]}</li>)}</ul></section>}
     {preview && <div><p>{preview.chapter ? `Listening to chapter ${preview.chapter}` : "Voice preview"}</p><audio ref={audioRef} controls autoPlay src={preview.src} aria-label={preview.chapter ? `Chapter ${preview.chapter} audio` : "Voice preview"} /></div>}
     {browserRows.length > 0 && <section aria-label="This device’s audio queue">
@@ -341,8 +380,10 @@ function StoryAudioContents({ novelId, libraryId }: { novelId: number; libraryId
           <Checkbox label={`Chapter ${chapter.chapter_number}: ${chapter.title || "Untitled chapter"}`} checked={selected.includes(chapter.chapter_number)} disabled={busy || !chapter.downloaded} onChange={event => toggle(chapter.chapter_number, event.target.checked)} />
           {local && <div><p>On this device: {local.status} · {local.completedParts} of {local.totalParts} parts</p>{local.error && <p>{local.error}</p>}{local.sourceVersion && chapter.source_version && local.sourceVersion !== chapter.source_version && <p>This device’s recording uses an earlier chapter version. Passage links are unavailable.</p>}{["queued", "generating"].includes(local.status) && <progress value={local.completedParts} max={Math.max(1, local.totalParts)} aria-label={`Chapter ${chapter.chapter_number} browser audio preparation`} />}<div className="story-audio__actions">{localControls(local)}</div></div>}
           <p>{chapter.downloaded ? "Text downloaded" : "Text not downloaded — download it from Chapters first"}{job ? ` · ${job.audio_ready ? "Audio ready" : job.status === "processing" ? "Preparing" : job.status === "retry_wait" ? "Waiting to retry" : job.status}` : " · No audio yet"}{job ? ` · ${job.completed_parts} of ${job.total_parts} parts` : ""}</p>
-          {job && <p>Narrator: {job.provider_voice}</p>}
-          {job && activeJob(job) && <progress value={job.completed_parts} max={Math.max(1, job.total_parts)} aria-label={`Chapter ${chapter.chapter_number} audio preparation`} />}
+          {job && <p>Narrator: {job.provider_voice}{job.provider_id==="qwen3_clone"&&!job.provider_model.startsWith("fishaudio/")?` · Chunk size: ${job.qwen_chunk_size?`${job.qwen_chunk_size} characters`:"legacy/default"}`:""}</p>}
+          {job && activeJob(job) && job.speech_stage === "preparing_text" && <p role="status">Preparing expression {job.preparation_completed_parts ?? 0} of {job.total_parts}</p>}
+          {job && activeJob(job) && <progress value={job.speech_stage === "preparing_text" ? job.preparation_completed_parts ?? 0 : job.completed_parts} max={Math.max(1, job.total_parts)} aria-label={`Chapter ${chapter.chapter_number} ${job.speech_stage === "preparing_text" ? "expression preparation" : "audio preparation"}`} />}
+          {job?.audio_ready && <AudioPartRepair jobId={job.id} onRepaired={() => setRefresh(value => value + 1)} />}
           {job?.error && <p>{job.error}</p>}
           {outdated && <p>This recording uses an earlier chapter version. You can listen, but passage links are unavailable.</p>}
           <div className="story-audio__actions">

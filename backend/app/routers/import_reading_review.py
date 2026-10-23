@@ -22,7 +22,7 @@ def list_reviews(response:Response,offset:int=Query(0,ge=0),limit:int=Query(20,g
 
 
 @router.get('/{review_id}',response_model=ImportReadingReviewView)
-def get_review(review_id:int,response:Response,offset:int=Query(0,ge=0),limit:int=Query(50,ge=1,le=100),db:Session=Depends(get_db),user:User=Depends(get_current_user)):
+def get_review(review_id:int,response:Response,offset:int=Query(0,ge=0),limit:int=Query(100,ge=1,le=100),db:Session=Depends(get_db),user:User=Depends(get_current_user)):
     private(response);return service.view(db,service.owned(db,user,review_id),offset,limit)
 
 

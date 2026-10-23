@@ -1,6 +1,7 @@
 """Account-private narrator management, never shared through story references."""
 import base64
 import binascii
+import os
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field, model_validator
@@ -10,7 +11,7 @@ from app.models.audio_job import ChapterAudioJob
 from app.models.user import User
 from app.models.voice_profile import VoiceProfile
 from app.models.reader_preference import ReaderPreference
-from app.services.voice_service import MODEL, LANGUAGES, MAX_UPLOAD, bridge_config
+from app.services.voice_service import MODEL, QWEN_NATIVE_MODEL, QWEN_MODELS, FISH_MODELS, LANGUAGES, MAX_UPLOAD, bridge_config
 from config.database import get_db
 
 router = APIRouter(prefix="/audio/voices", tags=["narrator voices"])
@@ -21,6 +22,7 @@ class VoiceUpload(BaseModel):
     audio_base64: str = Field(min_length=4, max_length=MAX_UPLOAD * 4 // 3 + 4)
     transcript: str = Field(default="", max_length=4000)
     language: str = "English"
+    engine: str = Field(default="qwen", pattern="^(qwen|fish)$")
     excerpt_start_seconds: float | None = Field(default=None, ge=0, le=3600, allow_inf_nan=False)
     excerpt_duration_seconds: float | None = Field(default=None, ge=3, le=30, allow_inf_nan=False)
 
@@ -39,6 +41,7 @@ class VoiceView(BaseModel):
     transcript: str
     error: str | None
     preview_ready: bool
+    model: str = MODEL
     created_at: datetime | None
 
 
@@ -81,7 +84,7 @@ def choose_default(request: DefaultVoiceWrite, db: Session = Depends(get_db), us
 
 
 def view(profile):
-    return VoiceView(id=profile.id, name=profile.name, language=profile.language, status=profile.status,
+    return VoiceView(model=profile.model, id=profile.id, name=profile.name, language=profile.language, status=profile.status,
                      transcript=profile.transcript, error=profile.error, preview_ready=bool(profile.preview), created_at=profile.created_at)
 
 
@@ -98,13 +101,20 @@ def capabilities(user: User = Depends(get_current_user)):
         bridge_config(); configured = True
     except ValueError:
         configured = False
-    return {"configured": configured, "model": MODEL, "languages": LANGUAGES, "max_upload_bytes": MAX_UPLOAD}
+    try:
+        bridge_config(fish=True); fish_configured = True
+    except ValueError:
+        fish_configured = False
+    return {"configured": configured or fish_configured, "model": QWEN_NATIVE_MODEL if os.getenv("NEXUS_MANAGED_SPEECH") == "1" else MODEL, "languages": LANGUAGES, "max_upload_bytes": MAX_UPLOAD,
+            "transcript_required": os.getenv("NEXUS_MANAGED_SPEECH") == "1",
+            "engines": [{"id": "qwen", "label": "Qwen3 TTS", "configured": configured},
+                        {"id": "fish", "label": "Fish Audio", "configured": fish_configured}]}
 
 
 @router.get("", response_model=list[VoiceView])
 def list_voices(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     # Listing must not materialize every private reference/preview into RAM.
-    rows = db.query(VoiceProfile.id, VoiceProfile.name, VoiceProfile.language, VoiceProfile.status,
+    rows = db.query(VoiceProfile.id, VoiceProfile.model, VoiceProfile.name, VoiceProfile.language, VoiceProfile.status,
         VoiceProfile.transcript, VoiceProfile.error, VoiceProfile.created_at,
         VoiceProfile.preview.isnot(None).label("preview_ready")).filter(VoiceProfile.user_id == user.id).order_by(VoiceProfile.created_at.desc()).all()
     return [VoiceView(**dict(row._mapping)) for row in rows]
@@ -113,7 +123,7 @@ def list_voices(db: Session = Depends(get_db), user: User = Depends(get_current_
 @router.post("", response_model=VoiceView, status_code=202)
 def upload(request: VoiceUpload, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     try:
-        bridge_config()
+        bridge_config(fish=True) if request.engine == "fish" else bridge_config()
     except ValueError as exc:
         raise HTTPException(503, str(exc)) from None
     if request.language not in LANGUAGES or not request.name.strip():
@@ -126,8 +136,11 @@ def upload(request: VoiceUpload, db: Session = Depends(get_db), user: User = Dep
         raise HTTPException(422, "Invalid audio encoding") from None
     if not body or len(body) > MAX_UPLOAD:
         raise HTTPException(413, "Upload an audio recording smaller than 12 MB")
+    model = os.getenv("NEXUS_FISH_MODEL", "fishaudio/s2-pro") if request.engine == "fish" else QWEN_NATIVE_MODEL if os.getenv("NEXUS_MANAGED_SPEECH") == "1" else MODEL
+    if model not in QWEN_MODELS and model not in FISH_MODELS:
+        raise HTTPException(503, "Unsupported local Fish model")
     profile = VoiceProfile(user_id=user.id, name=request.name.strip(), language=request.language, sample=body,
-                           transcript=request.transcript.strip(), model=MODEL, status="queued",
+                           transcript=request.transcript.strip(), model=model, status="queued",
                            excerpt_start_seconds=request.excerpt_start_seconds,
                            excerpt_duration_seconds=request.excerpt_duration_seconds)
     db.add(profile); db.commit(); db.refresh(profile)

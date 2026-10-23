@@ -230,3 +230,12 @@ def test_excerpt_migration_preserves_0036_voices_and_default(tmp_path):
                 assert connection.execute(text('SELECT transcript FROM voice_profiles WHERE id=1')).scalar_one()=='Existing private transcript'
         finally:
             engine.dispose()
+
+
+def test_linux_upload_records_native_qwen_model(client, auth_headers, monkeypatch, tmp_path):
+    configure(monkeypatch, tmp_path)
+    monkeypatch.setenv("NEXUS_MANAGED_SPEECH", "1")
+    result = client.post("/audio/voices", headers=auth_headers, json={"name":"Native narrator", "audio_base64":"UklGRg==", "transcript":"Exact words"})
+    assert result.status_code == 202
+    assert result.json()["model"] == voice_service.QWEN_NATIVE_MODEL
+    assert client.get("/audio/voices/capabilities", headers=auth_headers).json()["transcript_required"] is True

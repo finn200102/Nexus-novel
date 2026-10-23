@@ -6,8 +6,9 @@ import { MAIN_NAV, isCurrent, unreadLabel, type MainNavItem } from "./navItems";
 const MORE: MainNavItem = { label: "More", to: "/more", icon: MenuIcon, match: ["/more", "/settings", "/admin"] };
 
 /** Phone navigation (< 768 px): five labelled tabs, Updates carries the unread badge. */
-export function TabBar({ unreadCount }: { unreadCount: number }) {
-  const { pathname } = useLocation();
+export function TabBar({ unreadCount, activePath }: { unreadCount: number;activePath?:string }) {
+  const location = useLocation();
+  const pathname=activePath??location.pathname;
   return (
     <nav className="app-tabbar" aria-label="Main">
       <ul>

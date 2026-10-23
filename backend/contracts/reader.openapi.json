@@ -402,8 +402,37 @@
             "title": "Novel Id",
             "type": "integer"
           },
+          "preparation_provider_id": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preparation Provider Id"
+          },
           "provider": {
             "$ref": "#/components/schemas/AudioProviderSnapshot"
+          },
+          "qwen_chunk_size": {
+            "anyOf": [
+              {
+                "enum": [
+                  350,
+                  800,
+                  1500,
+                  3000
+                ],
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Qwen Chunk Size"
           },
           "voice_profile_id": {
             "anyOf": [
@@ -528,6 +557,17 @@
             ],
             "title": "Error Code"
           },
+          "generation_token_limit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generation Token Limit"
+          },
           "id": {
             "title": "Id",
             "type": "integer"
@@ -569,6 +609,28 @@
             "title": "Max Attempts",
             "type": "integer"
           },
+          "preparation_completed_parts": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preparation Completed Parts"
+          },
+          "preparation_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preparation Version"
+          },
           "pronunciation_version": {
             "anyOf": [
               {
@@ -591,6 +653,17 @@
           "provider_voice": {
             "title": "Provider Voice",
             "type": "string"
+          },
+          "qwen_chunk_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Qwen Chunk Size"
           },
           "source_chapter_key": {
             "anyOf": [
@@ -645,6 +718,21 @@
               }
             ],
             "title": "Source Version"
+          },
+          "speech_stage": {
+            "anyOf": [
+              {
+                "enum": [
+                  "preparing_text",
+                  "generating_audio"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speech Stage"
           },
           "status": {
             "title": "Status",
@@ -918,6 +1006,13 @@
             "title": "Part Index",
             "type": "integer"
           },
+          "source_spans": {
+            "items": {
+              "$ref": "#/components/schemas/AudioSourceSpan"
+            },
+            "title": "Source Spans",
+            "type": "array"
+          },
           "start_seconds": {
             "title": "Start Seconds",
             "type": "number"
@@ -951,6 +1046,78 @@
           "end_seconds"
         ],
         "title": "AudioManifestSegment",
+        "type": "object"
+      },
+      "AudioPartResponse": {
+        "properties": {
+          "duration_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Seconds"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "part_index": {
+            "title": "Part Index",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "synthesis_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Synthesis Text"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "part_index",
+          "text",
+          "status"
+        ],
+        "title": "AudioPartResponse",
+        "type": "object"
+      },
+      "AudioPartsResponse": {
+        "properties": {
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/AudioPartResponse"
+            },
+            "title": "Parts",
+            "type": "array"
+          }
+        },
+        "required": [
+          "parts"
+        ],
+        "title": "AudioPartsResponse",
         "type": "object"
       },
       "AudioProviderSnapshot": {
@@ -999,6 +1166,29 @@
           "voice"
         ],
         "title": "AudioProviderSnapshot",
+        "type": "object"
+      },
+      "AudioSourceSpan": {
+        "properties": {
+          "block_id": {
+            "title": "Block Id",
+            "type": "string"
+          },
+          "text_length": {
+            "title": "Text Length",
+            "type": "integer"
+          },
+          "text_offset": {
+            "title": "Text Offset",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "block_id",
+          "text_offset",
+          "text_length"
+        ],
+        "title": "AudioSourceSpan",
         "type": "object"
       },
       "AudioStatus": {
@@ -4801,6 +4991,126 @@
         "title": "ExportChapterReference",
         "type": "object"
       },
+      "ExpressionPreviewPart": {
+        "properties": {
+          "original_text": {
+            "title": "Original Text",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "original_text",
+          "text"
+        ],
+        "title": "ExpressionPreviewPart",
+        "type": "object"
+      },
+      "ExpressionPreviewRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "chapter_number": {
+            "title": "Chapter Number",
+            "type": "integer"
+          },
+          "expected_chapter_key": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Chapter Key"
+          },
+          "expected_content_version": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Content Version"
+          },
+          "expected_manifest_epoch": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Manifest Epoch"
+          },
+          "expected_manifest_revision": {
+            "anyOf": [
+              {
+                "pattern": "^(0|[1-9][0-9]{0,18})$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Manifest Revision"
+          },
+          "include_author_notes": {
+            "default": false,
+            "title": "Include Author Notes",
+            "type": "boolean"
+          },
+          "novel_id": {
+            "title": "Novel Id",
+            "type": "integer"
+          },
+          "provider_id": {
+            "exclusiveMinimum": 0.0,
+            "title": "Provider Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "novel_id",
+          "chapter_number",
+          "provider_id"
+        ],
+        "title": "ExpressionPreviewRequest",
+        "type": "object"
+      },
+      "ExpressionPreviewResponse": {
+        "properties": {
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/ExpressionPreviewPart"
+            },
+            "title": "Parts",
+            "type": "array"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "parts",
+          "warnings"
+        ],
+        "title": "ExpressionPreviewResponse",
+        "type": "object"
+      },
       "FailedChapterDownloadResponse": {
         "properties": {
           "chapter_number": {
@@ -6468,6 +6778,11 @@
             "minLength": 1,
             "title": "Ref",
             "type": "string"
+          },
+          "restore_archived_content": {
+            "default": false,
+            "title": "Restore Archived Content",
+            "type": "boolean"
           }
         },
         "required": [
@@ -6558,6 +6873,23 @@
             "title": "Applied",
             "type": "boolean"
           },
+          "archived_body_available": {
+            "default": false,
+            "title": "Archived Body Available",
+            "type": "boolean"
+          },
+          "backup_placeholder_key": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backup Placeholder Key"
+          },
           "candidates": {
             "items": {
               "$ref": "#/components/schemas/ImportReadingCandidate"
@@ -6571,6 +6903,11 @@
           },
           "reference": {
             "$ref": "#/components/schemas/ExportChapterReference"
+          },
+          "retained_originals": {
+            "default": 0,
+            "title": "Retained Originals",
+            "type": "integer"
           }
         },
         "required": [
@@ -7184,7 +7521,7 @@
           "rating": {
             "anyOf": [
               {
-                "type": "integer"
+                "type": "number"
               },
               {
                 "type": "null"
@@ -7941,6 +8278,24 @@
           "source_id"
         ],
         "title": "LiveSourcePage",
+        "type": "object"
+      },
+      "LocalTextModelDefaultsResponse": {
+        "properties": {
+          "base_url": {
+            "title": "Base Url",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          }
+        },
+        "required": [
+          "base_url",
+          "model"
+        ],
+        "title": "LocalTextModelDefaultsResponse",
         "type": "object"
       },
       "ManifestAnchor": {
@@ -12992,6 +13347,49 @@
         "title": "ReviewLookupPage",
         "type": "object"
       },
+      "RevisionSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "block_id": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Block Id",
+            "type": "string"
+          },
+          "content_version": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Content Version",
+            "type": "string"
+          },
+          "quote": {
+            "maxLength": 3000,
+            "minLength": 1,
+            "title": "Quote",
+            "type": "string"
+          },
+          "text_length": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 6000.0,
+            "title": "Text Length",
+            "type": "integer"
+          },
+          "text_offset": {
+            "minimum": 0.0,
+            "title": "Text Offset",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "content_version",
+          "block_id",
+          "text_offset",
+          "text_length",
+          "quote"
+        ],
+        "title": "RevisionSelection",
+        "type": "object"
+      },
       "SavedDiscoveryFilters": {
         "additionalProperties": false,
         "properties": {
@@ -15610,6 +16008,18 @@
             "title": "Include Author Notes",
             "type": "boolean"
           },
+          "preparation_provider_id": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preparation Provider Id"
+          },
           "provider": {
             "anyOf": [
               {
@@ -15619,6 +16029,23 @@
                 "type": "null"
               }
             ]
+          },
+          "qwen_chunk_size": {
+            "anyOf": [
+              {
+                "enum": [
+                  350,
+                  800,
+                  1500,
+                  3000
+                ],
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Qwen Chunk Size"
           },
           "voice_profile_id": {
             "anyOf": [
@@ -16116,6 +16543,47 @@
         "title": "StoryScopeView",
         "type": "object"
       },
+      "StoryTextStyleResponse": {
+        "properties": {
+          "revision": {
+            "minimum": 0.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "style_guide": {
+            "maxLength": 2000,
+            "title": "Style Guide",
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "style_guide"
+        ],
+        "title": "StoryTextStyleResponse",
+        "type": "object"
+      },
+      "StoryTextStyleWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_revision": {
+            "minimum": 0.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "style_guide": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Style Guide",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_revision"
+        ],
+        "title": "StoryTextStyleWrite",
+        "type": "object"
+      },
       "TagStatResponse": {
         "additionalProperties": true,
         "properties": {
@@ -16265,6 +16733,218 @@
           "updated_at"
         ],
         "title": "TermView",
+        "type": "object"
+      },
+      "TextRevisionInput": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_chapter_key": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Chapter Key"
+          },
+          "expected_content_version": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Content Version"
+          },
+          "expected_manifest_epoch": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Manifest Epoch"
+          },
+          "expected_manifest_revision": {
+            "anyOf": [
+              {
+                "pattern": "^(0|[1-9][0-9]{0,18})$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Manifest Revision"
+          },
+          "mode": {
+            "enum": [
+              "proofreading",
+              "reformat",
+              "rewrite",
+              "translation_polish"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "provider_id": {
+            "exclusiveMinimum": 0.0,
+            "title": "Provider Id",
+            "type": "integer"
+          },
+          "selection": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RevisionSelection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "translation_job_id": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Translation Job Id"
+          }
+        },
+        "required": [
+          "provider_id",
+          "mode"
+        ],
+        "title": "TextRevisionInput",
+        "type": "object"
+      },
+      "TextRevisionPreviewResponse": {
+        "properties": {
+          "chapter_key": {
+            "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$",
+            "title": "Chapter Key",
+            "type": "string"
+          },
+          "charged_usd": {
+            "minimum": 0.0,
+            "title": "Charged Usd",
+            "type": "number"
+          },
+          "draft": {
+            "title": "Draft",
+            "type": "string"
+          },
+          "input_tokens": {
+            "minimum": 0.0,
+            "title": "Input Tokens",
+            "type": "integer"
+          },
+          "manifest_epoch": {
+            "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$",
+            "title": "Manifest Epoch",
+            "type": "string"
+          },
+          "manifest_revision": {
+            "pattern": "^(0|[1-9][0-9]{0,18})$",
+            "title": "Manifest Revision",
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "proofreading",
+              "reformat",
+              "rewrite",
+              "translation_polish"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "original": {
+            "title": "Original",
+            "type": "string"
+          },
+          "output_tokens": {
+            "minimum": 0.0,
+            "title": "Output Tokens",
+            "type": "integer"
+          },
+          "preview": {
+            "title": "Preview",
+            "type": "string"
+          },
+          "provider_id": {
+            "exclusiveMinimum": 0.0,
+            "title": "Provider Id",
+            "type": "integer"
+          },
+          "saved": {
+            "const": false,
+            "title": "Saved",
+            "type": "boolean"
+          },
+          "selection": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RevisionSelection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_version": {
+            "title": "Source Version",
+            "type": "string"
+          },
+          "style_revision": {
+            "minimum": 0.0,
+            "title": "Style Revision",
+            "type": "integer"
+          },
+          "translation_job_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Translation Job Id"
+          }
+        },
+        "required": [
+          "chapter_key",
+          "manifest_epoch",
+          "manifest_revision",
+          "source_version",
+          "mode",
+          "provider_id",
+          "translation_job_id",
+          "style_revision",
+          "selection",
+          "original",
+          "draft",
+          "preview",
+          "saved",
+          "input_tokens",
+          "output_tokens",
+          "charged_usd"
+        ],
+        "title": "TextRevisionPreviewResponse",
         "type": "object"
       },
       "TopStoryResponse": {
@@ -19400,6 +20080,52 @@
         ]
       }
     },
+    "/audio/expression-preview": {
+      "post": {
+        "operationId": "expression_preview_audio_expression_preview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpressionPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpressionPreviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Expression Preview",
+        "tags": [
+          "audio"
+        ]
+      }
+    },
     "/audio/jobs": {
       "get": {
         "operationId": "list_jobs_audio_jobs_get",
@@ -19676,6 +20402,109 @@
           }
         ],
         "summary": "Audio Manifest",
+        "tags": [
+          "audio"
+        ]
+      }
+    },
+    "/audio/jobs/{job_id}/parts": {
+      "get": {
+        "operationId": "audio_parts_audio_jobs__job_id__parts_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudioPartsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Audio Parts",
+        "tags": [
+          "audio"
+        ]
+      }
+    },
+    "/audio/jobs/{job_id}/parts/{part_index}/retry": {
+      "post": {
+        "operationId": "repair_audio_part_audio_jobs__job_id__parts__part_index__retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "part_index",
+            "required": true,
+            "schema": {
+              "title": "Part Index",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudioJobResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Repair Audio Part",
         "tags": [
           "audio"
         ]
@@ -23329,6 +24158,42 @@
               "title": "Category Scope",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "from_chapter",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": -2147483648,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From Chapter"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to_chapter",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": -2147483648,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "To Chapter"
+            }
           }
         ],
         "responses": {
@@ -25527,7 +26392,7 @@
             "name": "limit",
             "required": false,
             "schema": {
-              "default": 50,
+              "default": 100,
               "maximum": 100,
               "minimum": 1,
               "title": "Limit",
@@ -27835,6 +28700,200 @@
         "summary": "Story Translations",
         "tags": [
           "private translation exports"
+        ]
+      }
+    },
+    "/reader/text-revisions/local-defaults": {
+      "get": {
+        "operationId": "local_defaults_reader_text_revisions_local_defaults_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocalTextModelDefaultsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Local Defaults",
+        "tags": [
+          "reader tools"
+        ]
+      }
+    },
+    "/reader/text-revisions/stories/{novel_id}/style": {
+      "get": {
+        "operationId": "story_style_reader_text_revisions_stories__novel_id__style_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "novel_id",
+            "required": true,
+            "schema": {
+              "title": "Novel Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryTextStyleResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Story Style",
+        "tags": [
+          "reader tools"
+        ]
+      },
+      "put": {
+        "operationId": "save_story_style_reader_text_revisions_stories__novel_id__style_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "novel_id",
+            "required": true,
+            "schema": {
+              "title": "Novel Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StoryTextStyleWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoryTextStyleResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Save Story Style",
+        "tags": [
+          "reader tools"
+        ]
+      }
+    },
+    "/reader/text-revisions/{novel_id}/{chapter_number}/preview": {
+      "post": {
+        "operationId": "text_revision_preview_reader_text_revisions__novel_id___chapter_number__preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "novel_id",
+            "required": true,
+            "schema": {
+              "title": "Novel Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "chapter_number",
+            "required": true,
+            "schema": {
+              "title": "Chapter Number",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TextRevisionInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TextRevisionPreviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Text Revision Preview",
+        "tags": [
+          "reader tools"
         ]
       }
     },

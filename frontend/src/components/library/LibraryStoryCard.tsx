@@ -1,5 +1,5 @@
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { Badge, Card, Cover } from "../ui";
 import { Novel } from "../../types/novel";
 import { displayTitle } from "../../utils/displayTitle";
@@ -32,6 +32,8 @@ const LibraryStoryCard: React.FC<LibraryStoryCardProps> = ({
   onShelvesChanged,
   compact = false,
 }) => {
+  const location=useLocation();
+  const libraryReturn=location.pathname==="/library"?`${location.pathname}${location.search}`:`/library?library=${libraryId}`;
   const title = displayTitle(novel);
   const href = storyHref(novel, libraryId);
   const followLabel = novel.follow_state ? FOLLOW_STATE_LABELS[novel.follow_state] : null;
@@ -42,7 +44,7 @@ const LibraryStoryCard: React.FC<LibraryStoryCardProps> = ({
   const titleNode = selectionMode ? (
     <span className="library-card__title">{title}</span>
   ) : (
-    <Link to={href} className="library-card__title ui-stretched-link">
+    <Link to={href} state={{libraryReturn}} className="library-card__title ui-stretched-link">
       {title}
     </Link>
   );

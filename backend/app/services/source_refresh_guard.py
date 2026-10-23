@@ -1,5 +1,6 @@
 """Reauthorize remote source results in a fresh local transaction."""
 import json
+from datetime import UTC, date, datetime, time
 from fastapi import HTTPException
 
 from app.models import Library, Novel, User
@@ -22,6 +23,24 @@ def refresh_fields(db, novel, raw, fields):
     aliases = {'author_site_id': 'author_id', 'site_story_id': 'story_id'}
     result = {key: value for key, value in fields.items()
               if key in {'scrape_status', 'scrape_error'} or aliases.get(key, key) in raw}
+    # Metadata travels as JSON; SQLAlchemy DateTime columns require Python
+    # values. Validate before assigning any fields to the private original.
+    for key in ('publish_date', 'updated_date', 'analyzed_at', 'parsed_at'):
+        if key not in result or result[key] is None:
+            continue
+        value = result[key]
+        try:
+            if isinstance(value, str):
+                value = datetime.fromisoformat(value)
+            elif isinstance(value, date) and not isinstance(value, datetime):
+                value = datetime.combine(value, time())
+            if not isinstance(value, datetime):
+                raise ValueError()
+            if value.tzinfo is not None:
+                value = value.astimezone(UTC).replace(tzinfo=None)
+        except (ValueError, TypeError, OverflowError):
+            raise ValueError(f'Metadata has an invalid {key}; no story fields were updated') from None
+        result[key] = value
     state = db.query(ChapterManifestState).filter_by(novel_id=novel.id).first()
     recorded = state.metadata_source if state and isinstance(state.metadata_source, dict) else {}
     groups = {'site': ('site', 'novel_site'), 'story_id': ('story_id', 'site_story_id'), 'source_url': ('source_url',)}

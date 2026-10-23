@@ -427,12 +427,48 @@ def plan(chunks):
         level = new
 
 
-def validate_result(text, chunks):
+def compact_local_result(value):
+    """Represent repeated citations by indices without dropping any fact."""
+    result = json.loads(json.dumps(value, ensure_ascii=False))
+    roots = []
+    seen = set()
+    for row in result['citations']:
+        identity = (row['chapter'], row['block_id'], row['quote'])
+        if identity not in seen:
+            roots.append(row)
+            seen.add(identity)
+    result['citations'] = roots
+    indexes = {(row['chapter'], row['block_id'], row['quote']): index for index, row in enumerate(roots)}
+    def compact(claim):
+        try:
+            claim['citations'] = [indexes[(row['chapter'], row['block_id'], row['quote'])] for row in claim['citations']]
+        except (KeyError, TypeError):
+            raise ValueError('Guide contains an unsupported nested citation') from None
+    for name in ('characters', 'relationships', 'locations', 'glossary'):
+        for claim in result[name]:
+            compact(claim)
+            if name == 'characters' and claim.get('appearance') is not None:
+                compact(claim['appearance'])
+    if result['recap'] is not None:
+        compact(result['recap'])
+    return result
+
+
+def observation_text(value, *, local=False):
+    text = json.dumps(compact_local_result(value), ensure_ascii=False, separators=(',', ':')) if local else json.dumps(value, ensure_ascii=False)
+    if local and len(text.encode()) > 18000:
+        raise ValueError('Local guide semantic content exceeds its limit')
+    return text
+
+
+def validate_result(text, chunks, *, local=False):
     try:
         result = GuideResult.model_validate_json(text).model_dump()
     except (ValueError, TypeError) as exc:
         raise ValueError('Provider returned invalid guide JSON') from exc
-    if not isinstance(result, dict) or len(json.dumps(result).encode()) > 18000:
+    maximum = 96000 if local else 18000
+    serialized = json.dumps(result, ensure_ascii=False) if local else json.dumps(result)
+    if not isinstance(result, dict) or len(serialized.encode()) > maximum:
         raise ValueError('Provider returned oversized or invalid guide facts')
     evidence = {}
     for chunk in chunks:
@@ -460,6 +496,8 @@ def validate_result(text, chunks):
             for item in value:
                 visit(item)
     visit(result)
+    if local:
+        observation_text(result, local=True)
     return result, citations
 
 
@@ -536,7 +574,7 @@ def process_one(session_factory):
             subject = row.review['input']['portrait_subject']
             subject_row = next(item for chunk in chunks for item in chunk if subject in item['text'])
             evidence.append(subject_row)
-        observations = [{'text': json.dumps(item, ensure_ascii=False), 'citations': item['citations']} for item in prior]
+        observations = [{'text': observation_text(item, local=provider.kind == 'local' and operation != 'portrait'), 'citations': item['citations']} for item in prior]
         prompt = json.dumps(dict(operation=operation, through_chapter=row.review['through'], evidence=evidence,
                                  observations=observations, portrait_subject=row.review['input'].get('portrait_subject')), ensure_ascii=False)
         generation, job_key = row.retry_generation, row.job_key
@@ -554,7 +592,7 @@ def process_one(session_factory):
             text, _, _, charged = reader_provider.invoke(db, provider, prompt=prompt, system=SYSTEM, max_tokens=4096,
                 request=companion_client.guide_request, purpose='guide_extract' if operation == 'extract' else 'guide_synthesize',
                 job_key=job_key, item_key=str(step), retry_generation=generation, authorize=authorize)
-            result, citations = validate_result(text, chunks)
+            result, citations = validate_result(text, chunks, local=provider.kind == 'local')
         row, _, chunks = checked(db, job_id, lease)
         db.add(Artifact(user_id=row.user_id, novel_id=row.novel_id, job_id=row.id, step=step,
                         kind='portrait' if media else ('guide' if step == len(steps)-1 else 'extraction'),

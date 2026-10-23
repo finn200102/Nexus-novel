@@ -1,4 +1,11 @@
-import React, { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useState,
+  useRef,
+  useSyncExternalStore,
+} from "react";
+import { useSearchParams } from "react-router-dom";
 import NovelList, { LibrarySortBy } from "../components/novel/NovelList";
 import { ShelfManager } from "../components/organization/ShelfManager";
 import { LibraryTitleMenu } from "../components/library/LibraryTitleMenu";
@@ -9,10 +16,28 @@ import { useLibraryContext } from "../context/useLibraryContext";
 import { organizationService } from "../services/organizationService";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { SlidersHorizontal } from "lucide-react";
-import { Button, FilterChip, Input, Menu, PageHeader, SegmentedControl, Select } from "../components/ui";
+import {
+  Button,
+  FilterChip,
+  Input,
+  Menu,
+  PageHeader,
+  SegmentedControl,
+  Select,
+} from "../components/ui";
 import SmartShelves from "../components/organization/SmartShelves";
-import { libraryViewService, type LibraryViewOptions, type LibraryViewPage, type OwnedLibraryDefinition, type FollowState } from "../services/libraryViewService";
-import { onAccountStorageChange, storageGeneration } from "../services/accountStorage";
+import {
+  libraryViewService,
+  type LibraryViewOptions,
+  type LibraryViewPage,
+  type OwnedLibraryDefinition,
+  type FollowState,
+} from "../services/libraryViewService";
+import {
+  accountStorage,
+  onAccountStorageChange,
+  storageGeneration,
+} from "../services/accountStorage";
 import type { Shelf } from "../types/organization";
 import "../styles/library-page.css";
 import "../styles/organization.css";
@@ -29,31 +54,92 @@ const sortOptions = [
   { value: "chapters", label: "Most chapters" },
 ];
 
-const STATE_KEYS = ["reading", "plan_to_read", "on_hold", "completed", "dropped", "ignored"] as const;
+const STATE_KEYS = [
+  "reading",
+  "plan_to_read",
+  "on_hold",
+  "completed",
+  "dropped",
+  "ignored",
+] as const;
 
 const LibraryPage: React.FC<LibraryPageProps> = ({ library_id }) => {
   const { libraries, activeLibraryId, selectLibrary } = useLibraryContext();
   const libraryMeta = useMemo(
     () => libraries.find((library) => library.id === library_id),
-    [libraries, library_id]
+    [libraries, library_id],
   );
   const libraryName = libraryMeta?.name || "Library";
   // The heading shows the library name with its switcher; the top bar and tab title say "Library".
   usePageTitle("Library");
 
-  const [searchTerm, setSearchTerm] = useState("");
-  const [sourceFilter, setSourceFilter] = useState("all");
-  const [sortBy, setSortBy] = useState<LibrarySortBy>("recent");
+  const [params, setParams] = useSearchParams();
+  const changeFilter = (key: string, value: string) =>
+    setParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        if (value) next.set(key, value);
+        else next.delete(key);
+        next.delete("offset");
+        return next;
+      },
+      { replace: true },
+    );
+  const searchTerm = params.get("q") || "",
+    setSearchTerm = (value: string) => changeFilter("q", value);
+  const sourceFilter = params.get("source") || "all",
+    setSourceFilter = (value: string) =>
+      changeFilter("source", value === "all" ? "" : value);
+  const sortValue = params.get("sort") || "recent";
+  const sortBy = (
+    sortOptions.some((option) => option.value === sortValue)
+      ? sortValue
+      : "recent"
+  ) as LibrarySortBy;
+  const setSortBy = (value: LibrarySortBy) => changeFilter("sort", value);
   const [shelves, setShelves] = useState<Shelf[]>([]);
-  const [shelfId, setShelfId] = useState<number | null>(null);
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const shelfValue = Number(params.get("shelf")),
+    shelfId =
+      Number.isInteger(shelfValue) && shelfValue > 0 ? shelfValue : null;
+  const setShelfId = (value: number | null) =>
+    changeFilter("shelf", value === null ? "" : String(value));
+  const statusValue = params.get("status"),
+    statusFilter = STATE_KEYS.some((value) => value === statusValue)
+      ? statusValue!
+      : "all";
+  const setStatusFilter = (value: string) =>
+    changeFilter("status", value === "all" ? "" : value);
   const [page, setPage] = useState<LibraryViewPage | null>(null);
-  const [options,setOptions] = useState<LibraryViewOptions|null>(null);
-  const [smartOpen,setSmartOpen] = useState(false);
-  const [userTag, setUserTag] = useState("");
-  const [minRating, setMinRating] = useState(0);
+  const [options, setOptions] = useState<LibraryViewOptions | null>(null);
+  const [smartOpen, setSmartOpen] = useState(false);
+  const userTag = params.get("tag") || "",
+    setUserTag = (value: string) => changeFilter("tag", value);
+  const ratingValue = Number(params.get("rating")),
+    minRating =
+      Number.isInteger(ratingValue) && ratingValue >= 1 && ratingValue <= 5
+        ? ratingValue
+        : 0;
+  const setMinRating = (value: number) =>
+    changeFilter("rating", value ? String(value) : "");
   const [tagOptions, setTagOptions] = useState<string[]>([]);
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [viewMode, updateViewMode] = useState<"grid" | "list">(() =>
+    accountStorage.getItem("library-view-mode") === "list" ? "list" : "grid",
+  );
+  const setViewMode = (value: "grid" | "list") => {
+    updateViewMode(value);
+    accountStorage.setItem("library-view-mode", value);
+  };
+  useEffect(
+    () =>
+      onAccountStorageChange(() =>
+        updateViewMode(
+          accountStorage.getItem("library-view-mode") === "list"
+            ? "list"
+            : "grid",
+        ),
+      ),
+    [],
+  );
   const [shelvesOpen, setShelvesOpen] = useState(false);
   const [moreFilters, setMoreFilters] = useState(false);
   const wide = useMediaQuery("(min-width: 768px)");
@@ -68,8 +154,21 @@ const LibraryPage: React.FC<LibraryPageProps> = ({ library_id }) => {
 
   useEffect(() => {
     let active = true;
-    organizationService.listShelves().then((rows) => active && setShelves(rows)).catch(() => active && setShelves([]));
-    libraryViewService.options().then(values => { if(active){ setOptions(values);setTagOptions(values.user_tags); } }).catch(() => { if(active)setTagOptions([]); });
+    organizationService
+      .listShelves()
+      .then((rows) => active && setShelves(rows))
+      .catch(() => active && setShelves([]));
+    libraryViewService
+      .options()
+      .then((values) => {
+        if (active) {
+          setOptions(values);
+          setTagOptions(values.user_tags);
+        }
+      })
+      .catch(() => {
+        if (active) setTagOptions([]);
+      });
     return () => {
       active = false;
     };
@@ -78,43 +177,113 @@ const LibraryPage: React.FC<LibraryPageProps> = ({ library_id }) => {
   useEffect(() => {
     const listener = (event: Event) => {
       const detail = (event as CustomEvent<{ libraryId?: number }>).detail;
-      if (!detail || detail.libraryId === library_id) setRefreshKey((prev) => prev + 1);
+      if (!detail || detail.libraryId === library_id)
+        setRefreshKey((prev) => prev + 1);
     };
     window.addEventListener(STORY_ADDED, listener);
     return () => window.removeEventListener(STORY_ADDED, listener);
   }, [library_id]);
 
+  const browseScrollKey = `library-scroll:${library_id}:${params.toString()}`;
+  const restoredScroll = useRef<string | null>(null);
+  useEffect(
+    () => {const generation=storageGeneration();return () => {
+      if(generation===storageGeneration())accountStorage.setItem(browseScrollKey, String(window.scrollY));
+    };},
+    [browseScrollKey],
+  );
+  useEffect(() => {
+    if (!page || restoredScroll.current === browseScrollKey) return;
+    restoredScroll.current = browseScrollKey;
+    const saved = Number(accountStorage.getItem(browseScrollKey));
+    if (Number.isFinite(saved) && saved > 0) {
+      const timer = window.setTimeout(() => window.scrollTo(0, saved), 100);
+      return () => window.clearTimeout(timer);
+    }
+  }, [page, browseScrollKey]);
+
   const statusCounts = page?.status_counts ?? {};
   const extraFilters = (userTag ? 1 : 0) + (minRating > 0 ? 1 : 0);
   const showExtra = wide || moreFilters;
   const storyCount = page?.library_total;
-  const currentDefinition = useMemo<OwnedLibraryDefinition>(() => ({version:1,scope:"owned_library",library_ids:[library_id],q:searchTerm,source:sourceFilter==="all"?null:sourceFilter,follow_states:statusFilter==="all"?[]:[statusFilter as FollowState],user_tag:userTag.trim()||null,min_rating:minRating||null,shelf_id:shelfId,sort_by:sortBy}), [library_id,searchTerm,sourceFilter,statusFilter,userTag,minRating,shelfId,sortBy]);
-  const sourceOptions = [{value:"all",label:"All sources"},...(options?.sources??[]).map(source=>({value:source.id,label:source.label})),...(sourceFilter!=="all"&&!options?.sources.some(source=>source.id===sourceFilter)?[{value:sourceFilter,label:sourceFilter}]:[])];
+  const currentDefinition = useMemo<OwnedLibraryDefinition>(
+    () => ({
+      version: 1,
+      scope: "owned_library",
+      library_ids: [library_id],
+      q: searchTerm,
+      source: sourceFilter === "all" ? null : sourceFilter,
+      follow_states:
+        statusFilter === "all" ? [] : [statusFilter as FollowState],
+      user_tag: userTag.trim() || null,
+      min_rating: minRating || null,
+      shelf_id: shelfId,
+      sort_by: sortBy,
+    }),
+    [
+      library_id,
+      searchTerm,
+      sourceFilter,
+      statusFilter,
+      userTag,
+      minRating,
+      shelfId,
+      sortBy,
+    ],
+  );
+  const sourceOptions = [
+    { value: "all", label: "All sources" },
+    ...(options?.sources ?? []).map((source) => ({
+      value: source.id,
+      label: source.label,
+    })),
+    ...(sourceFilter !== "all" &&
+    !options?.sources.some((source) => source.id === sourceFilter)
+      ? [{ value: sourceFilter, label: sourceFilter }]
+      : []),
+  ];
 
   return (
     <div className="library-page">
       <PageHeader
         className="library-page__header"
         title={<LibraryTitleMenu libraryId={library_id} name={libraryName} />}
-        description={storyCount !== undefined ? `${storyCount} ${storyCount === 1 ? "story" : "stories"}` : undefined}
+        description={
+          storyCount !== undefined
+            ? `${storyCount} ${storyCount === 1 ? "story" : "stories"}`
+            : undefined
+        }
         actions={
           selectionMode ? (
-            <Button variant="primary" onClick={() => setSelectionMode(false)}>Done</Button>
+            <Button variant="primary" onClick={() => setSelectionMode(false)}>
+              Done
+            </Button>
           ) : (
             <Menu
               align="end"
               items={[
-                { label: "Select stories", onSelect: () => setSelectionMode(true) },
+                {
+                  label: "Select stories",
+                  onSelect: () => setSelectionMode(true),
+                },
                 { label: "Shelves…", onSelect: () => setShelvesOpen(true) },
                 { label: "Smart shelves…", onSelect: () => setSmartOpen(true) },
               ]}
-              trigger={(props) => <Button {...props} variant="secondary">Organize</Button>}
+              trigger={(props) => (
+                <Button {...props} variant="secondary">
+                  Organize
+                </Button>
+              )}
             />
           )
         }
       />
 
-      <div className="library-toolbar" role="search" aria-label="Filter stories">
+      <div
+        className="library-toolbar"
+        role="search"
+        aria-label="Filter stories"
+      >
         <Input
           type="search"
           label="Search"
@@ -139,8 +308,16 @@ const LibraryPage: React.FC<LibraryPageProps> = ({ library_id }) => {
             label="Shelf"
             hideLabel
             value={shelfId == null ? "" : String(shelfId)}
-            onChange={(event) => setShelfId(event.target.value ? Number(event.target.value) : null)}
-            options={[{ value: "", label: "All shelves" }, ...shelves.map((shelf) => ({ value: String(shelf.id), label: shelf.name }))]}
+            onChange={(event) =>
+              setShelfId(event.target.value ? Number(event.target.value) : null)
+            }
+            options={[
+              { value: "", label: "All shelves" },
+              ...shelves.map((shelf) => ({
+                value: String(shelf.id),
+                label: shelf.name,
+              })),
+            ]}
           />
         )}
         <Select
@@ -162,7 +339,11 @@ const LibraryPage: React.FC<LibraryPageProps> = ({ library_id }) => {
             Filters{extraFilters > 0 ? ` (${extraFilters})` : ""}
           </Button>
         )}
-        <div id="library-more-filters" className="library-toolbar__extra" hidden={!showExtra}>
+        <div
+          id="library-more-filters"
+          className="library-toolbar__extra"
+          hidden={!showExtra}
+        >
           <Input
             label="My tag"
             hideLabel={wide}
@@ -172,7 +353,9 @@ const LibraryPage: React.FC<LibraryPageProps> = ({ library_id }) => {
             onChange={(event) => setUserTag(event.target.value)}
           />
           <datalist id="library-user-tags">
-            {tagOptions.map((tag) => <option key={tag} value={tag} />)}
+            {tagOptions.map((tag) => (
+              <option key={tag} value={tag} />
+            ))}
           </datalist>
           <Select
             label="My rating"
@@ -181,7 +364,10 @@ const LibraryPage: React.FC<LibraryPageProps> = ({ library_id }) => {
             onChange={(event) => setMinRating(Number(event.target.value))}
             options={[
               { value: "0", label: "Any rating" },
-              ...[1, 2, 3, 4, 5].map((stars) => ({ value: String(stars), label: `${stars}★ and up` })),
+              ...[1, 2, 3, 4, 5].map((stars) => ({
+                value: String(stars),
+                label: `${stars}★ and up`,
+              })),
             ]}
           />
         </div>
@@ -196,9 +382,23 @@ const LibraryPage: React.FC<LibraryPageProps> = ({ library_id }) => {
         />
       </div>
 
-      <div className="library-status-chips" role="group" aria-label="Filter by reading status">
-        <FilterChip selected={statusFilter === "all"} onChange={() => setStatusFilter("all")}>
-          All ({page ? Object.values(statusCounts).reduce((sum,value)=>sum+(value??0),0) : "…"})
+      <div
+        className="library-status-chips"
+        role="group"
+        aria-label="Filter by reading status"
+      >
+        <FilterChip
+          selected={statusFilter === "all"}
+          onChange={() => setStatusFilter("all")}
+        >
+          All (
+          {page
+            ? Object.values(statusCounts).reduce(
+                (sum, value) => sum + (value ?? 0),
+                0,
+              )
+            : "…"}
+          )
         </FilterChip>
         {STATE_KEYS.filter((key) => statusCounts[key]).map((key) => (
           <FilterChip
@@ -229,7 +429,13 @@ const LibraryPage: React.FC<LibraryPageProps> = ({ library_id }) => {
         onPageLoaded={setPage}
       />
 
-      <SmartShelves open={smartOpen} onClose={()=>setSmartOpen(false)} libraryId={library_id} initialDefinition={currentDefinition} shelves={shelves}/>
+      <SmartShelves
+        open={smartOpen}
+        onClose={() => setSmartOpen(false)}
+        libraryId={library_id}
+        initialDefinition={currentDefinition}
+        shelves={shelves}
+      />
 
       <ShelfManager
         open={shelvesOpen}
@@ -243,4 +449,10 @@ const LibraryPage: React.FC<LibraryPageProps> = ({ library_id }) => {
   );
 };
 
-export default function AccountLibraryPage(props:LibraryPageProps){ const generation=useSyncExternalStore(onAccountStorageChange,storageGeneration); return <LibraryPage key={`${generation}:${props.library_id}`} {...props}/>; }
+export default function AccountLibraryPage(props: LibraryPageProps) {
+  const generation = useSyncExternalStore(
+    onAccountStorageChange,
+    storageGeneration,
+  );
+  return <LibraryPage key={`${generation}:${props.library_id}`} {...props} />;
+}

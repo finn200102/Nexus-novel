@@ -1,5 +1,6 @@
 """Private bounded inference bridge; all billing remains in the novel backend."""
 import json
+import os
 import httpx
 from config.settings import settings
 
@@ -9,6 +10,14 @@ def require_configured():
         raise ValueError("Configure the authenticated analysis service before using the companion")
 
 
+def _timeout(provider, normal):
+    managed = (provider.get('kind') == 'local' and os.getenv('NEXUS_MANAGED_SPEECH') == '1'
+        and provider.get('base_url', '').rstrip('/') == os.getenv('NEXUS_LOCAL_AI_BASE_URL', '').rstrip('/')
+        and provider.get('model') == os.getenv('NEXUS_LOCAL_AI_MODEL', 'qwen3.8-27b'))
+    # The managed bridge allows 300 seconds for cold loading and generation.
+    return httpx.Timeout(330 if managed else normal, connect=5)
+
+
 def request(provider, *, prompt, system, max_tokens, api_key):
     require_configured()
     value = json.loads(prompt)
@@ -16,7 +25,7 @@ def request(provider, *, prompt, system, max_tokens, api_key):
             "evidence": [{key: row[key] for key in ("chapter", "block_id", "text")} for row in value["evidence"]],
             "provider": {"kind": provider.kind, "base_url": provider.base_url, "model": provider.model,
                          "api_key": api_key or None}, "max_tokens": max_tokens}
-    with httpx.Client(timeout=httpx.Timeout(130, connect=5), trust_env=False, follow_redirects=False) as client:
+    with httpx.Client(timeout=_timeout(body['provider'], 130), trust_env=False, follow_redirects=False) as client:
         with client.stream("POST", settings.ANALYSIS_ENGINE_URL.rstrip("/") + "/v1/companion/questions", json=body,
                            headers={"X-Nexus-Analysis-Key": settings.ANALYSIS_ENGINE_API_KEY}) as response:
             response.raise_for_status()
@@ -33,7 +42,8 @@ def request(provider, *, prompt, system, max_tokens, api_key):
 
 def _guide_call(path, body, maximum):
     require_configured()
-    with httpx.Client(timeout=httpx.Timeout(190, connect=5), trust_env=False, follow_redirects=False) as client:
+    timeout = _timeout(body['provider'], 190) if path == 'text' else httpx.Timeout(190, connect=5)
+    with httpx.Client(timeout=timeout, trust_env=False, follow_redirects=False) as client:
         with client.stream('POST', settings.ANALYSIS_ENGINE_URL.rstrip('/') + '/v1/private-guide/' + path,
             json=body, headers={'X-Nexus-Analysis-Key': settings.ANALYSIS_ENGINE_API_KEY}) as response:
             response.raise_for_status()
@@ -60,3 +70,10 @@ def image_request(provider, *, prompt, system, image_size, image_quality, api_ke
     return _guide_call('portrait', {**value,
         'provider': {'kind': provider.kind, 'base_url': provider.base_url, 'model': provider.image_model, 'api_key': api_key or None},
         'image_size': image_size, 'image_quality': image_quality}, 11_210_000)
+
+
+# reader_provider runs these checks before creating a provider request ledger
+# entry. Fake test transports can supply their own preflight or omit it.
+request.preflight = require_configured
+guide_request.preflight = require_configured
+image_request.preflight = require_configured

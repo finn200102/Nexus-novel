@@ -1,7 +1,7 @@
 import { chapterIdentity, type ChapterIdentity } from "./chapterIdentity";
 import {quoteLocator,type ChapterDocument,type TextLocator} from "../components/reader/chapterDocument";
 export type AudioPassage = {block_id:string|null;text_offset:number|null;text_length:number|null};
-export type AudioSegment = AudioPassage & {part_index:number;start_seconds:number;end_seconds:number};
+export type AudioSegment = AudioPassage & {source_spans?:AudioPassage[];part_index:number;start_seconds:number;end_seconds:number};
 export type AudioManifest = Partial<ChapterIdentity> & {job_id?:number;source_version:string|null;rendition:"original";include_author_notes:boolean|null;precision:"segment"|"unavailable";current_source?:boolean;pronunciation_version?:string|null;duration_seconds:number|null;segments:AudioSegment[]};
 
 export const MAX_AUDIO_SPOKEN_UTF16=2_000_000;
@@ -49,7 +49,9 @@ export function alignedTo(manifest:AudioManifest|null|undefined,document:Chapter
   let previous=0;
   for(const s of manifest.segments){
     if(!Number.isFinite(s.start_seconds)||!Number.isFinite(s.end_seconds)||Math.abs(s.start_seconds-previous)>0.000001||s.end_seconds<=s.start_seconds)return false;
-    if(s.block_id){const block=document.blocks.find(b=>b.id===s.block_id);if(!block || !Number.isInteger(s.text_offset)||!Number.isInteger(s.text_length)||s.text_offset!<0||s.text_length!<=0||s.text_offset!+s.text_length!>block.text.length)return false;}
+    if(s.source_spans?.length){const first=s.source_spans[0];if(first.block_id!==s.block_id || first.text_offset!==s.text_offset || first.text_length!==s.text_length)return false;}
+    const spans=s.source_spans?.length?s.source_spans:[s];
+    for(const span of spans){if(span.block_id){const block=document.blocks.find(b=>b.id===span.block_id);if(!block || !Number.isInteger(span.text_offset)||!Number.isInteger(span.text_length)||span.text_offset!<0||span.text_length!<=0||span.text_offset!+span.text_length!>block.text.length)return false;}}
     previous=s.end_seconds;
   }
   return Math.abs(previous-manifest.duration_seconds)<=0.000001;
@@ -65,9 +67,11 @@ export function audioLocator(manifest:AudioManifest|null|undefined,document:Chap
 
 export function audioTime(manifest:AudioManifest|null|undefined,document:ChapterDocument|undefined,locator:TextLocator|undefined,rendition="original",identity?:ChapterIdentity):number|undefined {
   if(!alignedTo(manifest,document,rendition,identity)||!locator?.blockId)return;
-  const parts=manifest!.segments.filter(s=>s.block_id===locator.blockId);
+  const parts=manifest!.segments.flatMap(s=>(s.source_spans?.length?s.source_spans:[s]).filter(span=>span.block_id===locator.blockId).map(span=>({span,start:s.start_seconds})));
   if(!parts.length)return;
-  return [...parts].reverse().find(s=>(s.text_offset || 0)<=(locator.textOffset || 0))?.start_seconds ?? parts[0].start_seconds;
+  // A merged chunk has only measured segment timing. Any covered block seeks
+  // to that chunk's start, without estimating unmeasured word/block timings.
+  return [...parts].reverse().find(p=>(p.span.text_offset || 0)<=(locator.textOffset || 0))?.start ?? parts[0].start;
 }
 
 /** Keep nullable legacy wire identity out of the validated local cache type. */

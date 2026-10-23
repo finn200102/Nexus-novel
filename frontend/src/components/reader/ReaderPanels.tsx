@@ -35,7 +35,7 @@ export function NoteDialog({ open, quote, onClose, onSave }: { open: boolean; qu
 }
 
 /** Bookmarks and notes for this story; jump to one or delete it. */
-export function AnnotationsSheet({ open, onClose, annotations, chapterNumber, chapterKey, onJump, onDelete, onViewVersion }: {
+export function AnnotationsSheet({ open, onClose, annotations, chapterNumber, chapterKey, onJump, onDelete, onViewVersion, onEdit }: {
   open: boolean;
   onClose: () => void;
   annotations: ReadingAnnotation[];
@@ -44,7 +44,21 @@ export function AnnotationsSheet({ open, onClose, annotations, chapterNumber, ch
   onJump: (annotation: ReadingAnnotation) => void;
   onDelete: (id: number) => void;
   onViewVersion?: (annotation: ReadingAnnotation) => void;
+  onEdit?: (annotation: ReadingAnnotation, note: string) => Promise<void>;
 }) {
+  const [editing, setEditing] = useState<ReadingAnnotation | null>(null);
+  const [editNote, setEditNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState("");
+  useEffect(() => { setEditing(null); setEditNote(""); setEditError(""); }, [open, chapterKey, chapterNumber]);
+  useEffect(() => { if (editing && !annotations.some(item => item.id === editing.id && item.chapter_key === editing.chapter_key)) { setEditing(null); setEditNote(""); } }, [annotations, editing]);
+  const saveEdit = async () => {
+    if (!editing || !onEdit || saving) return;
+    setSaving(true); setEditError("");
+    try { await onEdit(editing, editNote.trim()); setEditing(null); }
+    catch { setEditError("The note could not be saved. Refresh the chapter and try again."); }
+    finally { setSaving(false); }
+  };
   const belongsHere=(annotation:ReadingAnnotation)=>chapterKey ? annotation.chapter_key===chapterKey : annotation.chapter_number===chapterNumber;
   const here = annotations.filter(belongsHere);
   const elsewhere = annotations.filter(annotation=>!belongsHere(annotation));
@@ -61,16 +75,23 @@ export function AnnotationsSheet({ open, onClose, annotations, chapterNumber, ch
           </span>
         </button>
         {annotation.locator_content_version && annotation.chapter_number != null && !annotation.identity_unresolved && onViewVersion && <Button variant="ghost" size="sm" onClick={() => onViewVersion(annotation)}>Saved text</Button>}
+        {onEdit && belongsHere(annotation) && !annotation.identity_unresolved && !annotation.archived && annotation.chapter_number != null && <Button variant="ghost" size="sm" onClick={() => { setEditing(annotation); setEditNote(annotation.note || ""); setEditError(""); }}>Edit note</Button>}
+        {onEdit && !belongsHere(annotation) && !annotation.identity_unresolved && !annotation.archived && annotation.chapter_number != null && <Button variant="ghost" size="sm" onClick={() => onJump(annotation)}>Open chapter to edit</Button>}
         <IconButton label={`Delete ${kind.toLowerCase()}: ${text.slice(0, 40)}`} icon={<Trash2 />} tooltip="none" size="sm" onClick={() => onDelete(annotation.id)} />
       </li>
     );
   };
   return (
-    <Sheet open={open} onClose={onClose} title="Bookmarks and notes" closeLabel="Close bookmarks and notes">
+    <><Sheet open={open} onClose={onClose} title="Bookmarks and notes" closeLabel="Close bookmarks and notes">
       {annotations.length === 0 && <p className="text-muted">No bookmarks or notes yet. Press B or use the bookmark button to mark your place.</p>}
       {here.length > 0 && (<><h3 className="reader-annotations__heading">This chapter</h3><ul className="reader-annotations">{here.map(row)}</ul></>)}
       {elsewhere.length > 0 && (<><h3 className="reader-annotations__heading">Other chapters</h3><ul className="reader-annotations">{elsewhere.map(row)}</ul></>)}
     </Sheet>
+    <Dialog open={editing !== null} onClose={() => { if (!saving) setEditing(null); }} title="Edit note" actions={<><Button variant="ghost" disabled={saving} onClick={() => setEditing(null)}>Cancel</Button><Button variant="primary" disabled={saving} onClick={() => void saveEdit()}>{saving ? "Saving…" : "Save note"}</Button></>}>
+      {editing?.quote && <blockquote>{editing.quote}</blockquote>}
+      <TextArea label="Note" rows={4} maxLength={20000} value={editNote} onChange={event => setEditNote(event.target.value)} />
+      {editError && <p role="alert">{editError}</p>}
+    </Dialog></>
   );
 }
 

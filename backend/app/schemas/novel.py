@@ -28,7 +28,7 @@ class Novel(BaseModel):
     follows: Optional[int] = None
     status: Optional[str] = None
     views: Optional[int] = None
-    rating: Optional[int] = None
+    rating: Optional[float] = None
     publish_date: Optional[datetime] = None
     updated_date: Optional[datetime] = None
     chapter_count: Optional[int] = None

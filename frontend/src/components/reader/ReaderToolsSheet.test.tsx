@@ -53,3 +53,5 @@ describe("private companion signed boundaries", () => {
     expect(screen.queryByText("Private prior-account answer")).toBeNull(); expect(screen.getByLabelText("Story question")).toHaveValue(""); act(() => activateAccountStorage(null));
   });
 });
+
+vi.mock("../../services/textRevisionService",()=>({textRevisionService:{defaults:vi.fn().mockResolvedValue({base_url:"",model:""}),style:vi.fn().mockResolvedValue({revision:0,style_guide:""}),saveStyle:vi.fn(),preview:vi.fn()}}));

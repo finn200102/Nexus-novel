@@ -10,6 +10,7 @@ class ImportReadingMapping(BaseModel):
     ref: str=Field(min_length=1,max_length=128)
     chapter_key: UUID
     confirm_changed_content: bool=False
+    restore_archived_content: bool=False
 
 
 class ImportReadingPreviewInput(BaseModel):
@@ -39,6 +40,9 @@ class ImportReadingReferenceView(BaseModel):
     applied: bool
     candidates: list[ImportReadingCandidate]
     candidates_truncated: bool
+    archived_body_available: bool=False
+    retained_originals: int=0
+    backup_placeholder_key: UUID|None=None
 
 
 class ImportReadingReviewView(BaseModel):

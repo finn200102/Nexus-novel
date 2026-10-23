@@ -10,6 +10,7 @@ import { onAccountStorageChange, storageGeneration } from "../../services/accoun
 import { chapterService } from "../../services/chapterService";
 import { companionBoundary, initialCompanionBoundary } from "./companionBoundary";
 import PassageTranslation from "./PassageTranslation";
+import TextRevisionPanel from "./TextRevisionPanel";
 import type { PassageAnchor } from "./selectedPassage";
 
 type ReaderToolsProps = {
@@ -116,6 +117,7 @@ function ReaderToolsContents({ open, onClose, novelId, chapter, libraryId, sourc
       <Button disabled={!consent || busy || !permission} onClick={() => void run(async () => setPermission(await readerToolsService.setPermission(novelId, Number(providerId), { translation: true, companion: true, ao3_consent: !!permission?.is_ao3 && consent })))}>Remember permission for this story</Button>
       <Button disabled={busy || !permission} onClick={() => void run(async () => { setPermission(await readerToolsService.setPermission(novelId, Number(providerId), { translation: false, companion: false, ao3_consent: false })); setConsent(false); })}>Block external processing for this story</Button>
     </>}
+    {open && <TextRevisionPanel key={`${novelId}:${chapter}:${sourceVersion}:${providerId}:${identity?.chapter_key}:${identity?.manifest_epoch}:${identity?.manifest_revision}:${passage?.block_id}:${passage?.text_offset}:${passage?.quote ?? ""}`} novelId={novelId} chapter={chapter} provider={selected} identity={identity} sourceVersion={sourceVersion} passage={passage?.content_version === sourceVersion ? passage : null} variants={variants} />}
     <section aria-labelledby="reader-translate-heading">
       <h2 id="reader-translate-heading">Translate this chapter</h2>
       <Select label="Target language" value={language} onChange={(event) => setLanguage(event.target.value)} options={[

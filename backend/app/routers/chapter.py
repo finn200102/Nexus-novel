@@ -1,5 +1,6 @@
 from app.routers.chapter_manifest import router as manifest_router
 from typing import Literal
+from app.schemas.library_tools import LibraryDownloadPage, TextSearchPage
 from app.schemas.chapter_reading import ChapterReadingSummaryResponse, ChapterReadingPageResponse
 from fastapi import APIRouter, Depends, status, HTTPException, BackgroundTasks, Query, Path, Response
 from fastapi.responses import StreamingResponse
@@ -8,7 +9,7 @@ from config.database import SessionLocal as SessionFactory
 from config.database import get_db
 from app.models.user import User
 from ..schemas.chapter import Chapter as ChapterSchema
-from ..schemas.chapter import ChapterCreate, ChapterUpdate, ChapterContent, ChapterDownloadJob as ChapterDownloadJobSchema, ChapterDownloadQueueRequest, ReadingProgressResponse, ReadingProgressUpdate, ReadingAnnotationCreate, ReadingAnnotationResponse
+from ..schemas.chapter import ChapterCreate, ChapterUpdate, ChapterContent, ChapterDownloadJob as ChapterDownloadJobSchema, ChapterDownloadQueueRequest, ReadingProgressResponse, ReadingProgressUpdate, ReadingAnnotationCreate, ReadingAnnotationResponse, ReadingAnnotationUpdate
 from ..schemas.chapter import (
     ChapterVersionsPage, RecentReadingProgressResponse, ReadingHistoryResponse, ChapterNavigationResponse,
     ChapterRecapResponse, NovelDownloadStatusResponse,
@@ -788,6 +789,27 @@ def create_reading_annotation(
     return {**item.__dict__, **identity(chapter), "chapter_number": chapter.chapter_number}
 
 
+@router.patch("/annotations/{annotation_id:int}", response_model=ReadingAnnotationResponse)
+def update_reading_annotation(annotation_id: int, update: ReadingAnnotationUpdate,
+    db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    item = db.query(ReadingAnnotation).filter_by(id=annotation_id, user_id=current_user.id).with_for_update().first()
+    if item is None:
+        raise HTTPException(404, "Annotation not found")
+    _owned_novel(db, item.novel_id, current_user)
+    chapter = db.query(Chapter).filter_by(id=item.chapter_id, novel_id=item.novel_id).first()
+    if chapter is None or item.chapter_key != chapter.chapter_key:
+        raise HTTPException(409, "This annotation needs chapter identity review before editing")
+    from app.services.chapter_identity_service import check_write, identity
+    if any(getattr(update, key) is None for key in ("expected_chapter_key", "expected_manifest_epoch", "expected_manifest_revision", "expected_content_version")):
+        raise HTTPException(409, "Refresh the chapter before editing this annotation")
+    check_write(db, current_user.id, chapter, **update.model_dump(exclude={"note"}), require_content_version=True)
+    # A note edit must not silently move the original highlight or saved locator.
+    item.note = update.note
+    db.commit()
+    db.refresh(item)
+    return {**item.__dict__, **identity(chapter), "chapter_number": chapter.chapter_number}
+
+
 @router.delete("/annotations/{annotation_id:int}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_reading_annotation(
     annotation_id: int,
@@ -816,11 +838,11 @@ def chapter_reading_summary(novel_id:int,response:Response,db:Session=Depends(ge
 
 @router.get('/reading-chapters/{novel_id:int}', response_model=ChapterReadingPageResponse)
 def chapter_reading_page(novel_id:int,response:Response,offset:int=Query(0,ge=0),limit:int=Query(100,ge=1,le=200),
-    q:str=Query('',max_length=200),category_scope:Literal['all','followed']='all',db:Session=Depends(get_db),user:User=Depends(get_current_user)):
+    q:str=Query('',max_length=200),category_scope:Literal['all','followed']='all',from_chapter:int|None=Query(None,ge=-(2**31),le=2**31-1),to_chapter:int|None=Query(None,ge=-(2**31),le=2**31-1),db:Session=Depends(get_db),user:User=Depends(get_current_user)):
     response.headers['Cache-Control']='private, no-store'
     from app.services.chapter_reading_service import page
     try:
-        return page(db,user.id,novel_id,offset,limit,q,category_scope)
+        return page(db,user.id,novel_id,offset,limit,q,category_scope,from_chapter,to_chapter)
     finally:
         db.rollback()
 
@@ -1099,6 +1121,65 @@ def reset_chapter_status(
     return chapter
 
 
+@router.get("/download-status", response_model=LibraryDownloadPage, response_model_exclude_unset=True)
+def library_download_status(library_id: int | None = None, offset: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=200), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from app.models.library import Library
+    query = db.query(Novel).join(Library).filter(Library.user_id == current_user.id)
+    if library_id is not None:
+        if db.query(Library.id).filter_by(id=library_id, user_id=current_user.id).first() is None:
+            raise HTTPException(404, "Library not found")
+        query = query.filter(Novel.library_id == library_id)
+    total = query.count()
+    novels = query.order_by(Novel.id).offset(offset).limit(limit).all()
+    ids = [novel.id for novel in novels]
+    # Load only status fields: polling must never fetch all downloaded book text.
+    columns = [Chapter.id, Chapter.novel_id, Chapter.chapter_number, Chapter.title, Chapter.content_status,
+        Chapter.download_started_at, Chapter.download_finished_at, Chapter.retry_count, Chapter.download_error]
+    chapters = db.query(*columns).filter(Chapter.novel_id.in_(ids), Chapter.archived.is_(False)).order_by(Chapter.chapter_number).all() if ids else []
+    grouped = {id: [] for id in ids}
+    for chapter in chapters:
+        grouped[chapter.novel_id].append(chapter)
+    return {"total": total, "offset": offset, "limit": limit, "novels": [{"novel_id": novel.id,
+        "library_id": novel.library_id, "title": novel.title, "status": _download_status(grouped[novel.id])} for novel in novels]}
+
+
+@router.get("/search", response_model=TextSearchPage)
+def search_downloaded_text(response: Response, q: str = Query(..., min_length=2, max_length=200),
+    novel_id: int | None = None, library_id: int | None = None, offset: int = Query(0, ge=0, le=100000),
+    limit: int = Query(20, ge=1, le=100), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from sqlalchemy import func, case
+    from app.models.library import Library
+    from app.models.chapter_manifest import ChapterManifestState
+    response.headers['Cache-Control'] = 'private, no-store'
+    q = q.strip()
+    if len(q) < 2:
+        raise HTTPException(422, "Enter at least two characters to search")
+    if novel_id is not None:
+        _owned_novel(db, novel_id, current_user)
+    if library_id is not None and db.query(Library.id).filter_by(id=library_id, user_id=current_user.id).first() is None:
+        raise HTTPException(404, "Library not found")
+    text = func.coalesce(Chapter.document['plain_text'].as_string(), Chapter.content, '')
+    lowered = func.lower(text)
+    pattern = '%' + q.lower().replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_') + '%'
+    query = db.query(Chapter).join(Novel).join(Library).join(ChapterManifestState, ChapterManifestState.novel_id == Novel.id).filter(Library.user_id == current_user.id,
+        Chapter.archived.is_(False), Chapter.chapter_key.isnot(None), Chapter.content_status == ContentStatus.PRESENT, lowered.like(pattern, escape='\\'))
+    if novel_id is not None: query = query.filter(Chapter.novel_id == novel_id)
+    if library_id is not None: query = query.filter(Novel.library_id == library_id)
+    total = query.count()
+    position = func.strpos(lowered, q.lower()) if db.get_bind().dialect.name == 'postgresql' else func.instr(lowered, q.lower())
+    start = case((position > 90, position - 90), else_=1)
+    rows = query.with_entities(
+        Chapter.id, Chapter.novel_id, Novel.library_id, Novel.title, Chapter.chapter_number, Chapter.title,
+        Chapter.chapter_key, ChapterManifestState.manifest_epoch, ChapterManifestState.revision,
+        Chapter.document['content_version'].as_string(), func.substr(text, start, 380)).order_by(
+            Novel.id, Chapter.chapter_number, Chapter.id).offset(offset).limit(limit).all()
+    return {"total": total, "offset": offset, "limit": limit, "matches": [{"chapter_id": r[0], "novel_id": r[1],
+        "library_id": r[2], "novel_title": r[3], "chapter_number": r[4], "chapter_title": r[5],
+        "chapter_key": r[6], "manifest_epoch": r[7], "manifest_revision": str(r[8]),
+        "content_version": r[9], "snippet": r[10]} for r in rows]}
+
+
 @router.get("/novel/{novel_id}/download-status", response_model=NovelDownloadStatusResponse, response_model_exclude_unset=True)
 def get_novel_download_status(
     novel_id: int,
@@ -1111,24 +1192,10 @@ def get_novel_download_status(
     """
     _owned_novel(db, novel_id, current_user)
     chapters = chapter_services.get_chapters_by_novel_id(db, novel_id).all()
-    if not chapters:
-        return {
-            "total": 0,
-            "present": 0,
-            "missing": 0,
-            "processing": 0,
-            "failed": 0,
-            "chapters": [],
-            "processing_chapters": [],
-            "failed_chapters": [],
-        }
+    return _download_status(chapters)
 
-    novel = novel_services.get_novel_by_id(db, novel_id)
-    if not novel:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Novel not found"
-        )
 
+def _download_status(chapters):
     processing_chapters = []
     failed_chapters = []
     present_count = 0

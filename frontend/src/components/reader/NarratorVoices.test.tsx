@@ -19,6 +19,29 @@ describe("private narrator voices",()=>{
     await waitFor(()=>expect(voiceService.upload).toHaveBeenCalledWith({name:"New narrator",language:"English",transcript:"",audio_base64:"YXVkaW8="}));
     expect(await screen.findByText("New narrator")).toBeInTheDocument();
   });
+  it("keeps Qwen as default and sends an explicitly selected Fish engine",async()=>{
+    vi.mocked(voiceService.capabilities).mockResolvedValue({configured:true,languages:["English"],engines:[{id:"qwen",label:"Qwen TTS",configured:true},{id:"fish",label:"Fish Audio",configured:true}]});
+    vi.mocked(voiceService.upload).mockResolvedValue({...ready,id:4,status:"queued"});
+    render(<NarratorVoices selected={null} onSelect={vi.fn()}/>);
+    const engine=await screen.findByRole("combobox",{name:"Speech engine"});
+    expect(engine).toHaveValue("qwen");
+    fireEvent.change(engine,{target:{value:"fish"}});
+    fireEvent.change(screen.getByLabelText(/^Narrator name/),{target:{value:"Fish narrator"}});
+    fireEvent.change(screen.getByLabelText(/^Voice recording/),{target:{files:[new File(["audio"],"reference.wav",{type:"audio/wav"})]}});
+    fireEvent.change(screen.getByLabelText(/^Recording transcript/),{target:{value:"Exact reference words"}});
+    fireEvent.submit(screen.getByRole("button",{name:"Create narrator voice"}).closest("form")!);
+    await waitFor(()=>expect(voiceService.upload).toHaveBeenCalledWith(expect.objectContaining({engine:"fish",transcript:"Exact reference words"})));
+  });
+  it("requires an exact reference transcript when local transcription is unavailable",async()=>{
+    vi.mocked(voiceService.capabilities).mockResolvedValue({configured:true,languages:["English"],transcript_required:true});
+    render(<NarratorVoices selected={null} onSelect={vi.fn()}/>);
+    expect(await screen.findByLabelText(/^Recording transcript \(required\)/)).toBeRequired();
+    fireEvent.change(screen.getByLabelText(/^Narrator name/),{target:{value:"Local voice"}});
+    fireEvent.change(screen.getByLabelText(/^Voice recording/),{target:{files:[new File(["audio"],"reference.wav",{type:"audio/wav"})]}});
+    expect(screen.getByRole("button",{name:"Create narrator voice"})).toBeDisabled();
+    fireEvent.change(screen.getByLabelText(/^Recording transcript/),{target:{value:"Reference words"}});
+    expect(screen.getByRole("button",{name:"Create narrator voice"})).toBeEnabled();
+  });
   it("discards private voice results after an account switch",async()=>{
     let finish!:(voices:NarratorVoice[])=>void;
     vi.mocked(voiceService.list).mockReturnValue(new Promise(resolve=>{finish=resolve;}));
@@ -64,7 +87,11 @@ describe("private narrator voices",()=>{
     fireEvent.change(await screen.findByLabelText(/^Narrator name/), { target: { value: "My narrator" } });
     fireEvent.change(screen.getByLabelText(/^Voice recording/), { target: { files: [new File(["audio"], "long-reference.mp3", { type: "audio/mpeg" })] } });
     const audio = await screen.findByLabelText("Selected recording preview");
+    fireEvent.change(screen.getByLabelText(/^Recording transcript/), { target: { value: "Full minute of words that must not accompany a short excerpt" } });
     Object.defineProperty(audio, "duration", { configurable: true, value: 60 }); fireEvent.loadedMetadata(audio);
+    expect(screen.getByLabelText(/^Selected excerpt transcript/)).toHaveValue("");
+    expect(screen.getByText(/Selected reference: 0–15 seconds/)).toBeInTheDocument();
+    expect(screen.getByText(/The excerpt changed/)).toBeInTheDocument();
     expect(screen.getByLabelText("Excerpt start (seconds)")).toHaveValue(0);
     expect(screen.getByLabelText("Excerpt end (seconds)")).toHaveValue(15);
     expect(screen.getByText(/Cloning uses only the selected excerpt/)).toBeInTheDocument();
@@ -73,6 +100,22 @@ describe("private narrator voices",()=>{
     fireEvent.change(screen.getByLabelText(/^Selected excerpt transcript/), { target: { value: "Only selected words" } });
     fireEvent.submit(screen.getByRole("button", { name: "Create narrator voice" }).closest("form")!);
     await waitFor(() => expect(voiceService.upload).toHaveBeenCalledWith({ name: "My narrator", audio_base64: "YXVkaW8=", transcript: "Only selected words", language: "English", excerpt_start_seconds: 20, excerpt_duration_seconds: 15 }));
+  });
+
+  it("blocks an obviously long full-file transcript for a short selected reference", async () => {
+    vi.stubGlobal("URL", {createObjectURL:vi.fn(()=>"blob:reference"),revokeObjectURL:vi.fn()});
+    render(<NarratorVoices selected={null} onSelect={vi.fn()}/>);
+    fireEvent.change(await screen.findByLabelText(/^Narrator name/),{target:{value:"My narrator"}});
+    fireEvent.change(screen.getByLabelText(/^Voice recording/),{target:{files:[new File(["audio"],"long.mp3",{type:"audio/mpeg"})]}});
+    const audio=await screen.findByLabelText("Selected recording preview");
+    Object.defineProperty(audio,"duration",{configurable:true,value:60});fireEvent.loadedMetadata(audio);
+    fireEvent.change(screen.getByLabelText(/^Selected excerpt transcript/),{target:{value:Array(178).fill("word").join(" ")}});
+    expect(screen.getByText(/This transcript has too many words/)).toBeInTheDocument();
+    expect(screen.getByRole("button",{name:"Create narrator voice"})).toBeDisabled();
+    fireEvent.submit(screen.getByRole("button",{name:"Create narrator voice"}).closest("form")!);
+    expect(voiceService.upload).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText(/^Selected excerpt transcript/),{target:{value:Array(45).fill("word").join(" ")}});
+    expect(screen.getByRole("button",{name:"Create narrator voice"})).toBeEnabled();
   });
 
   it("bounds excerpts and clears an old transcript when the selected passage changes", async () => {

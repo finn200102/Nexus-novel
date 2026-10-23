@@ -1,7 +1,18 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, {
+  useEffect,
+  useState,
+  useCallback,
+  useRef,
+  useSyncExternalStore,
+} from "react";
 import { useNavigate } from "react-router-dom";
-import { novelService } from "../../services/novelService";
+import {
+  onAccountStorageChange,
+  storageGeneration,
+} from "../../services/accountStorage";
+import apiClient from "../../services/apiClient";
 import { chapterService } from "../../services/chapterService";
+import { chapterIdentity } from "../../services/chapterIdentity";
 import { useLibraryContext } from "../../context/useLibraryContext";
 import { useToast } from "../../context/useToast";
 import { Novel } from "../../types/novel";
@@ -21,13 +32,27 @@ interface DownloadsTabProps {
   setJobs: React.Dispatch<React.SetStateAction<DownloadJob[]>>;
 }
 
-const DownloadsTab: React.FC<DownloadsTabProps> = ({ jobs, setJobs }) => {
+const DownloadsTabContents: React.FC<DownloadsTabProps> = ({
+  jobs,
+  setJobs,
+}) => {
   const navigate = useNavigate();
+  const mounted = useRef(false);
+  const requestSequence = useRef(0);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const { activeLibraryId } = useLibraryContext();
   const { addToast } = useToast();
 
   const [novelStatuses, setNovelStatuses] = useState<NovelDownloadStatus[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [refreshError, setRefreshError] = useState("");
+  const [statusOffset, setStatusOffset] = useState(0),
+    [statusTotal, setStatusTotal] = useState(0);
   const [expandedNovel, setExpandedNovel] = useState<number | null>(null);
 
   const fetchDownloadStatuses = useCallback(async () => {
@@ -36,36 +61,41 @@ const DownloadsTab: React.FC<DownloadsTabProps> = ({ jobs, setJobs }) => {
       return;
     }
 
+    const request = ++requestSequence.current;
     try {
-      const novels = await novelService.getAllNovels(activeLibraryId);
-      console.log("DownloadPage: Fetched novels:", novels.length);
-      const statusesPromises = novels.map(async (novel) => {
-        try {
-          const status = await chapterService.getDownloadStatus(novel.id);
-          console.log("DownloadPage: Status for novel", novel.id, ":", status);
-          return {
-            novel,
-            ...status,
-          };
-        } catch (err) {
-          console.error(`Failed to get status for novel ${novel.id}:`, err);
-          return null;
-        }
+      const response = await apiClient.get("/chapter/download-status", {
+        params: {
+          library_id: activeLibraryId,
+          offset: statusOffset,
+          limit: 100,
+        },
       });
-
-      const statuses = await Promise.all(statusesPromises);
-      console.log("DownloadPage: All statuses:", statuses);
-      const validStatuses = statuses.filter(
-        (s): s is NovelDownloadStatus => s !== null && s.total > 0
+      if (!mounted.current || request !== requestSequence.current) return;
+      setNovelStatuses(
+        response.data.novels.map(
+          (row: {
+            novel_id: number;
+            title: string;
+            status: NovelDownloadStatusResponse;
+          }) => ({
+            ...row.status,
+            novel: { id: row.novel_id, title: row.title } as Novel,
+          }),
+        ),
       );
-      console.log("DownloadPage: Valid statuses:", validStatuses);
-      setNovelStatuses(validStatuses);
+      setStatusTotal(response.data.total);
+      setRefreshError("");
     } catch (err) {
+      if (!mounted.current || request !== requestSequence.current) return;
       console.error("Failed to fetch download statuses:", err);
+      setRefreshError(
+        "Could not refresh download status. Shown information may be out of date. Retry to check your queue.",
+      );
     } finally {
-      setLoading(false);
+      if (mounted.current && request === requestSequence.current)
+        setLoading(false);
     }
-  }, [activeLibraryId]);
+  }, [activeLibraryId, statusOffset]);
 
   useEffect(() => {
     fetchDownloadStatuses();
@@ -97,11 +127,10 @@ const DownloadsTab: React.FC<DownloadsTabProps> = ({ jobs, setJobs }) => {
   const handleRetryFailed = async (
     novelId: number,
     chapterId: number,
-    chapterNumber: number
+    chapterNumber: number,
   ) => {
     try {
-      await chapterService.resetChapterStatus(chapterId, "MISSING");
-      await chapterService.downloadChapter(activeLibraryId!, novelId, chapterNumber);
+      await retryChapter(novelId, chapterId, chapterNumber);
       setTimeout(() => fetchDownloadStatuses(), 500);
     } catch (err) {
       console.error("Failed to retry chapter:", err);
@@ -109,13 +138,37 @@ const DownloadsTab: React.FC<DownloadsTabProps> = ({ jobs, setJobs }) => {
     }
   };
 
-  const handleRetryAllFailed = async (failedChapters: FailedChapter[]) => {
+  const retryChapter = async (
+    novelId: number,
+    chapterId: number,
+    chapterNumber: number,
+  ) => {
+    if (!activeLibraryId) throw new Error("Choose a library before retrying.");
+    const current = await chapterService.getNavigation(novelId, chapterNumber);
+    const identity = chapterIdentity(current);
+    if (current.chapter_id !== chapterId || !identity) {
+      throw new Error(
+        "The chapter list changed. Open the story and review it before retrying.",
+      );
+    }
+    await chapterService.downloadChapter(
+      activeLibraryId,
+      novelId,
+      current.chapter_number,
+      identity,
+    );
+  };
+
+  const handleRetryAllFailed = async (
+    novelId: number,
+    failedChapters: FailedChapter[],
+  ) => {
     try {
       for (const chapter of failedChapters) {
-        await chapterService.resetChapterStatus(chapter.id, "MISSING");
+        await retryChapter(novelId, chapter.id, chapter.chapter_number);
       }
       fetchDownloadStatuses();
-      addToast(`Reset ${failedChapters.length} chapters for retry`, "success");
+      addToast(`Retrying ${failedChapters.length} chapters`, "success");
     } catch (err) {
       console.error("Failed to retry all:", err);
       addToast("Failed to retry chapters", "error");
@@ -127,13 +180,18 @@ const DownloadsTab: React.FC<DownloadsTabProps> = ({ jobs, setJobs }) => {
   };
 
   const hasActivity = novelStatuses.some(
-    (s) => s.processing > 0 || s.failed > 0
+    (s) => s.processing > 0 || s.failed > 0,
   );
 
   const updateJob = async (job: DownloadJob, action: "retry" | "cancel") => {
     try {
-      const updated = action === "retry" ? await downloadService.retry(job.id) : await downloadService.cancel(job.id);
-      setJobs((current) => current.map((item) => item.id === updated.id ? updated : item));
+      const updated =
+        action === "retry"
+          ? await downloadService.retry(job.id)
+          : await downloadService.cancel(job.id);
+      setJobs((current) =>
+        current.map((item) => (item.id === updated.id ? updated : item)),
+      );
     } catch (error) {
       console.error(`Failed to ${action} download job`, error);
       addToast(`Failed to ${action} download job`, "error");
@@ -147,12 +205,18 @@ const DownloadsTab: React.FC<DownloadsTabProps> = ({ jobs, setJobs }) => {
 
   const jobStatusText = (job: DownloadJob) => {
     switch (job.status) {
-      case "queued": return job.attempt_count > 1 ? "Retrying" : "Waiting";
-      case "processing": return job.attempt_count > 1 ? "Retrying" : "Saving";
-      case "retry_wait": return `Retrying · attempt ${job.attempt_count + 1} of ${job.max_attempts}`;
-      case "failed": return "Failed";
-      case "cancelled": return "Cancelled";
-      default: return "Saved";
+      case "queued":
+        return job.attempt_count > 1 ? "Retrying" : "Waiting";
+      case "processing":
+        return job.attempt_count > 1 ? "Retrying" : "Saving";
+      case "retry_wait":
+        return `Retrying · attempt ${job.attempt_count + 1} of ${job.max_attempts}`;
+      case "failed":
+        return "Failed";
+      case "cancelled":
+        return "Cancelled";
+      default:
+        return "Saved";
     }
   };
 
@@ -168,15 +232,91 @@ const DownloadsTab: React.FC<DownloadsTabProps> = ({ jobs, setJobs }) => {
 
   return (
     <div className="updates-downloads">
-
-      {!hasActivity && novelStatuses.length === 0 && (
-        <EmptyState level={3} title="No downloads yet" description="Start downloading chapters from a story to see them here." />
+      {refreshError && (
+        <p role="alert">
+          {refreshError}{" "}
+          <button onClick={() => void fetchDownloadStatuses()}>
+            Retry download status
+          </button>
+        </p>
+      )}
+      {statusTotal > 100 && (
+        <nav aria-label="Download story pages">
+          <button
+            disabled={!statusOffset}
+            onClick={() => setStatusOffset((value) => Math.max(0, value - 100))}
+          >
+            Previous download stories
+          </button>
+          <button
+            disabled={statusOffset + 100 >= statusTotal}
+            onClick={() => setStatusOffset((value) => value + 100)}
+          >
+            Next download stories
+          </button>
+        </nav>
       )}
 
-      {jobs.length > 0 && <section className="downloads-job-panel" aria-label="Download queue">
-        <div className="downloads-section-header"><h2>Queue</h2><span>{jobs.filter((job) => ["queued", "processing", "retry_wait"].includes(job.status)).length} active</span></div>
-        <div className="downloads-job-list">{jobs.slice(0, 25).map((job) => <article key={job.id} className="downloads-job-row"><div><strong>{jobTitle(job)}</strong><small>{jobStatusText(job)}</small>{job.error && <small className="downloads-chapter-error">{job.error}</small>}</div><div className="downloads-chapter-actions">{["failed", "cancelled", "retry_wait"].includes(job.status) && <button className="downloads-btn downloads-btn--small downloads-btn--retry" onClick={() => updateJob(job, "retry")}>Retry</button>}{["queued", "processing", "retry_wait"].includes(job.status) && <button className="downloads-btn downloads-btn--small" onClick={() => updateJob(job, "cancel")}>Cancel</button>}</div></article>)}</div>
-      </section>}
+      {!refreshError && !hasActivity && novelStatuses.length === 0 && (
+        <EmptyState
+          level={3}
+          title="No downloads yet"
+          description="Start downloading chapters from a story to see them here."
+        />
+      )}
+
+      {jobs.length > 0 && (
+        <section className="downloads-job-panel" aria-label="Download queue">
+          <div className="downloads-section-header">
+            <h2>Queue</h2>
+            <span>
+              {
+                jobs.filter((job) =>
+                  ["queued", "processing", "retry_wait"].includes(job.status),
+                ).length
+              }{" "}
+              active
+            </span>
+          </div>
+          <div className="downloads-job-list">
+            {jobs.slice(0, 25).map((job) => (
+              <article key={job.id} className="downloads-job-row">
+                <div>
+                  <strong>{jobTitle(job)}</strong>
+                  <small>{jobStatusText(job)}</small>
+                  {job.error && (
+                    <small className="downloads-chapter-error">
+                      {job.error}
+                    </small>
+                  )}
+                </div>
+                <div className="downloads-chapter-actions">
+                  {["failed", "cancelled", "retry_wait"].includes(
+                    job.status,
+                  ) && (
+                    <button
+                      className="downloads-btn downloads-btn--small downloads-btn--retry"
+                      onClick={() => updateJob(job, "retry")}
+                    >
+                      Retry
+                    </button>
+                  )}
+                  {["queued", "processing", "retry_wait"].includes(
+                    job.status,
+                  ) && (
+                    <button
+                      className="downloads-btn downloads-btn--small"
+                      onClick={() => updateJob(job, "cancel")}
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
 
       {novelStatuses.map((status) => {
         const isExpanded = expandedNovel === status.novel.id;
@@ -192,7 +332,11 @@ const DownloadsTab: React.FC<DownloadsTabProps> = ({ jobs, setJobs }) => {
             >
               <div className="downloads-novel-cover">
                 <img
-                  src={status.novel.img_url || status.novel.cover_image || defaultCoverImage}
+                  src={
+                    status.novel.img_url ||
+                    status.novel.cover_image ||
+                    defaultCoverImage
+                  }
                   alt={displayTitle(status.novel)}
                   onError={(e) => {
                     (e.target as HTMLImageElement).src = "";
@@ -200,10 +344,12 @@ const DownloadsTab: React.FC<DownloadsTabProps> = ({ jobs, setJobs }) => {
                 />
               </div>
               <div className="downloads-novel-info">
-                <h3 className="downloads-novel-title">{displayTitle(status.novel)}</h3>
+                <h3 className="downloads-novel-title">
+                  {displayTitle(status.novel)}
+                </h3>
                 <div className="downloads-novel-meta">
                   <span className="downloads-novel-site">
-                    {status.novel.novel_site?.toUpperCase() || "UNKNOWN"}
+                    {status.novel.novel_site?.toUpperCase() || ""}
                   </span>
                   <span className="downloads-novel-count">
                     {status.present}/{status.total} chapters
@@ -266,9 +412,7 @@ const DownloadsTab: React.FC<DownloadsTabProps> = ({ jobs, setJobs }) => {
                             <span>Retry #{chapter.retry_count}</span>
                             <button
                               className="downloads-btn downloads-btn--small"
-                              onClick={() =>
-                                handleCancelChapter(chapter.id)
-                              }
+                              onClick={() => handleCancelChapter(chapter.id)}
                               title="Cancel"
                             >
                               ✕
@@ -288,7 +432,10 @@ const DownloadsTab: React.FC<DownloadsTabProps> = ({ jobs, setJobs }) => {
                         className="downloads-btn downloads-btn--retry"
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleRetryAllFailed(status.failed_chapters);
+                          handleRetryAllFailed(
+                            status.novel.id,
+                            status.failed_chapters,
+                          );
                         }}
                       >
                         Retry All Failed
@@ -327,7 +474,7 @@ const DownloadsTab: React.FC<DownloadsTabProps> = ({ jobs, setJobs }) => {
                                 handleRetryFailed(
                                   status.novel.id,
                                   chapter.id,
-                                  chapter.chapter_number
+                                  chapter.chapter_number,
                                 )
                               }
                               title="Retry"
@@ -336,9 +483,7 @@ const DownloadsTab: React.FC<DownloadsTabProps> = ({ jobs, setJobs }) => {
                             </button>
                             <button
                               className="downloads-btn downloads-btn--small"
-                              onClick={() =>
-                                handleCancelChapter(chapter.id)
-                              }
+                              onClick={() => handleCancelChapter(chapter.id)}
                               title="Cancel"
                             >
                               ✕
@@ -367,4 +512,13 @@ const DownloadsTab: React.FC<DownloadsTabProps> = ({ jobs, setJobs }) => {
   );
 };
 
-export default DownloadsTab;
+export default function DownloadsTab(props: DownloadsTabProps) {
+  const generation = useSyncExternalStore(
+    onAccountStorageChange,
+    storageGeneration,
+  );
+  const { activeLibraryId } = useLibraryContext();
+  return (
+    <DownloadsTabContents key={`${generation}:${activeLibraryId}`} {...props} />
+  );
+}

@@ -69,7 +69,10 @@ def test_completed_source_and_later_target_autosave_count_one_logical_reading(db
 
 
 @pytest.mark.parametrize('first_index', [0, 1])
-def test_unfinished_members_can_finish_in_either_order_without_second_fact(db, test_user, siblings, first_index):
+def test_unfinished_members_can_finish_in_either_order_without_second_fact(db, test_user, siblings, first_index, monkeypatch):
+    # Match the explicit summary cutoff rather than depending on the host date.
+    completion_time = datetime(2026, 10, 16, 12)
+    monkeypatch.setattr("app.services.reading_continuity_service.utcnow", lambda: completion_time)
     continuity, members = siblings
     continuity.completed = False; continuity.completed_at = None; continuity.completion_novel_id = None
     db.query(ReadingRunEvent).delete()
@@ -80,6 +83,7 @@ def test_unfinished_members_can_finish_in_either_order_without_second_fact(db, t
     db.refresh(continuity)
     assert continuity.completed
     first_date = continuity.completed_at
+    assert first_date == completion_time
     first_story = continuity.completion_novel_id
     save(db, test_user, members[1-first_index], 'later-other-member-finish')
     db.refresh(continuity)

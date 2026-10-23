@@ -1,3 +1,4 @@
+import { textRevisionService } from "../../services/textRevisionService";
 import type {ProviderInput} from "../../generated/api";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { Banner, Button, Input, PageHeader, Select } from "../../components/ui";
@@ -17,6 +18,8 @@ function Contents() {
   const [rows, setRows] = useState<ReaderProvider[]>([]);
   const [kind, setKind] = useState<ProviderInput["kind"]>("local");
   const [name, setName] = useState("");
+  const [localDefaults,setLocalDefaults]=useState<{base_url:string;model:string}|null>(null);
+  useEffect(()=>{void textRevisionService.defaults().then(setLocalDefaults).catch(()=>undefined);},[]);
   const [url, setUrl] = useState("");
   const [model, setModel] = useState("");
   const [key, setKey] = useState("");
@@ -57,6 +60,7 @@ function Contents() {
         .then(async () => { setKey(""); setEditing(null); await refresh(); })
         .catch((err) => setError(getUserFacingError(err, "Couldn’t save this provider."))).finally(() => setBusy(false));
     }}>
+      {editing==null && kind==="local" && localDefaults?.base_url && <Button onClick={()=>{setUrl(localDefaults.base_url);setModel(localDefaults.model);setName("Local Qwen");}}>Use configured local model</Button>}
       <Input label="Provider name" value={name} required maxLength={120} onChange={(event) => setName(event.target.value)} />
       <Select label="Provider type" value={kind} disabled={editing != null} onChange={(event) => setKind(event.target.value as ProviderInput["kind"])} options={[
         { value: "local", label: "Local conversational model" }, { value: "local_translation", label: "Local translation model" },

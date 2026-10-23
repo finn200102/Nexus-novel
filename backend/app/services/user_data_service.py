@@ -33,6 +33,7 @@ from sqlalchemy.orm import Session
 
 from app.models.library import Library
 from app.models.novel import Novel
+from app.models.chapter import Chapter
 from app.models.reading_annotation import ReadingAnnotation
 from app.models.reading_history import ReadingHistory
 from app.models.reading_progress import ReadingProgress
@@ -192,6 +193,9 @@ def export_user_data(db: Session, user: User) -> dict:
         preference = preferences.get(f"story:{novel_id}")
         if preference and preference.values.get("typography"):
             entry["reader_typography"] = preference.values["typography"]
+        text_style = preferences.get(f"textstyle:{novel_id}")
+        if text_style:
+            entry["text_style_guide"] = text_style.values.get("style_guide", "")
         pronunciation = preferences.get(f"pronunciation:{novel_id}")
         if pronunciation:
             entry["pronunciation"] = pronunciation.values
@@ -379,7 +383,7 @@ def _create_novel(db: Session, library: Library, item) -> tuple[Novel | None, st
     return novel, None
 
 
-def _import_novel(db: Session, user: User, library: Library, item, queued: list[Novel]) -> dict:
+def _import_novel(db: Session, user: User, library: Library, item, queued: list[Novel], private_originals=None) -> dict:
     report: dict = {"url": item.url, "title": item.title, "status": None, "reason": None}
     if item.url is None:
         novel,portable_status,link_id,failure=portable_story_service.resolve(db,user,library,item)
@@ -396,6 +400,33 @@ def _import_novel(db: Session, user: User, library: Library, item, queued: list[
         else:report['status']='linked'
     report['novel_id']=novel.id
     if novel.scrape_status=='awaiting_original':report['original_status']='unavailable'
+    backup_placeholder_keys={}
+    if private_originals and novel.scrape_status=='awaiting_original':
+        # A full backup may restore content into a clean private destination.
+        # Create only empty, source-less chapter slots; body material remains
+        # in the owner's import review until explicitly selected and applied.
+        existing=db.query(Chapter).execution_options(include_archived_chapters=True).filter_by(novel_id=novel.id).count()
+        if existing==0:
+            from app.models.chapter import ContentStatus
+            placeholder_by_archive_key={}
+            for body in private_originals.values():
+                if body.get('kind')!='current':continue
+                chapter=Chapter(novel_id=novel.id,chapter_number=body['chapter_number'],title=body.get('title'),
+                    category=body.get('category') or 'story',source_url=None,site_chapter_id=None,
+                    metadata_manifest_key=None,metadata_chapter_key=None,content=None,document=None,
+                    content_status=ContentStatus.MISSING,archived=bool(body.get('archived')),
+                    archived_at=datetime.now(UTC).replace(tzinfo=None) if body.get('archived') else None)
+                db.add(chapter)
+                placeholder_by_archive_key[str(body['chapter_key'])]=chapter
+            db.flush()
+            for chapter in placeholder_by_archive_key.values():db.refresh(chapter)
+            for ref in item.chapter_refs:
+                target=placeholder_by_archive_key.get(str(ref.chapter_key)) if ref.chapter_key else None
+                if target is None and ref.source_version:
+                    target=next((chapter for body_key,chapter in placeholder_by_archive_key.items()
+                        if any(candidate.get('chapter_key')==body_key and candidate.get('source_version')==ref.source_version
+                               for candidate in private_originals.values())),None)
+                if target is not None:backup_placeholder_keys[ref.ref]=target.chapter_key
     report["follow_state"] = _apply_follow(db, user, novel, item)
     # Run facts are portable; numeric snapshots are not chapter authority.
     # Keep all original positions and locators durably in the private review.
@@ -407,9 +438,11 @@ def _import_novel(db: Session, user: User, library: Library, item, queued: list[
     before_progress=db.query(ReadingProgress).filter_by(user_id=user.id,novel_id=novel.id).first()
     before_history=db.query(ReadingHistory).filter_by(user_id=user.id,novel_id=novel.id).count()
     before_annotations=db.query(ReadingAnnotation).filter_by(user_id=user.id,novel_id=novel.id).count()
-    review=imported_reading.stage(db,user,novel,item,mapping)
+    review=imported_reading.stage(db,user,novel,item,mapping,private_originals=private_originals,backup_placeholder_keys=backup_placeholder_keys)
     db.flush()
     report['reading_review_id']=review.id if review else None
+    if private_originals and review and novel.scrape_status=='awaiting_original' and any(body.get('kind')=='current' for body in private_originals.values()):
+        report['original_status']='backup_review'
     nested=[]
     for raw in item.pending_reading_imports:
         if raw.get('pending_reading_imports'):raise HTTPException(422,'Nested reading import reviews are not supported')
@@ -428,6 +461,7 @@ def _import_novel(db: Session, user: User, library: Library, item, queued: list[
     report['annotations']={'added':db.query(ReadingAnnotation).filter_by(user_id=user.id,novel_id=novel.id).count()-before_annotations,'unchanged':0,'deferred':len(item.annotations) if review and len(review.applied_refs or {})<len(review.payload['chapter_refs']) else 0,'review_required':len(item.annotations) if review and len(review.applied_refs or {})<len(review.payload['chapter_refs']) else 0}
     report["personal"] = _apply_personal(db, user, novel, item.personal) if item.personal else None
     report["reader_preferences"] = _apply_reader_preferences(db, user, {"typography": item.reader_typography.model_dump(exclude_none=True)}, novel) if item.reader_typography is not None else None
+    report["text_style_guide"] = _apply_reader_preferences(db, user, {"style_guide": item.text_style_guide}, novel, scope=f"textstyle:{novel.id}") if item.text_style_guide is not None else None
     report["pronunciation"] = _apply_pronunciation(db, user, item.pronunciation, novel) if item.pronunciation is not None else None
     return report
 
@@ -489,7 +523,7 @@ def _summarize(libraries: list[dict], saved_searches: list[dict], shelves: list[
     }
 
 
-def import_user_data(db: Session, user: User, document: UserDataDocument) -> dict:
+def import_user_data(db: Session, user: User, document: UserDataDocument, *, private_backup_bodies=None) -> dict:
     from app.services.chapter_identity_service import sqlite_transaction
     from app.auth.dependencies import require_current_session
     sqlite_transaction(db,write=True)
@@ -521,7 +555,9 @@ def import_user_data(db: Session, user: User, document: UserDataDocument) -> dic
         novel_reports = []
         queued: list[Novel] = []
         for item in entry.novels:
-            report = _import_novel(db, user, library, item, queued)
+            body_key=portable_story_service.reference_key(entry.name,item.url,item.portable_story)
+            originals=(private_backup_bodies or {}).get(body_key,{})
+            report = _import_novel(db, user, library, item, queued, originals)
             novel_reports.append(report)
             db.flush()
             novel=db.get(Novel,report.get('novel_id')) if report.get('novel_id') is not None else None

@@ -15,6 +15,7 @@ import { onAccountStorageChange, storageGeneration } from "../services/accountSt
 import { restoreTextLocator, selectedTextLocator, visibleBlockLocator, quoteLocator, type TextLocator, type ChapterDocument } from "../components/reader/chapterDocument";
 import ReaderToolsSheet from "../components/reader/ReaderToolsSheet";
 import { capturePassage, type PassageAnchor } from "../components/reader/selectedPassage";
+import FinishChapter from "../components/reader/FinishChapter";
 import type { TranslationVariant } from "../services/readerToolsService";
 import OfflineBadge from "../components/reader/OfflineBadge";
 import ChapterBody from "../components/reader/ChapterBody";
@@ -223,6 +224,7 @@ const Reader: React.FC = () => {
   const [audioPlaying,setAudioPlaying] = useState(false);
   const [noteQuote, setNoteQuote] = useState<string | null>(null);
   const [annotationsOpen, setAnnotationsOpen] = useState(false);
+
   const [recapOpen, setRecapOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
@@ -921,6 +923,8 @@ const Reader: React.FC = () => {
           </>}>Translated into {translation.language}. Your original chapter is preserved.</Banner>}
           {pairedDocument ? <div className="reader-parallel-text"><ChapterBody content={pairedDocument.plain_text} authorNotes={authorNotes} document={pairedDocument} /></div>
             : <ChapterBody content={translation?.document.plain_text ?? chapter.content} authorNotes={authorNotes} document={translation?.document ?? chapter.document} />}
+          <FinishChapter key={`${chapter.chapter_number}:${chapterSourceVersion(chapter)}:${progress?.reading_run_key}`} novelId={novel_id} chapterNumber={chapter.chapter_number} version={chapterSourceVersion(chapter)} runKey={progress?.reading_run_key??null} identity={loadedChapterIdentity} disabled={loading}/>
+
           {(nextEntry || navigationLive) ? <ReaderEndOfChapter
             chapterNumber={chapter.chapter_number}
             next={nextEntry ? { chapter_number: nextEntry.chapter_number, title: nextEntry.title, label: entryLabel(nextEntry) } : null}
@@ -993,6 +997,13 @@ const Reader: React.FC = () => {
         chapterNumber={chapter.chapter_number} chapterKey={loadedChapterIdentity?.chapter_key}
         onJump={jumpToAnnotation}
         onDelete={(id) => void removeAnnotation(id)}
+        onEdit={async(annotation,note)=>{
+          if(annotation.chapter_number!==chapter.chapter_number || !loadedChapterIdentity || (annotation as ReadingAnnotation & {chapter_key?:string}).chapter_key!==loadedChapterIdentity.chapter_key)throw new Error("Open this note’s original chapter before editing it.");
+          const requestGeneration=storageGeneration();
+          const version=chapterSourceVersion(chapter,true);if(!version)throw new Error("Reload the current chapter text before editing this note.");
+          const updated=await chapterService.updateReadingAnnotation(annotation.id,{note,...expectedChapterIdentity(loadedChapterIdentity,version),expected_content_version:version});
+          if(requestGeneration===storageGeneration())setAnnotations(rows=>rows.map(row=>row.id===updated.id?updated:row));
+        }}
         onViewVersion={(annotation) => {
           if (!annotation.locator_content_version || annotation.chapter_number == null) return;
           setAnnotationsOpen(false);

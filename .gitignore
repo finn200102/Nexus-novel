@@ -49,3 +49,6 @@ frontend/artifacts/
 
 # Generated downloads and export caches; never publish private books or narration.
 /backend/downloads/
+
+# Local model experiment outputs may contain private source or generated prose.
+/backend/scripts/experiment-results/

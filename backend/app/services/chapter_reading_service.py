@@ -67,7 +67,7 @@ def summary(db,user_id,novel_id):
         next_unread_chapter_id=following.id if following else None,next_unread_chapter_number=following.chapter_number if following else None)
 
 
-def page(db,user_id,novel_id,offset,limit,q='',category_scope='all'):
+def page(db,user_id,novel_id,offset,limit,q='',category_scope='all',from_chapter=None,to_chapter=None):
     point,run,categories,current,checkpoints=context(db,user_id,novel_id)
     from app.services.chapter_identity_service import manifest_state,state_fields
     header=state_fields(manifest_state(db,novel_id))
@@ -79,6 +79,9 @@ def page(db,user_id,novel_id,offset,limit,q='',category_scope='all'):
         func.sum(case((followed,1),else_=0)).over(order_by=ordering,rows=(None,0)).label('followed_ordinal')).filter(Chapter.novel_id==novel_id).subquery()
     query=db.query(Chapter,ordinals.c.ordinal,ordinals.c.followed_ordinal,checkpoints.c.max_percent).join(
         ordinals,ordinals.c.id==Chapter.id).outerjoin(checkpoints,checkpoints.c.chapter_number==Chapter.chapter_number).filter(Chapter.novel_id==novel_id)
+    if from_chapter is not None and to_chapter is not None and from_chapter>to_chapter:raise HTTPException(422,'Choose chapter numbers in ascending order')
+    if from_chapter is not None:query=query.filter(Chapter.chapter_number>=from_chapter)
+    if to_chapter is not None:query=query.filter(Chapter.chapter_number<=to_chapter)
     if category_scope=='followed':query=query.filter(followed)
     if q:
         pattern='%'+q.replace('\\','\\\\').replace('%','\\%').replace('_','\\_')+'%'

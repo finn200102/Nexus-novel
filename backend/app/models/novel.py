@@ -3,6 +3,7 @@ from sqlalchemy import (
     String,
     Text,
     Integer,
+    Float,
     BigInteger,
     ForeignKey,
     Table,
@@ -55,7 +56,9 @@ class Novel(BaseModel):
     follows = Column(Integer)
     status = Column(String(50))
     views = Column(Integer)
-    rating = Column(Integer)
+    # SQLite's existing INTEGER-affinity column already preserves REAL values;
+    # retain its declaration to avoid rebuilding identity-protected stories.
+    rating = Column(Float().with_variant(Integer(), "sqlite"))
     publish_date = Column(DateTime)
     updated_date = Column(DateTime)
     chapter_count = Column(Integer)

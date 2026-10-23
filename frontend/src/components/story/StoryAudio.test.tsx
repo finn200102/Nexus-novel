@@ -6,13 +6,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import StoryAudio from "./StoryAudio";
 import { audioService, type ServerAudioJob, type StoryAudioOverview } from "../../services/audioService";
 import apiClient from "../../services/apiClient";
+import { readerToolsService } from "../../services/readerToolsService";
 import { voiceService } from "../../services/voiceService";
 import { browserAudioQueue } from "../../services/browserAudioQueue";
 import { chapterAudioStore } from "../../services/offlineReaderStore";
 import { ttsService } from "../../services/ttsService";
 import { accountStorage, activateAccountStorage, storageGeneration } from "../../services/accountStorage";
 vi.mock("../../services/pronunciationService",async original=>({...await original<typeof import("../../services/pronunciationService")>(),pronunciationService:{get:vi.fn(async()=>({scope:"pronunciation",revision:0,rules:[],account_rules:[],inherit_account:true,effective_rules:[],effective_version:null})),save:vi.fn()}}));
-vi.mock("../../services/audioService", () => ({ audioService: { story: vi.fn(), createStory: vi.fn(), retry: vi.fn(), cancel: vi.fn(), audio: vi.fn() } }));
+vi.mock("../../services/audioService", () => ({ audioService: { parts: vi.fn(), retryPart: vi.fn(), expressionPreview: vi.fn(), story: vi.fn(), createStory: vi.fn(), retry: vi.fn(), cancel: vi.fn(), audio: vi.fn() } }));
+vi.mock("../../services/readerToolsService", () => ({readerToolsService:{providers:vi.fn()}}));
 vi.mock("../../services/voiceService", () => ({ voiceService: { list: vi.fn(), getDefault: vi.fn(), setDefault: vi.fn() } }));
 vi.mock("../../services/browserAudioQueue", () => ({ browserAudioQueue: { subscribe: vi.fn(() => () => undefined), getSnapshot: vi.fn(), enqueue: vi.fn(), retry: vi.fn(), cancel: vi.fn(), remove: vi.fn(), hydrate: vi.fn() } }));
 vi.mock("../../services/offlineReaderStore", () => ({ chapterAudioStore: { get: vi.fn(), recording: vi.fn() } }));
@@ -30,6 +32,7 @@ describe("story audio creation", () => {
     vi.mocked(browserAudioQueue.getSnapshot).mockReturnValue({ generation: storageGeneration(), running: false, rows: [] });
     vi.mocked(browserAudioQueue.hydrate).mockResolvedValue(undefined);
     vi.mocked(browserAudioQueue.remove).mockResolvedValue(undefined);
+    vi.mocked(readerToolsService.providers).mockResolvedValue([]);
     vi.mocked(audioService.story).mockResolvedValue(overview());
     vi.mocked(voiceService.getDefault).mockResolvedValue({ voice_profile_id: 3, revision: 1 });
     vi.mocked(voiceService.list).mockResolvedValue([{ id: 3, name: "My voice", language: "English", status: "completed", transcript: "", error: null, preview_ready: true }]);
@@ -38,6 +41,45 @@ describe("story audio creation", () => {
     vi.mocked(audioService.cancel).mockResolvedValue(job("cancelled"));
   });
   afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+  it("explains both chapter selection and a missing narrator without starting audio", async () => {
+    vi.mocked(voiceService.getDefault).mockResolvedValue({voice_profile_id:null,revision:0});
+    accountStorage.setItem("nexus-reader-tts-preset","qwen3_clone");
+    mount();
+    await screen.findByRole("option",{name:"My voice · Qwen · English"});
+    expect(screen.getByRole("button",{name:"Create selected audio"})).toBeDisabled();
+    expect(screen.getByText("Choose a ready voice in Narrator above.")).toBeInTheDocument();
+    expect(screen.getByText(/Select a downloaded chapter using its checkbox/)).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("combobox",{name:"Narrator"}),{target:{value:"3"}});
+    fireEvent.click(screen.getByRole("checkbox",{name:"Chapter 1: Opening"}));
+    await waitFor(()=>expect(screen.getByRole("button",{name:"Create selected audio"})).toBeEnabled());
+    expect(screen.queryByText("Before creating audio:")).not.toBeInTheDocument();
+    expect(audioService.createStory).not.toHaveBeenCalled();
+  });
+
+  it("previews expressive Fish narration with an enabled local provider and preserves chapter identity", async () => {
+    vi.mocked(voiceService.list).mockResolvedValue([{id:3,name:"Fish voice",model:"fishaudio/s2-pro",language:"English",status:"completed",transcript:"",error:null,preview_ready:true}]);
+    const provider={id:7,name:"Local Qwen",model:"qwen",kind:"local",base_url:"http://localhost",budget_usd:0,used_usd:0,reserved_usd:0,enabled:true};
+    vi.mocked(readerToolsService.providers).mockResolvedValue([provider,{...provider,id:8,name:"Disabled",enabled:false},{...provider,id:9,name:"Remote",kind:"openai"}]);
+    vi.mocked(audioService.expressionPreview).mockResolvedValue({parts:[{original_text:"Hello",text:"[happy]Hello"}],warnings:["Preview excerpt only"]});
+    mount();
+    const selector=await screen.findByRole("combobox",{name:"Expressive narration"});
+    await screen.findByRole("option",{name:"Local Qwen · qwen"});
+    expect(screen.queryByRole("option",{name:/Disabled|Remote/})).not.toBeInTheDocument();
+    fireEvent.change(selector,{target:{value:"7"}});
+    fireEvent.click(screen.getByRole("checkbox",{name:"Chapter 1: Opening"}));
+    fireEvent.click(screen.getByRole("button",{name:"Preview expression for selected chapter"}));
+    await screen.findByText("Speech: [happy]Hello");
+    expect(audioService.expressionPreview).toHaveBeenCalledWith(expect.objectContaining({novel_id:11,chapter_number:1,provider_id:7,...expectedChapterIdentity(identity(11,1),"current")}));
+    expect(audioService.createStory).not.toHaveBeenCalled();
+  });
+
+  it("distinguishes local expression preparation from speech synthesis progress",async()=>{
+    const value=overview();value.chapters[0].latest_job={...job("processing"),preparation_version:"expression-v1",preparation_completed_parts:2,speech_stage:"preparing_text",total_parts:3};
+    vi.mocked(audioService.story).mockResolvedValue(value);mount();
+    expect(await screen.findByText("Preparing expression 2 of 3")).toBeInTheDocument();
+    expect(screen.getByRole("progressbar",{name:"Chapter 1 expression preparation"})).toHaveAttribute("value","2");
+  });
 
   it("previews a chapter range and reports individual queue outcomes without requesting a paid provider", async () => {
     mount();
@@ -48,7 +90,7 @@ describe("story audio creation", () => {
     expect(await screen.findByText("2 chapters selected: 1, 2")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("checkbox", { name: "Include author notes in new audio" }));
     fireEvent.click(screen.getByRole("button", { name: "Create selected audio" }));
-    await waitFor(() => expect(audioService.createStory).toHaveBeenCalledWith(11, { chapter_numbers: [1, 2],chapter_identities:[{chapter_number:1,...expectedChapterIdentity(identity(11,1),"current")},{chapter_number:2,...expectedChapterIdentity(identity(11,2))}], voice_profile_id: 3, include_author_notes: true }));
+    await waitFor(() => expect(audioService.createStory).toHaveBeenCalledWith(11, { chapter_numbers: [1, 2],chapter_identities:[{chapter_number:1,...expectedChapterIdentity(identity(11,1),"current")},{chapter_number:2,...expectedChapterIdentity(identity(11,2))}], voice_profile_id: 3, qwen_chunk_size:350, include_author_notes: true }));
     expect(await screen.findByText("Chapter 1: Queued")).toBeInTheDocument();
     expect(screen.getByText("Chapter 2: Download the chapter first")).toBeInTheDocument();
     expect(screen.getByText("No chapters selected.")).toBeInTheDocument();
@@ -160,7 +202,7 @@ describe("story audio creation", () => {
     fireEvent.click(await screen.findByRole("checkbox", { name: "Chapter 51: Ending" }));
     expect(screen.getByText("2 chapters selected: 1, 51")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Create selected audio" }));
-    await waitFor(() => expect(audioService.createStory).toHaveBeenCalledWith(11, { chapter_numbers: [1, 51],chapter_identities:[{chapter_number:1,...expectedChapterIdentity(identity(11,1),"current")},{chapter_number:51,...expectedChapterIdentity(identity(11,51),"current")}], voice_profile_id: 3, include_author_notes: false }));
+    await waitFor(() => expect(audioService.createStory).toHaveBeenCalledWith(11, { chapter_numbers: [1, 51],chapter_identities:[{chapter_number:1,...expectedChapterIdentity(identity(11,1),"current")},{chapter_number:51,...expectedChapterIdentity(identity(11,51),"current")}], voice_profile_id: 3, qwen_chunk_size:350, include_author_notes: false }));
   });
 
   it("preserves preset choices, requires an explicit browser action, and keeps its key out of server requests", async () => {
@@ -258,4 +300,18 @@ describe("story audio creation", () => {
     expect(screen.queryByLabelText("Chapter 1 audio")).not.toBeInTheDocument();
   });
 
+});
+
+it("snapshots the explicitly selected Qwen chunk size for a new recording",async()=>{
+  activateAccountStorage(7);
+  vi.mocked(browserAudioQueue.getSnapshot).mockReturnValue({generation:storageGeneration(),running:false,rows:[]});
+  vi.mocked(voiceService.getDefault).mockResolvedValue({voice_profile_id:3,revision:1});
+  vi.mocked(voiceService.list).mockResolvedValue([{id:3,name:"My voice",language:"English",status:"completed",transcript:"",error:null,preview_ready:true}]);
+  vi.mocked(audioService.story).mockResolvedValue(overview());
+  mount();
+  fireEvent.change(await screen.findByRole("combobox",{name:"Narration chunk size"}),{target:{value:"3000"}});
+  fireEvent.click(screen.getByRole("checkbox",{name:"Chapter 1: Opening"}));
+  await waitFor(()=>expect(screen.getByRole("button",{name:"Create selected audio"})).toBeEnabled());
+  fireEvent.click(screen.getByRole("button",{name:"Create selected audio"}));
+  await waitFor(()=>expect(audioService.createStory).toHaveBeenCalledWith(11,expect.objectContaining({qwen_chunk_size:3000})));
 });

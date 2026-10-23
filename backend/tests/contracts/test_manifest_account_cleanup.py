@@ -13,8 +13,29 @@ from tests.contracts.test_chapter_identity import original  # noqa: F401
 from tests.routes.conftest import db, test_user, test_library  # noqa: F401
 
 
+@pytest.fixture
+def isolated_foreign_keys(db, foreign_keys):
+    # PRAGMA state belongs to a physical connection. Pin the FK-mode scenario
+    # across commits, then restore that same connection before pooling it.
+    db.rollback()
+    original_bind = db.bind
+    connection = original_bind.connect()
+    db.bind = connection
+    try:
+        connection.exec_driver_sql(f'PRAGMA foreign_keys={"ON" if foreign_keys else "OFF"}')
+        connection.commit()
+        yield
+    finally:
+        db.rollback()
+        db.bind = original_bind
+        connection.rollback()
+        connection.exec_driver_sql('PRAGMA foreign_keys=OFF')
+        connection.commit()
+        connection.close()
+
+
 @pytest.mark.parametrize('foreign_keys', [False, True])
-def test_account_delete_purges_only_owned_topology_reviews_and_items(db, test_user, original, foreign_keys):
+def test_account_delete_purges_only_owned_topology_reviews_and_items(db, test_user, original, foreign_keys, isolated_foreign_keys):
     novel, _ = original
     victim_id, novel_id = test_user.id, novel.id
     db.rollback()

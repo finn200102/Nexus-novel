@@ -14,9 +14,23 @@ from app.models.voice_profile import VoiceProfile
 from app.services.job_lease import claim, heartbeat, recover_expired, utcnow
 
 MODEL = "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-4bit"
+QWEN_NATIVE_MODEL = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
+QWEN_MODELS = {MODEL, QWEN_NATIVE_MODEL}
+FISH_MODELS = {"fishaudio/s2-pro", "fishaudio/drama-3"}
+CLONE_PROVIDERS = {"qwen3_clone", "fish_clone"}
+
+def bridge_for_model(model):
+    if model in QWEN_MODELS:
+        return bridge_config()
+    if model not in FISH_MODELS:
+        raise ValueError("Unsupported local narrator model")
+    return bridge_config(fish=True)
+
+
 LANGUAGES = ("English", "German", "Chinese", "Japanese", "Korean", "French", "Russian", "Portuguese", "Spanish", "Italian")
 MAX_UPLOAD = 12 * 1024 * 1024
 SAFE_REFERENCE_ERRORS = {
+    "The transcript is too long for the selected recording. Enter only the words spoken in this excerpt.",
     "Audio could not be decoded. Try a WAV, MP3, M4A, Ogg or FLAC recording.",
     "Invalid audio recording",
     "Use a recording between 3 and 30 seconds; 5–15 seconds of clear speech works best.",
@@ -26,13 +40,14 @@ SAFE_REFERENCE_ERRORS = {
 }
 
 
-def bridge_config():
-    url = os.getenv("NEXUS_LOCAL_VOICE_URL", "").rstrip("/")
+def bridge_config(*, fish=False):
+    prefix = "NEXUS_FISH_VOICE" if fish else "NEXUS_LOCAL_VOICE"
+    url = os.getenv(prefix + "_URL", "").rstrip("/")
     parsed = urlparse(url)
     if parsed.scheme != "http" or parsed.hostname not in {"localhost", "127.0.0.1", "host.docker.internal", "local-tts"} or parsed.username or parsed.password or parsed.query or parsed.fragment or parsed.path:
         raise ValueError("Local voice cloning is not configured on this Nexus server.")
     try:
-        key = Path(os.environ["NEXUS_LOCAL_VOICE_KEY_FILE"]).read_text().strip()
+        key = Path(os.environ[prefix + "_KEY_FILE"]).read_text().strip()
         if len(key) < 32:
             raise ValueError()
     except (OSError, KeyError, ValueError):
@@ -63,7 +78,7 @@ def prepare_voice(profile_id, session_factory):
             return
         owner = profile.lease_owner
         try:
-            url, headers = bridge_config()
+            url, headers = bridge_for_model(profile.model)
             with heartbeat(session_factory, VoiceProfile, profile.id, owner), httpx.Client(timeout=httpx.Timeout(960, connect=5), trust_env=False) as client:
                 response = client.post(url + "/v1/voices/prepare", json=request_payload(profile, prepare=True), headers=headers)
                 response.raise_for_status()
@@ -76,7 +91,7 @@ def prepare_voice(profile_id, session_factory):
             preview = base64.b64decode(data["preview_base64"], validate=True)
             transcript = data["transcript"]
             if (not sample.startswith(b"RIFF") or len(sample) > 1_500_000 or not preview.startswith(b"RIFF")
-                    or len(preview) > 40_000_000 or not isinstance(transcript, str) or not transcript.strip() or len(transcript) > 4000 or data.get("model") != MODEL):
+                    or len(preview) > 40_000_000 or not isinstance(transcript, str) or not transcript.strip() or len(transcript) > 4000 or data.get("model") != profile.model):
                 raise ValueError("Invalid response from the local voice service")
             current.sample, current.preview, current.transcript = sample, preview, transcript
             current.status, current.finished_at = "completed", utcnow()
@@ -113,3 +128,19 @@ def process_due_voices(session_factory):
         profile_id = profile.id if profile else None
     if profile_id is not None:
         prepare_voice(profile_id, session_factory)
+
+
+def release_for_local_text():
+    """Cooperate with managed Linux speech; never touch an unconfigured runtime."""
+    if os.getenv("NEXUS_MANAGED_SPEECH") != "1":
+        return
+    for fish in (False, True):
+        prefix = "NEXUS_FISH_VOICE" if fish else "NEXUS_LOCAL_VOICE"
+        if not os.getenv(prefix + "_URL"):
+            continue
+        url, headers = bridge_config(fish=True) if fish else bridge_config()
+        with httpx.Client(timeout=httpx.Timeout(960, connect=5), trust_env=False) as client:
+            response = client.post(url + "/v1/runtime/release", headers=headers)
+            # Older independently installed Mac bridges have no scheduler.
+            if response.status_code != 404:
+                response.raise_for_status()

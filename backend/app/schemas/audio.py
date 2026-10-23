@@ -29,6 +29,8 @@ class AudioJobCreate(AudioChapterIdentity):
     chapter_number: int = Field(ge=-2147483648, le=2147483647, strict=True)
     voice_profile_id: int | None = None
     include_author_notes: bool = False
+    preparation_provider_id: int | None = Field(default=None, gt=0)
+    qwen_chunk_size: Literal[350, 800, 1500, 3000] | None = None
     provider: AudioProviderSnapshot
 
 
@@ -51,6 +53,8 @@ class AudioJobResponse(BaseModel):
     provider_id: str
     provider_model: str
     provider_voice: str
+    qwen_chunk_size: int | None = None
+    generation_token_limit: int | None = None
     total_parts: int
     completed_parts: int
     attempt_count: int
@@ -61,6 +65,9 @@ class AudioJobResponse(BaseModel):
     include_author_notes: bool | None = None
     voice_profile_id: int | None = None
     pronunciation_version: str | None = None
+    preparation_version: str | None = None
+    preparation_completed_parts: int | None = None
+    speech_stage: Literal["preparing_text", "generating_audio"] | None = None
     audio_ready: bool = False
     created_at: datetime
     updated_at: datetime
@@ -111,6 +118,8 @@ class StoryAudioCreate(BaseModel):
     voice_profile_id: int | None = Field(default=None, gt=0)
     provider: AudioProviderSnapshot | None = None
     include_author_notes: bool = False
+    preparation_provider_id: int | None = Field(default=None, gt=0)
+    qwen_chunk_size: Literal[350, 800, 1500, 3000] | None = None
 
     model_config = ConfigDict(extra="forbid")
 
@@ -163,7 +172,14 @@ class ProviderCapability(BaseModel):
     response_formats: list[str] = ["mp3", "wav"]
 
 
+class AudioSourceSpan(BaseModel):
+    block_id: str
+    text_offset: int
+    text_length: int
+
+
 class AudioManifestSegment(BaseModel):
+    source_spans: list[AudioSourceSpan] = Field(default_factory=list)
     part_index: int
     block_id: str | None = None
     text_offset: int | None = None
@@ -195,3 +211,34 @@ class AudioManifestResponse(BaseModel):
     current_source: bool
     duration_seconds: float | None = None
     segments: list[AudioManifestSegment]
+
+
+class ExpressionPreviewRequest(AudioChapterIdentity):
+    model_config = ConfigDict(extra='forbid')
+    novel_id: int
+    chapter_number: int
+    provider_id: int = Field(gt=0)
+    include_author_notes: bool = False
+
+
+class ExpressionPreviewPart(BaseModel):
+    original_text: str
+    text: str
+
+
+class ExpressionPreviewResponse(BaseModel):
+    parts: list[ExpressionPreviewPart]
+    warnings: list[str]
+
+
+class AudioPartResponse(BaseModel):
+    part_index: int
+    text: str
+    synthesis_text: str | None = None
+    status: str
+    error: str | None = None
+    duration_seconds: float | None = None
+
+
+class AudioPartsResponse(BaseModel):
+    parts: list[AudioPartResponse]

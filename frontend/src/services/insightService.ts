@@ -1,7 +1,7 @@
 import apiClient from "./apiClient";
 
 export type InsightSignal = { family: string; value: string; confidence?: number; evidence: Record<string, unknown>; model_version: string };
-export type InsightAnalysis = { state: "not_started" | "queued" | "running" | "completed" | "failed"; signals: InsightSignal[] };
+export type InsightAnalysis = { state: "not_started" | "queued" | "running" | "completed" | "failed"; signal_scope?: "metadata" | "chapter_sample" | null; signals: InsightSignal[] };
 export type SimilarNovel = { novel_id: number; title: string; author?: string; score: number; explanation: string; reasons?: string[] };
 export type CanonicalWork = { id: number; title: string; editions: Array<{ id: number; novel_id: number; edition_kind: string; language?: string | null }> };
 export type StoryCitation = { chapter: number; quote: string; note?: string; start_offset?: number; end_offset?: number; anchor_state?: "exact" | "ambiguous" | "unanchored"; evidence_hash?: string; source_fingerprint?: string };

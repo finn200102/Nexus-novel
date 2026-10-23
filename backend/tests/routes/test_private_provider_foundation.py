@@ -23,6 +23,30 @@ def guide_provider(db, paid):
     return paid
 
 
+def test_missing_analysis_configuration_never_creates_unknown_provider_request(db, paid, monkeypatch):
+    from app.services import companion_client
+    from config.settings import settings
+    provider = guide_provider(db, paid)
+    reserved_before = provider.reserved_microusd
+    monkeypatch.setattr(settings, 'ANALYSIS_ENGINE_URL', '')
+    monkeypatch.setattr(settings, 'ANALYSIS_ENGINE_API_KEY', '')
+    with pytest.raises(ValueError, match='Configure the authenticated analysis service'):
+        invoke(db, provider, str(uuid4()), request=companion_client.guide_request)
+    assert db.query(ReaderProviderRequest).count() == 0
+    assert provider.reserved_microusd == reserved_before
+
+
+def test_only_configured_managed_local_text_gets_cold_model_timeout(monkeypatch):
+    from app.services.companion_client import _timeout
+    monkeypatch.setenv('NEXUS_MANAGED_SPEECH', '1')
+    monkeypatch.setenv('NEXUS_LOCAL_AI_BASE_URL', 'http://127.0.0.1:8080/v1')
+    monkeypatch.setenv('NEXUS_LOCAL_AI_MODEL', 'qwen3.8-27b')
+    local = dict(kind='local', base_url='http://127.0.0.1:8080/v1', model='qwen3.8-27b')
+    assert _timeout(local, 190).read == 330
+    assert _timeout({**local, 'model': 'other'}, 190).read == 190
+    assert _timeout({**local, 'kind': 'openai_compatible'}, 190).read == 190
+
+
 def png(width=1024, height=1024):
     def chunk(kind, body):
         return struct.pack('>I', len(body)) + kind + body + struct.pack('>I', zlib.crc32(kind + body) & 0xffffffff)

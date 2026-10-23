@@ -53,3 +53,17 @@ it("replaces bulk deletion with the explicit source review without removing chap
  expect(view.container.querySelector(".chapter-changes-disclosure")).toHaveAttribute("open");expect(screen.getByText("Review chapter list changes",{exact:true})).toHaveFocus();
  expect(chapterService.deleteChaptersByIds).not.toHaveBeenCalled();expect(chapterService.downloadChapter).not.toHaveBeenCalled();expect(screen.queryByText(/downloaded text is removed from the server/)).toBeNull();expect(screen.getByRole("button",{name:"Select chapters"})).toBeInTheDocument();
 });
+
+it("previews a bounded range including chapter zero before downloading missing text",async()=>{
+ const missing={...item(1),content_status:"MISSING" as const};
+ vi.mocked(chapterService.getReadingChapters).mockResolvedValue({novel_id:11,total:1,offset:0,limit:200,revision:2,reading_run_key:null,items:[missing]});
+ mount();await screen.findByText("Part 1");
+ fireEvent.change(screen.getByLabelText("Download from chapter"),{target:{value:"0"}});
+ fireEvent.change(screen.getByLabelText("Download through chapter"),{target:{value:"0"}});
+ fireEvent.click(screen.getByRole("button",{name:"Review download range"}));
+ await screen.findByRole("region",{name:"Reviewed download range"});
+ expect(chapterService.downloadChapter).not.toHaveBeenCalled();
+ expect(chapterService.getReadingChapters).toHaveBeenCalledWith(11,expect.objectContaining({from_chapter:0,to_chapter:0,limit:200}));
+ fireEvent.click(screen.getByRole("button",{name:"Download reviewed missing chapters"}));
+ await waitFor(()=>expect(chapterService.downloadChapter).toHaveBeenCalledWith(1,11,0,expect.objectContaining({chapter_key:missing.chapter_key})));
+});

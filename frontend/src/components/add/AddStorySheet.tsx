@@ -69,7 +69,7 @@ export function AddStorySheet({ open, onClose, request }: AddStorySheetProps) {
     try {
       if (urls.length === 1) await novelService.addNovel(libraryId, urls[0]);
       else await novelService.addNovels(libraryId, urls);
-      addToast(urls.length === 1 ? "Story added. Chapters are downloading." : `${urls.length} stories added. Chapters are downloading.`, "success");
+      addToast(urls.length === 1 ? "Story added. Story information is being prepared; open the story to check chapters and downloads." : `${urls.length} stories added. Check each story for import progress and chapter downloads.`, "success");
       notifyStoryAdded(libraryId);
       setLinks("");
       onClose();

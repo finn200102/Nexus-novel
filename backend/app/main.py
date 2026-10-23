@@ -13,7 +13,7 @@ from app.routers import ext, kobo
 from app.routers import podcasts, audio_exports, pronunciation
 from app.routers import reader_tools
 from app.routers import translation_exports, passage_translation
-from app.routers import translation_batches, passage_revision
+from app.routers import translation_batches, passage_revision, text_revision
 from app.routers import reading_runs
 from app.routers import offline_library, source_migrations
 from app.routers import library_views, smart_shelves
@@ -125,6 +125,7 @@ app.include_router(translation_exports.router)
 app.include_router(passage_translation.router)
 app.include_router(translation_batches.router)
 app.include_router(passage_revision.router)
+app.include_router(text_revision.router)
 app.include_router(reading_runs.router)
 app.include_router(offline_library.router)
 app.include_router(source_migrations.router)

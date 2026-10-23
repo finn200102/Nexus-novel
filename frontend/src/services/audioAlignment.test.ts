@@ -55,3 +55,15 @@ describe('stable chapter identity at text/audio handoff',()=>{
 });
 
 it('normalizes nullable server recording identity without inventing a current chapter or losing original timing',async()=>{const {audioManifestFromWire}=await import('./audioAlignment');const value=audioManifestFromWire({job_id:7,current_source:false,chapter_key:null,manifest_epoch:null,manifest_revision:null,source_version:'original-v1',rendition:'original',precision:'segment',segments:[{part_index:0,start_seconds:0,end_seconds:2}]});expect(value.chapter_key).toBeUndefined();expect(value.source_version).toBe('original-v1');expect(value.segments).toEqual([{part_index:0,start_seconds:0,end_seconds:2,block_id:null,text_offset:null,text_length:null}]);});
+
+it('seeks every covered source block to the measured merged chunk start and rejects foreign spans',()=>{
+ const doc={...document,blocks:document.blocks.filter(b=>b.role!=='author_note')};
+ const first=doc.blocks[0],second=doc.blocks[1];
+ const spans=[{block_id:first.id,text_offset:0,text_length:first.text.length},{block_id:second.id,text_offset:0,text_length:second.text.length}];
+ const map=measuredManifest(doc.content_version,[spans[0]],[5])!;
+ map.segments[0].source_spans=spans;
+ expect(audioTime(map,doc,{blockId:second.id,textOffset:4})).toBe(0);
+ expect(audioLocator(map,doc,2)?.blockId).toBe(first.id);
+ expect(alignedTo({...map,segments:[{...map.segments[0],block_id:'foreign'}]},doc)).toBe(false);
+ expect(alignedTo({...map,segments:[{...map.segments[0],source_spans:[...spans,{block_id:'foreign',text_offset:0,text_length:1}]}]},doc)).toBe(false);
+});

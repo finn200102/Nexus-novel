@@ -8,6 +8,7 @@ import { usePageTitle } from "./hooks/usePageTitle";
 import Home from "./pages/Home";
 import Signup from "./pages/Signup";
 import Login from "./pages/Login";
+import TextSearch from "./pages/TextSearch";
 import LibraryRoute from "./pages/LibraryRoute";
 import Reader from "./pages/Reader";
 import Discover from "./pages/Discover";
@@ -76,6 +77,7 @@ export function AppRoutes() {
       <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route index element={<Titled title="Home"><Home /></Titled>} />
         <Route path="discover" element={<Discover />} />
+        <Route path="search" element={<Titled title="Search downloaded text"><TextSearch/></Titled>} />
         <Route path="for-you" element={<Recommendations />} />
         <Route path="offline" element={<Offline />} />
         <Route path="discover/:site" element={<Discover />} />

@@ -17,7 +17,7 @@ export type UserDataImportNovel = {
   url: string | null;
   novel_id?: number;
   portable_link_id?: number;
-  original_status?: "unavailable";
+  original_status?: "unavailable" | "backup_review";
   title: string | null;
   status: NovelImportStatus;
   reason: string | null;
@@ -51,5 +51,11 @@ export const userDataService = {
   },
   async importData(document: unknown): Promise<UserDataImportReport> {
     return (await apiClient.post("/me/import", document, { timeout: IMPORT_TIMEOUT_MS })).data;
+  },
+  async exportFullBackup(library?:string): Promise<Blob> {
+    return (await apiClient.get("/me/backup", { responseType: "blob", timeout: IMPORT_TIMEOUT_MS,params:library?{library}:undefined })).data;
+  },
+  async importFullBackup(file: File): Promise<UserDataImportReport> {
+    return (await apiClient.post("/me/backup/import",file,{timeout:IMPORT_TIMEOUT_MS,headers:{"Content-Type":"application/zip"}})).data;
   },
 };

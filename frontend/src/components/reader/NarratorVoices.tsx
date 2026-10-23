@@ -10,7 +10,10 @@ export function NarratorVoices({selected, onSelect}: {selected: number | null; o
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [languages, setLanguages] = useState<string[]>(["English"]);
   const [name, setName] = useState("");
+  const [engine, setEngine] = useState<"qwen" | "fish">("qwen");
+  const [engines, setEngines] = useState<{id:string;label:string;configured:boolean}[]>([]);
   const [language, setLanguage] = useState("English");
+  const [transcriptRequired, setTranscriptRequired] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -35,7 +38,7 @@ export function NarratorVoices({selected, onSelect}: {selected: number | null; o
   useEffect(() => {
     mounted.current = true;
     const refresh = () => voiceService.list().then((rows) => { if (mounted.current && generation === storageGeneration()) setVoices(rows); }).catch(() => undefined);
-    voiceService.capabilities().then((data) => { if (mounted.current && generation === storageGeneration()) {setConfigured(data.configured); setLanguages(data.languages);} }).catch(() => {if (mounted.current && generation === storageGeneration()) setConfigured(false);});
+    voiceService.capabilities().then((data) => { if (mounted.current && generation === storageGeneration()) {setConfigured(data.configured); setTranscriptRequired(data.transcript_required === true); setLanguages(data.languages); setEngines(data.engines || []); if (data.engines?.find(item => item.id === "fish")?.configured && !data.engines?.find(item => item.id === "qwen")?.configured) setEngine("fish");} }).catch(() => {if (mounted.current && generation === storageGeneration()) setConfigured(false);});
     void refresh();
     const timer = window.setInterval(() => {if (generation === storageGeneration()) void refresh();}, 3000);
     return () => {mounted.current = false; previewRequest.current += 1; window.clearInterval(timer); if (previewRef.current) URL.revokeObjectURL(previewRef.current);};
@@ -65,6 +68,9 @@ export function NarratorVoices({selected, onSelect}: {selected: number | null; o
   const start = Number(excerptStart), end = Number(excerptEnd);
   const invalidExcerpt = cropping && (!excerptStart.trim() || !excerptEnd.trim() || !Number.isFinite(start) || !Number.isFinite(end) || start < 0 || start > 3600 || end - start < 3 || end - start > 30 || duration !== null && end > duration + 0.05);
   const tooShort = duration !== null && duration < 3;
+  const referenceSeconds = duration === null ? null : cropping ? end - start : duration;
+  const transcriptTooLong = referenceSeconds !== null && referenceSeconds > 0 && !invalidExcerpt && transcript.trim().split(/\s+/u).filter(Boolean).length > referenceSeconds * 8;
+  const transcriptLengthError = "This transcript has too many words for the selected recording. Enter only the words spoken in the selected excerpt; a full-file transcript will not match a shorter excerpt.";
   const loadMetadata = (event: React.SyntheticEvent<HTMLAudioElement>) => {
     if (!current() || event.currentTarget.src !== recordingUrl.current) return;
     const seconds = event.currentTarget.duration;
@@ -84,6 +90,8 @@ export function NarratorVoices({selected, onSelect}: {selected: number | null; o
     event.preventDefault();
     if (!file || !name.trim()) return;
     if (file.size > 12 * 1024 * 1024) {setError("Choose a recording smaller than 12 MB."); return;}
+    if (transcriptRequired && !transcript.trim()) {setError("Enter the exact words spoken in the reference recording or selected excerpt."); return;}
+    if (transcriptTooLong) {setError(transcriptLengthError); return;}
     if (tooShort || invalidExcerpt) {setError("Choose a 3–30-second excerpt within the recording, starting no later than 3600 seconds."); return;}
     setBusy(true); setError("");
     try {
@@ -91,7 +99,7 @@ export function NarratorVoices({selected, onSelect}: {selected: number | null; o
         const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(",")[1]); reader.onerror = reject; reader.readAsDataURL(file);
       });
       if (!current()) return;
-      const voice = await voiceService.upload({name: name.trim(), audio_base64: data, transcript, language,
+      const voice = await voiceService.upload({name: name.trim(), audio_base64: data, transcript, language, ...(engine === "fish" ? {engine} : {}),
         ...(cropping ? { excerpt_start_seconds: start, excerpt_duration_seconds: Math.round((end - start) * 1000) / 1000 } : {}),
       });
       if (current()) {setVoices((rows) => [voice, ...rows]); setName(""); chooseFile(null); if (fileInput.current) fileInput.current.value = "";}
@@ -133,7 +141,7 @@ export function NarratorVoices({selected, onSelect}: {selected: number | null; o
     <p className="text-sm text-muted">Choose a recording of one clear voice. You can select a 3–30-second excerpt from a longer file; 5–15 seconds works best. Your recording and narration stay on this installation. Use a voice you have permission to use.</p>
     {configured === false && <p role="status">Local voice cloning needs to be enabled by your administrator.</p>}
     {voices.map((voice) => <div key={voice.id} className="reader-narrators__voice">
-      <strong>{voice.name}</strong><span className="text-sm"> · {voice.language} · {voice.status === "completed" ? "Ready" : voice.status === "failed" ? "Needs attention" : "Preparing locally…"}</span>
+      <strong>{voice.name}</strong><span className="text-sm"> · {voice.model?.startsWith("fishaudio/") ? "Fish Audio · " : ""}{voice.language} · {voice.status === "completed" ? "Ready" : voice.status === "failed" ? "Needs attention" : "Preparing locally…"}</span>
       {voice.error && <p className="text-sm" role="status">{voice.error}</p>}
       <div className="reader-listen-settings__actions">
         {voice.status === "completed" && <Button size="sm" onClick={() => onSelect(voice)}>{selected === voice.id ? "Selected narrator" : "Use as narrator"}</Button>}
@@ -154,19 +162,24 @@ export function NarratorVoices({selected, onSelect}: {selected: number | null; o
         <label className="ui-check"><input type="checkbox" checked={cropping} disabled={busy || duration !== null && duration > 30} onChange={event => {
           clearTranscriptForExcerpt(); setCropping(event.target.checked); setExcerptStart("0"); setExcerptEnd(String(Math.min(duration ?? 15, 15)));
         }} /><span>Use a selected excerpt</span></label>
+        {!cropping && <p className="text-sm">The whole recording will be used. It must be 3–30 seconds; longer recordings require an explicit excerpt.</p>}
         {cropping && <>
           <Input label="Excerpt start (seconds)" type="number" min="0" max="3600" step="0.1" value={excerptStart} disabled={busy} onChange={event => { clearTranscriptForExcerpt(); setExcerptStart(event.target.value); }} />
           <Input label="Excerpt end (seconds)" type="number" min="3" max={duration ?? 3630} step="0.1" value={excerptEnd} disabled={busy} onChange={event => { clearTranscriptForExcerpt(); setExcerptEnd(event.target.value); }} />
+          <p role="status" className="text-sm">Selected reference: {excerptStart}–{excerptEnd} seconds. Supply only the words spoken in this range.</p>
           <p className="text-sm">Cloning uses only the selected excerpt. The first 15 seconds are selected automatically for long recordings; choose a clear passage with one speaker.</p>
           {invalidExcerpt && <p role="status">Select 3–30 seconds within the recording.</p>}
         </>}
         {tooShort && <p role="status">This recording is shorter than 3 seconds. Choose a longer recording.</p>}
         {recordingPreview && <Button disabled={busy || invalidExcerpt || tooShort} onClick={() => void playExcerpt()}>{cropping ? "Play selected excerpt" : "Preview recording"}</Button>}
       </div>}
+      {engines.length > 0 && <Select label="Speech engine" value={engine} disabled={busy} onChange={event => setEngine(event.target.value as "qwen" | "fish")} options={engines.filter(item => item.configured).map(item => ({value:item.id,label:item.label}))} />}
+      {engine === "fish" && <p>Enter the exact recording transcript. Fish uses it to match your voice.</p>}
       <Select label="Recording language" disabled={busy} value={language} onChange={(event) => setLanguage(event.target.value)} options={languages.map((value) => ({value, label: value}))} />
-      <Input label={cropping ? "Selected excerpt transcript (optional)" : "Recording transcript (optional)"} disabled={busy} hint={cropping ? "Only the exact words between the selected start and end times. Leave blank to transcribe the excerpt locally." : "The exact words in the recording. Leave blank to transcribe locally."} maxLength={4000} value={transcript} onChange={(event) => setTranscript(event.target.value)} />
+      <Input label={`${cropping ? "Selected excerpt" : "Recording"} transcript (${transcriptRequired ? "required" : "optional"})`} required={transcriptRequired} disabled={busy} hint={transcriptRequired ? "Enter the exact words in the recording or selected excerpt. Local transcription is unavailable on this installation." : cropping ? "Only the exact words between the selected start and end times. Leave blank to transcribe the excerpt locally." : "The exact words in the recording. Leave blank to transcribe locally."} maxLength={4000} value={transcript} onChange={(event) => setTranscript(event.target.value)} />
       {transcriptNotice && <p role="status">{transcriptNotice}</p>}
-      <Button type="submit" disabled={busy || !file || file.size > 12 * 1024 * 1024 || !name.trim() || invalidExcerpt || tooShort}>{busy ? "Uploading…" : "Create narrator voice"}</Button>
+      {transcriptTooLong && <p role="status">{transcriptLengthError}</p>}
+      <Button type="submit" disabled={busy || !file || file.size > 12 * 1024 * 1024 || !name.trim() || transcriptRequired && !transcript.trim() || invalidExcerpt || tooShort || transcriptTooLong}>{busy ? "Uploading…" : "Create narrator voice"}</Button>
       <p className="text-sm text-muted">First use may take several minutes to download the local models. Deleting a voice removes its recording and preview and cancels its unfinished jobs; completed chapter audio remains separately removable.</p>
     </form>}
     {error && <p role="alert">{error}</p>}

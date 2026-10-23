@@ -163,6 +163,12 @@ class ReadingAnnotationCreate(SavedLocatorFields, ChapterWriteIdentity):
     text_offset: int = Field(0, ge=0, le=16_000_000)
 
 
+class ReadingAnnotationUpdate(ChapterWriteIdentity):
+    note: str | None = Field(..., max_length=20000)
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class ReadingAnnotationResponse(SavedLocatorFields, ChapterIdentityResponse):
     chapter_key: ChapterKey | None = None
     original_chapter_number: int | None = None

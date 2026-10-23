@@ -13,3 +13,5 @@ describe('private guide provider configuration',()=>{
  it('does not offer unsupported provider types an image capability or implicit fallback',async()=>{mount();fireEvent.change(screen.getByLabelText('Provider type'),{target:{value:'anthropic'}});expect(screen.getByLabelText('Private character portraits')).toBeDisabled();expect(screen.getByText(/Portrait generation is unavailable/)).toBeVisible();expect(readerToolsService.createProvider).not.toHaveBeenCalled();});
  it('does not adopt a provider response from the previous account',async()=>{let done!:(value:never[])=>void;vi.mocked(readerToolsService.providers).mockReturnValueOnce(new Promise(resolve=>{done=resolve;})).mockResolvedValue([]);mount();act(()=>activateAccountStorage(2));await act(async()=>done([{id:9,name:'Other person secret provider'}] as never[]));expect(screen.queryByText('Other person secret provider')).not.toBeInTheDocument();});
 });
+
+vi.mock("../../services/textRevisionService",()=>({textRevisionService:{defaults:vi.fn().mockResolvedValue({base_url:"",model:""}),style:vi.fn().mockResolvedValue({revision:0,style_guide:""}),saveStyle:vi.fn(),preview:vi.fn()}}));

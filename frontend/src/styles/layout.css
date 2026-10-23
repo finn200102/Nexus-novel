@@ -288,3 +288,20 @@
 /* ---------- Reader frame (no shell) ---------- */
 .reader-frame { min-height: 100vh; min-height: 100dvh; background: var(--bg); }
 .reader-frame__main { min-width: 0; }
+
+@media (max-width: 767px) {
+  .app-topbar:has(form[role="search"]) { flex-wrap: wrap; }
+  .app-topbar > form[role="search"] { order: 5; flex: 1 0 100%; display: flex; flex-wrap: wrap; gap: .5rem; min-width: 0; }
+  .app-topbar > form[role="search"] .ui-field { min-width: 0; flex: 1 1 12rem; }
+}
+
+.app-topbar form[role="search"] > select {
+  min-height: 40px;
+  max-width: 100%;
+  padding: 0 .75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  background: var(--surface, var(--bg));
+  color: inherit;
+  font: inherit;
+}

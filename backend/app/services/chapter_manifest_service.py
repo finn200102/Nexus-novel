@@ -706,7 +706,21 @@ def ingest_metadata_snapshot(db,novel,snapshot):
     if not known_source_matches(fresh,snapshot.source):
         conflict('chapter_review_required','The captured source namespace differs from this private story. Review it before binding source chapters.')
     if state.metadata_source is not None and state.metadata_source!=snapshot.source:
-        conflict('chapter_review_required','The source work namespace changed. Review it before accepting any source chapter binding.')
+        from app.models.reading_progress import ReadingProgress
+        from app.models.reading_run import ReadingRun
+        previous=state.metadata_source
+        # An empty placeholder can learn its previously unknown work ID. It
+        # cannot replace a known namespace or any chapter/progress history.
+        initializing=(not local and state.revision==0 and not state.identity_required
+            and state.metadata_manifest_key==snapshot.manifest_key
+            and isinstance(previous,dict) and previous.get('story_id') is None
+            and snapshot.source.get('story_id') is not None
+            and {**previous,'story_id':snapshot.source['story_id']}==snapshot.source
+            and not db.query(ReadingProgress.id).filter_by(novel_id=fresh.id).first()
+            and not db.query(ReadingRun.id).filter_by(novel_id=fresh.id).first()
+            and not db.query(ChapterManifestReview.id).filter_by(novel_id=fresh.id).first())
+        if not initializing:
+            conflict('chapter_review_required','The source work namespace changed. Review it before accepting any source chapter binding.')
     if state.metadata_manifest_key not in (None,snapshot.manifest_key):conflict('chapter_review_required','The metadata work has a different lifecycle. Review before accepting its chapter list.')
     remote_by_key={item['chapter_key']:item for item in snapshot.items}
     stable={}

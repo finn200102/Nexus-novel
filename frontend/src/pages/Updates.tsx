@@ -33,6 +33,7 @@ const Updates: React.FC<{ tab: UpdatesTab }> = ({ tab }) => {
   const { isAuthenticated } = useAuth();
   const sources = useSourceStatus(isAuthenticated);
   const [jobs, setJobs] = useState<DownloadJob[]>([]);
+  const [jobsError,setJobsError]=useState("");
   const [announcement, setAnnouncement] = useState("");
   const previous = useRef<{ failed: number; completed: number } | null>(null);
 
@@ -44,8 +45,8 @@ const Updates: React.FC<{ tab: UpdatesTab }> = ({ tab }) => {
     let cancelled = false;
     const load = () => {
       downloadService.listJobs(libraryId)
-        .then((data) => { if (!cancelled && Array.isArray(data)) setJobs(data); })
-        .catch(() => undefined);
+        .then((data) => { if (!cancelled && Array.isArray(data)){setJobs(data);setJobsError("");} })
+        .catch(() => {if(!cancelled)setJobsError("Could not refresh the download queue. Saved status may be out of date; Nexus will retry shortly.");});
     };
     load();
     const timer = window.setInterval(load, 5000);
@@ -90,6 +91,7 @@ const Updates: React.FC<{ tab: UpdatesTab }> = ({ tab }) => {
       actions={<Button variant="ghost" size="sm" onClick={() => navigate("/settings/notifications")}>Notification settings</Button>}
     />
     <div className="visually-hidden" role="status" aria-live="polite">{announcement}</div>
+    {jobsError&&<p role="alert">{jobsError}</p>}
     {!activeLibrary && <EmptyState level={2} title="No library selected" description="Create or select a library to see updates." />}
     {activeLibrary && libraryId != null && <>
       <Tabs

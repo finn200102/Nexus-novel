@@ -88,11 +88,20 @@ def get_or_create_follow(db: Session, user_id: int, novel: Novel) -> UserNovelFo
     follow = UserNovelFollow(
         user_id=user_id,
         novel_id=novel.id,
-            state=legacy_state,
-            followed_at=novel.followed_at,
+        state=legacy_state,
+        followed_at=novel.followed_at,
     )
-    db.add(follow)
-    db.flush()
+    try:
+        # Another reader request can initialize these settings concurrently.
+        # A savepoint keeps its unique-key conflict from aborting other work.
+        with db.begin_nested():
+            db.add(follow)
+            db.flush()
+    except IntegrityError:
+        existing = get_existing_follow(db, user_id, novel)
+        if existing is None:
+            raise
+        return existing
     return follow
 
 
@@ -298,6 +307,7 @@ def scrape_novel_background(
     metadata_id: int,
     db_session_factory,
     loop: asyncio.AbstractEventLoop | None = None,
+    job_id: str | None = None,
 ):
     """Background task to scrape and update novel metadata."""
     db = db_session_factory()
@@ -317,7 +327,7 @@ def scrape_novel_background(
                 raise HTTPException(409, 'The linked source changed before this import started')
             authority = capture_source(db, novel.library.user_id, novel)
             scraped_data = _run_metadata_call(
-                metadata_client.wait_for_scrape_complete(metadata_id), loop
+                metadata_client.wait_for_scrape_complete(metadata_id, **({"job_id": job_id} if job_id else {})), loop
             )
             novel = revalidate_source(db, authority)
             if scraped_data.get("status") == "error":
@@ -396,10 +406,11 @@ def scrape_within_limits(
     loop: asyncio.AbstractEventLoop | None,
     user_id: int,
     scrape=None,
+    job_id: str | None = None,
 ):
     """Scrape a story added by link, then drop it again when it is outside the
     content limits of the profile that added it (household profiles)."""
-    (scrape or scrape_novel_background)(novel_id, metadata_id, db_session_factory, loop)
+    (scrape or scrape_novel_background)(novel_id, metadata_id, db_session_factory, loop, **({"job_id": job_id} if job_id else {}))
     db = db_session_factory()
     try:
         user = db.get(User, user_id)
@@ -588,6 +599,7 @@ async def add_novel(
         SessionLocal,
         asyncio.get_running_loop(),
         int(current_user.id),
+        job_id=scrape_result.get("job_id"),
     )
 
     return novel_obj
@@ -767,6 +779,7 @@ async def rescrape_novel(
             metadata_id,
             SessionLocal,
             asyncio.get_running_loop(),
+            job_id=scrape_result.get("job_id"),
         )
     else:
         try:

@@ -16,6 +16,7 @@ interface StoryAboutProps {
   inLibrary: boolean;
   signals: InsightSignal[];
   analysisState: string;
+  analysisScope?: "metadata" | "chapter_sample" | null;
   enriching: boolean;
   onEnrich: () => void;
   similar: SimilarNovel[];
@@ -107,7 +108,7 @@ const StoryAbout: React.FC<StoryAboutProps> = (props) => {
           <details className="story-disclosure">
             <summary>Writing style (estimated)</summary>
             <div className="story-disclosure__body">
-              <p className="story-hint">Estimated from the text on this server. Source tags are not changed.</p>
+              <p className="story-hint">{props.analysisScope === "metadata" ? "Estimated from catalog information, including the synopsis; downloaded chapter prose was not used." : props.analysisScope === "chapter_sample" ? "Estimated from a downloaded chapter sample." : "Local text estimates. The input source has not been reported."} Source tags are not changed.</p>
               {signals.length > 0 ? (
                 <ul className="story-chips" role="list">
                   {signals.map((signal) => (
@@ -141,10 +142,11 @@ const StoryAbout: React.FC<StoryAboutProps> = (props) => {
               </>
             ) : (
               <>
-                <p className="story-hint">Prepare local evidence from downloaded chapters. For new AI answers, configure a private provider and use the story companion in the reader.</p>
+                <p className="story-hint">Prepare local evidence from chapters you have read and explicitly confirmed. For new AI answers, configure a private provider and use the story companion in the reader.</p>
+                {inLibrary && guide.through_chapter == null && <p className="story-hint">Read the downloaded chapters in order. In the reader, open “Translation &amp; story companion” and select “I have finished this downloaded chapter” after reading each chapter. Then return here.</p>}
                 <div className="story-row">
                   {inLibrary && (
-                    <Button size="sm" variant="secondary" loading={buildingGuide} onClick={onBuildGuide}>Prepare local chapter evidence</Button>
+                    <Button size="sm" variant="secondary" loading={buildingGuide} disabled={guide.through_chapter == null} onClick={onBuildGuide}>Prepare local chapter evidence</Button>
                   )}
                   <Link className="story-link" to={guideLink}>Open story guide</Link>
                 </div>

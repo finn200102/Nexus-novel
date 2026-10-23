@@ -146,6 +146,7 @@ class ExportNovel(BaseModel):
     annotations: list[ExportAnnotation] = Field(default_factory=list)
     personal: Optional[ExportPersonal] = None
     reader_typography: Optional[Typography] = None
+    text_style_guide: str | None = Field(default=None, max_length=2000)
     pronunciation: Optional[ExportPronunciation] = None
     reading_runs: list[ExportReadingRun] = Field(default_factory=list, max_length=5000)
 

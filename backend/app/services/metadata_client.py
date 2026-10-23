@@ -258,6 +258,7 @@ async def wait_for_scrape_complete(
     metadata_id: int,
     timeout_seconds: int = 300,
     poll_interval_seconds: float = 2,
+    job_id: str | None = None,
 ) -> dict:
     """Wait for the metadata worker to replace its temporary placeholder."""
     logger.info(
@@ -272,6 +273,15 @@ async def wait_for_scrape_complete(
         data = await get_novel_metadata(metadata_id)
         if data.get("status") != "scraping" and data.get("title") != "Scraping...":
             return data
+        if job_id:
+            response = await _request("GET", f"/api/jobs/{job_id}", timeout=INTERACTIVE_TIMEOUT)
+            job = response.json()
+            job_status = job.get("status")
+            if job_status in {"failed", "cancelled", "archived", "paused"}:
+                if job_status == "paused":
+                    raise RuntimeError("Metadata import is paused. Check the source status in Operations.")
+                action = "Check the failed metadata job in Operations." if job_status == "failed" else "Check the metadata job in Operations."
+                raise RuntimeError(f"Metadata import {job_status}. {action}")
         await asyncio.sleep(poll_interval_seconds)
 
     raise TimeoutError(

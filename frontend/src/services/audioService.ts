@@ -28,7 +28,11 @@ function toServerProviderRequest(provider: AudioProviderConfig) {
   return { id: provider.id, request };
 }
 
+export type AudioJobPart = import('../generated/api').AudioPartResponse;
 export const audioService = {
+  async parts(id:number):Promise<{parts:AudioJobPart[]}> {return (await apiClient.get(`/audio/jobs/${id}/parts`)).data;},
+  async retryPart(id:number,index:number):Promise<ServerAudioJob> {return (await apiClient.post(`/audio/jobs/${id}/parts/${index}/retry`)).data;},
+  async expressionPreview(input:Partial<ExpectedChapterIdentity>&{novel_id:number;chapter_number:number;provider_id:number;include_author_notes:boolean}):Promise<{parts:{original_text:string;text:string}[];warnings?:string[]}> {return (await apiClient.post('/audio/expression-preview',input,{timeout:130_000})).data;},
   async recordings(novelId:number,offset=0):Promise<Omit<import('../generated/api').StoryAudioRecordingPage,'items'>&{items:ServerAudioJob[]}>{
     const page=(await apiClient.get<import('../generated/api').StoryAudioRecordingPage>(`/audio/stories/${novelId}/recordings`,{params:{offset,limit:50}})).data;
     return {...page,items:page.items.map(row=>({...row,audio_ready:row.audio_ready===true}))};
@@ -36,10 +40,11 @@ export const audioService = {
   async story(novelId: number, offset = 0, limit = 50, range?:{from_chapter:number;to_chapter:number}): Promise<StoryAudioOverview> {
     return (await apiClient.get(`/audio/stories/${novelId}`, { params: { offset, limit, ...range } })).data;
   },
-  async createStory(novelId: number, input: { chapter_numbers: number[]; chapter_identities?:({chapter_number:number}&ExpectedChapterIdentity)[]; include_author_notes: boolean } & ({ voice_profile_id: number; provider?: never } | { voice_profile_id?: never; provider: AudioProviderConfig })): Promise<StoryAudioBatch> {
+  async createStory(novelId: number, input: { chapter_numbers: number[]; chapter_identities?:({chapter_number:number}&ExpectedChapterIdentity)[]; include_author_notes: boolean; preparation_provider_id?: number; qwen_chunk_size?:350|800|1500|3000 } & ({ voice_profile_id: number; provider?: never } | { voice_profile_id?: never; provider: AudioProviderConfig })): Promise<StoryAudioBatch> {
     // Explicit fields keep browser-only API keys out of backend job requests.
     const provider = input.provider;
     const body = { chapter_numbers: input.chapter_numbers, ...(input.chapter_identities?{chapter_identities:input.chapter_identities}:{}), include_author_notes: input.include_author_notes,
+      ...(input.preparation_provider_id ? { preparation_provider_id: input.preparation_provider_id } : {}),
       ...(input.voice_profile_id ? { voice_profile_id: input.voice_profile_id } : provider ? { provider: {
         id: provider.id, base_url: provider.base_url, model: provider.model, voice: provider.voice,
         language_code: provider.language_code, execution_mode: provider.execution_mode,

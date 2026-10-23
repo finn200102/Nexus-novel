@@ -11,7 +11,7 @@ def utf16_length(value):
     return len(value.encode("utf-16-le")) // 2
 
 
-def plan_passages(document, title, maximum, *, include_author_notes=False, pronunciation_rules=None):
+def plan_passages(document, title, maximum, *, include_author_notes=False, pronunciation_rules=None, coalesce=False):
     result = []
     from app.services.pronunciation_service import pronounced_chunks, ensure_speech_budget, AudioPlanningLimitError, MAX_AUDIO_PARTS, MAX_AUDIO_SPOKEN_UTF16
     ensure_speech_budget(document, title, pronunciation_rules or [], include_author_notes)
@@ -32,6 +32,19 @@ def plan_passages(document, title, maximum, *, include_author_notes=False, pronu
         text = block.get("text", "")
         for spoken, start, end in planner(text, maximum):
             add({"text": spoken, "block_id": block["id"], "text_offset": utf16_length(text[:start]), "text_length": utf16_length(text[start:end])})
+    if coalesce:
+        merged = []
+        for part in result:
+            spans = [] if part["block_id"] is None else [{key: part[key] for key in ("block_id", "text_offset", "text_length")}]
+            previous = merged[-1] if merged else None
+            # Keep the spoken title separate. Whitespace between prose blocks is
+            # a synthesis separator; source offsets remain individual UTF-16 spans.
+            if spans and previous and previous["block_id"] is not None and len(previous["text"]) + 1 + len(part["text"]) <= maximum:
+                previous["text"] += " " + part["text"]
+                previous["source_spans"].extend(spans)
+            else:
+                merged.append({**part, "source_spans": spans})
+        return merged
     return result
 
 
@@ -85,7 +98,7 @@ def manifest(db, job):
         for part in parts:
             end = elapsed + part.duration_seconds
             segments.append({"part_index": part.part_index, "block_id": part.block_id, "text_offset": part.text_offset,
-                "text_length": part.text_length, "start_seconds": elapsed, "end_seconds": end})
+                "text_length": part.text_length, "source_spans": part.source_spans or ([{"block_id": part.block_id, "text_offset": part.text_offset, "text_length": part.text_length}] if part.block_id is not None else []), "start_seconds": elapsed, "end_seconds": end})
             elapsed = end
     from app.services.audio_identity_service import fields, chapter_for_job
     chapter = chapter_for_job(db, job)

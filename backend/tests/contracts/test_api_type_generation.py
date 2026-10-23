@@ -123,10 +123,12 @@ def test_real_export_is_deterministic_ignores_ambient_secrets_and_matches_genera
     assert not forbidden.exists()
     assert generator.DEFAULT_SCHEMA.read_text()==json.dumps(first,indent=2,sort_keys=True)+'\n'
     assert generator.DEFAULT_TYPES.read_text()==generator.generate_types(first)
-    assert sum(len(methods) for methods in first['paths'].values())==168
+    assert sum(len(methods) for methods in first['paths'].values())==175
     for path in ('/chapter/novel/{novel_id}/manifest/preview', '/chapter/novel/{novel_id}/manifest/apply',
                  '/chapter/novel/{novel_id}/manifest/reviews/{review_id}/undo',
-                 '/chapter/key/{novel_id}/{chapter_key}/content', '/audio/jobs/{job_id}/manifest'):
+                 '/chapter/key/{novel_id}/{chapter_key}/content', '/audio/jobs/{job_id}/manifest',
+                 '/audio/expression-preview', '/audio/jobs/{job_id}/parts/{part_index}/retry',
+                 '/reader/text-revisions/{novel_id}/{chapter_number}/preview', '/reader/text-revisions/stories/{novel_id}/style'):
         assert path in first['paths']
     for model in ('TranslateInput', 'AudioJobCreate'):
         assert {'expected_chapter_key', 'expected_manifest_epoch', 'expected_manifest_revision',

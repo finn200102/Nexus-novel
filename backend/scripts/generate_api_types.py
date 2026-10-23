@@ -19,6 +19,12 @@ NOVEL = BACKEND.parent
 DEFAULT_SCHEMA = BACKEND / 'contracts/reader.openapi.json'
 DEFAULT_TYPES = NOVEL / 'frontend/src/generated/api.ts'
 COVERED = {
+    '/audio/expression-preview': ('post',),
+    '/audio/jobs/{job_id}/parts': ('get',),
+    '/audio/jobs/{job_id}/parts/{part_index}/retry': ('post',),
+    '/reader/text-revisions/{novel_id}/{chapter_number}/preview': ('post',),
+    '/reader/text-revisions/local-defaults': ('get',),
+    '/reader/text-revisions/stories/{novel_id}/style': ('get', 'put'),
     '/admin/source-manifest-reviews/novels/{novel_id}/head': ('get',),
     '/admin/source-manifest-reviews/novels/{novel_id}/context': ('get',),
     '/admin/source-manifest-reviews/preview': ('post',),

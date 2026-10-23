@@ -216,3 +216,36 @@ def test_story_latest_job_prioritizes_active_then_recent_update(client,auth_head
     old.status='completed';old.updated_at=datetime.now()+timedelta(hours=2);db.commit()
     data=client.get(f'/audio/stories/{novel.id}',headers=auth_headers).json()
     assert data['chapters'][0]['latest_job']['id']==old.id and data['summary']['needs_retry']==0
+
+
+def test_qwen_chunk_choice_persists_coalesces_and_completed_settings_do_not_alias(client, auth_headers, db, test_user, test_library, monkeypatch, tmp_path):
+    from app.models import ChapterAudioPart
+    novel, voice = setup_story(db, test_user, test_library, monkeypatch, tmp_path)
+    chapter = db.query(Chapter).filter_by(novel_id=novel.id, chapter_number=1).one()
+    chapter.document = from_html(''.join('<p>' + ('Sentence for paragraph %s. ' % i) * 5 + '</p>' for i in range(30)))
+    chapter.content = chapter.document['plain_text']; db.commit()
+    first = submit(client, auth_headers, novel, voice, [1]).json()['outcomes'][0]['job']
+    old = db.get(ChapterAudioJob, first['id']); old.status = 'completed'
+    path = tmp_path/'previous.wav'; path.write_bytes(b'RIFF'); old.audio_path=str(path); db.commit()
+    newer = submit(client, auth_headers, novel, voice, [1], qwen_chunk_size=3000)
+    assert newer.status_code == 202, newer.text
+    current = newer.json()['outcomes'][0]['job']
+    assert current['id'] != old.id and current['qwen_chunk_size'] == 3000 and current['generation_token_limit'] == 2400
+    assert current['total_parts'] < first['total_parts'] / 2
+    parts = db.query(ChapterAudioPart).filter_by(job_id=current['id']).order_by(ChapterAudioPart.part_index).all()
+    assert all(len(p.text) <= 3000 for p in parts)
+    spans = [span for p in parts for span in (p.source_spans or [])]
+    assert [s['block_id'] for s in spans] == [b['id'] for b in chapter.document['blocks']]
+    assert ' '.join(p.text for p in parts[1:]) == ' '.join(b['text'] for b in chapter.document['blocks'])
+    for part in parts[1:]:
+        assert part.text_length == part.source_spans[0]['text_length']
+    assert submit(client, auth_headers, novel, voice, [2], qwen_chunk_size=2000).status_code == 422
+    spans_before = [p.source_spans for p in parts]
+    job = db.get(ChapterAudioJob, current['id']); job.status='completed'
+    for part in parts: part.status='completed'; part.duration_seconds=1
+    db.commit()
+    repaired = client.post(f"/audio/jobs/{job.id}/parts/1/retry", headers=auth_headers)
+    assert repaired.status_code == 200, repaired.text
+    db.refresh(job)
+    assert job.qwen_chunk_size == 3000 and job.generation_token_limit == 2400
+    assert [p.source_spans for p in db.query(ChapterAudioPart).filter_by(job_id=job.id).order_by(ChapterAudioPart.part_index)] == spans_before

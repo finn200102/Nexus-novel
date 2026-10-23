@@ -3,10 +3,12 @@ from decimal import Decimal, ROUND_CEILING
 import os
 from urllib.parse import urlsplit
 import httpx
+from app.logging_config import get_logger
 from app.services.notification_crypto import decrypt_url
 from app.services.outbound_url import public_http_transport
 
 MAX_OUTPUT_TOKENS = 4096
+logger = get_logger(__name__)
 
 
 def validate_destination(kind, url):
@@ -57,6 +59,11 @@ def invoke(db, provider, *, prompt, system, max_tokens=MAX_OUTPUT_TOKENS, reques
     reserved = 0 if local else cost(selected, estimate_input, max_tokens)
     key = decrypt_url(provider.secret_ciphertext) if provider.secret_ciphertext else ""
     record = None
+    # Bridges can validate local prerequisites before reserving a request.
+    # A missing internal service is a known non-dispatch, never an unknown bill.
+    preflight = getattr(request, 'preflight', None)
+    if preflight is not None:
+        preflight()
     if not local:
         if not key:
             raise ValueError("This remote provider has no API key")
@@ -90,6 +97,9 @@ def invoke(db, provider, *, prompt, system, max_tokens=MAX_OUTPUT_TOKENS, reques
             raise ValueError("Provider returned invalid usage information")
         charged = 0 if local else cost(selected, input_tokens, output_tokens)
     except Exception as exc:
+        status = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
+        logger.warning('Provider response could not be validated', error_type=type(exc).__name__,
+            http_status=status, provider_kind=selected.kind, purpose=purpose)
         if record is not None:
             ledger.mark_unknown(db, record_key)
             raise ledger.ProviderRequestUnresolved("The paid provider response is unknown. Its reservation is retained; review the request ledger before explicitly retrying.") from exc
@@ -113,10 +123,18 @@ def direct_request(provider, *, prompt, system, max_tokens, api_key):
             headers["Authorization"] = "Bearer " + api_key
         endpoint = provider.base_url.rstrip("/") + "/chat/completions"
         payload = {"model": provider.model, "max_tokens": max_tokens, "temperature": 0.1,
-                   "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}]}
+                   "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
+                   **({"chat_template_kwargs": {"enable_thinking": False}} if provider.kind in {"local", "local_translation"} else {})}
+    if (provider.kind == "local" and os.getenv("NEXUS_MANAGED_SPEECH") == "1"
+            and provider.base_url.rstrip("/") == os.getenv("NEXUS_LOCAL_AI_BASE_URL", "").rstrip("/")
+            and provider.model == os.getenv("NEXUS_LOCAL_AI_MODEL", "qwen3.8-27b")):
+        from app.services.voice_service import bridge_config
+        bridge, authorization = bridge_config()
+        endpoint = bridge + "/v1/text/chat/completions"
+        headers.update(authorization)
     transport = httpx.HTTPTransport() if provider.kind in {"local", "local_translation"} else public_http_transport(force_public=True)
     import json
-    with httpx.Client(transport=transport, timeout=httpx.Timeout(120, connect=8), follow_redirects=False, trust_env=False) as client:
+    with httpx.Client(transport=transport, timeout=httpx.Timeout(300 if os.getenv("NEXUS_MANAGED_SPEECH") == "1" and provider.kind == "local" else 120, connect=8), follow_redirects=False, trust_env=False) as client:
         with client.stream("POST", endpoint, json=payload, headers=headers) as response:
             if response.status_code >= 300:
                 raise ValueError(f"Provider rejected the request (HTTP {response.status_code})")
@@ -156,6 +174,9 @@ def invoke_image(db, provider, *, prompt, system='', purpose='guide_portrait', j
     key = decrypt_url(provider.secret_ciphertext) if provider.secret_ciphertext else ''
     if not local and (not key or reserved <= 0 or not provider.budget_microusd):
         raise ValueError('Set an image price ceiling, API key and budget before paid portraits')
+    preflight = getattr(request, 'preflight', None)
+    if preflight is not None:
+        preflight()
     row = ledger.reserve_request(db, provider, reserved, expected_snapshot=approved, purpose=purpose,
         job_key=job_key, item_key=item_key, retry_generation=retry_generation, authorize=authorize)
     request_key = row.request_key

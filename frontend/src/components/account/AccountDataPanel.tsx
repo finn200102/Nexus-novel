@@ -29,10 +29,14 @@ const AccountDataContents: React.FC = () => {
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
   const current=()=>mounted.current&&generation===storageGeneration();
   const { addToast } = useToast();
-  const { refreshLibraries } = useLibraryContext();
+  const { refreshLibraries, libraries } = useLibraryContext();
   const fileInput = useRef<HTMLInputElement>(null);
+  const backupInput = useRef<HTMLInputElement>(null);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [exportingBackup, setExportingBackup] = useState(false);
+  const [importingBackup, setImportingBackup] = useState(false);
+  const [backupLibrary,setBackupLibrary]=useState("");
   const [report, setReport] = useState<UserDataImportReport | null>(null);
 
   const exportData = async () => {
@@ -55,6 +59,35 @@ const AccountDataContents: React.FC = () => {
     } finally {
       if(current())setExporting(false);
     }
+  };
+
+  const exportFullBackup = async () => {
+    setExportingBackup(true);
+    try {
+      const payload=await userDataService.exportFullBackup(backupLibrary||undefined);
+      if(!current())return;
+      const url=URL.createObjectURL(payload),link=document.createElement("a");
+      link.href=url;link.download=`nexus-full-backup-${new Date().toISOString().slice(0,10)}.zip`;
+      document.body.appendChild(link);link.click();link.remove();URL.revokeObjectURL(url);
+      addToast("Your full backup is downloading", "success");
+    } catch(err) {
+      if(!current())return;
+      addToast(getUserFacingError(err,"Could not export your full backup"),"error");
+    } finally { if(current())setExportingBackup(false); }
+  };
+
+  const importFullBackup = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file=event.target.files?.[0];event.target.value="";if(!file)return;
+    setImportingBackup(true);setReport(null);
+    try {
+      const result=await userDataService.importFullBackup(file);
+      if(!current())return;
+      setReport(result);await refreshLibraries();if(!current())return;
+      addToast("Backup imported. Review chapter matches and choose which archived bodies to restore.","success");
+    } catch(err) {
+      if(!current())return;
+      addToast(getUserFacingError(err,"Could not import this full backup"),"error");
+    } finally { if(current())setImportingBackup(false); }
   };
 
   const importFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -100,15 +133,21 @@ const AccountDataContents: React.FC = () => {
       </header>
       <div className="account-data__body">
         <p>
-          Export your libraries, follow states, progress, history, annotations, saved searches and private smart shelves as one JSON file.
-          Stories keep their source link or private import identity. Imported reading places and annotations may need an explicit chapter review below; existing saved places are kept.
+          Account data JSON contains libraries, progress, notes, annotations and organization settings. A full backup ZIP adds owned chapter text and retained chapter versions; it excludes generated audio, voice profiles, provider credentials, and source files the app did not retain.
+          Backup chapter bodies stay staged in your private review until you explicitly restore them into empty chapters. Existing chapter text is never replaced.
         </p>
         <div className="account-data__actions">
           <button type="button" onClick={() => void exportData()} disabled={exporting}>
-            <Download size={14} aria-hidden="true" /> {exporting ? "Preparing export…" : "Export my data"}
+            <Download size={14} aria-hidden="true" /> {exporting ? "Preparing export…" : "Export account data (.json)"}
           </button>
           <button type="button" onClick={() => fileInput.current?.click()} disabled={importing}>
-            <Upload size={14} aria-hidden="true" /> {importing ? "Importing…" : "Import data"}
+            <Upload size={14} aria-hidden="true" /> {importing ? "Importing…" : "Import account data (.json)"}
+          </button>
+          <button type="button" onClick={() => void exportFullBackup()} disabled={exportingBackup}>
+            <Download size={14} aria-hidden="true" /> {exportingBackup ? "Preparing backup…" : "Export full backup (.zip)"}
+          </button>
+          <button type="button" onClick={() => backupInput.current?.click()} disabled={importingBackup}>
+            <Upload size={14} aria-hidden="true" /> {importingBackup ? "Importing backup…" : "Import full backup (.zip)"}
           </button>
           <input
             ref={fileInput}
@@ -118,7 +157,14 @@ const AccountDataContents: React.FC = () => {
             aria-label="Nexus data export file"
             onChange={(event) => void importFile(event)}
           />
+          <input ref={backupInput} type="file" accept="application/zip,.zip" hidden aria-label="Nexus full backup archive" onChange={(event)=>void importFullBackup(event)} />
         </div>
+        <label className="account-data__backup-scope">Full backup scope
+          <select value={backupLibrary} onChange={event=>setBackupLibrary(event.target.value)} disabled={exportingBackup||importingBackup}>
+            <option value="">All libraries</option>
+            {(libraries||[]).map(library=><option key={library.id} value={library.name}>{library.name}</option>)}
+          </select>
+        </label>
 
         {report && (
           <div className="account-data__report" role="status">
@@ -129,7 +175,7 @@ const AccountDataContents: React.FC = () => {
             </p>)}
             {report.libraries.flatMap(library => library.novels.filter(novel => novel.reader_preferences === "kept_local").map(novel => <p key={`${library.name}:${novel.novel_id??novel.portable_link_id??novel.url??novel.title}`}>Kept your current text settings for {novel.title || novel.url}.</p>))}
             {report.libraries.some(library=>library.novels.some(novel=>novel.reading_review_id))&&<p>Imported chapter references are retained. Open “Imported reading places and annotations” below to review their matches.</p>}
-            {report.libraries.flatMap(library=>library.novels.filter(novel=>novel.original_status==='unavailable').map(novel=><p key={`original:${novel.novel_id??novel.portable_link_id}`}>“{novel.title||'Private story'}” is retained in {library.name}. Its original content is unavailable here. Restore the original separately, then review its chapter matches; nothing is fetched automatically.</p>))}
+            {report.libraries.flatMap(library=>library.novels.filter(novel=>novel.original_status==='unavailable'||novel.original_status==='backup_review').map(novel=><p key={`original:${novel.novel_id??novel.portable_link_id}`}>{novel.original_status==='backup_review'?`“${novel.title||'Private story'}” has archived chapter text staged in its private review. Choose chapter matches and the restore option below to finish.`:`“${novel.title||'Private story'}” is retained in ${library.name}. Its original content is unavailable here. Restore the original separately, then review its chapter matches; nothing is fetched automatically.`}</p>))}
             <dl className="account-data__summary">
               {SUMMARY_LABELS.map(([key, label]) => (
                 <div key={key}>
